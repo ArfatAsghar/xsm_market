@@ -607,6 +607,9 @@ const Chat: React.FC = () => {
   };
 
   const getChatDisplayName = (chat: ChatData) => {
+    if (chat.name === 'Website Agent') {
+  return 'Website Agent';
+}
     // For ad inquiries, show seller name instead of ad title
     if (chat.type === 'ad_inquiry') {
       if (chat.otherParticipants.length > 0) {

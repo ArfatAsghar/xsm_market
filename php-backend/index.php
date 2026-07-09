@@ -411,6 +411,9 @@ function handleChatRoutes($controller, $path, $method) {
             $uploadController = new ChatUploadController();
             $uploadController->uploadFile();
             break;
+            case $path === '/chat/agent' && $method === 'POST':
+    $controller->createOrGetAgentChat();
+    break;
         case $path === '/chat/ad-inquiry' && $method === 'POST':
             $controller->createAdInquiryChat();
             break;

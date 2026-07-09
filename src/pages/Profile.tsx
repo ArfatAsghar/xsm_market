@@ -699,12 +699,12 @@ const Profile: React.FC<ProfileProps> = () => {
               <h2 className="text-2xl font-bold text-white mb-2">
                 {profile.username}
               </h2>
-              <p className="text-xsm-light-gray mb-2">{profile.email}</p>
+              <p className="text-gray-300 font-medium mb-2">{profile.email}</p>
               
               {/* Joining Date */}
-              <p className="text-sm text-xsm-medium-gray mb-4">
-                {formatJoinDate(profile.joinDate)}
-              </p>
+              <p className="text-sm text-gray-300 font-medium mb-4">
+  {formatJoinDate(profile.joinDate)}
+</p>
               
               <div className="text-xs text-green-400 flex items-center justify-center gap-1 mb-4">
                 <div className="w-2 h-2 bg-green-400 rounded-full"></div>

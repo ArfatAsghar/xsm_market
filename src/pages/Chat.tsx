@@ -106,13 +106,19 @@ interface ChatData {
     title: string;
     price: number;
   };
-  dealSummary?: {
-    totalDeals: number;
-    channels: string[];
-    prices: number[];
-    channelsBought: number;
-    channelsSold: number;
-  };
+ dealSummary?: {
+  totalDeals: number;
+  channels: string[];
+  prices: number[];
+  channelsBought: number;
+  channelsSold: number;
+  deals?: Array<{
+    channel: string;
+    price: number;
+    role?: string;
+    status?: string;
+  }>;
+};
 }
 
 const Chat: React.FC = () => {
@@ -1053,19 +1059,51 @@ useEffect(() => {
                   <span className="text-xsm-light-gray">Channels sold</span>
                   <span>{selectedChat.dealSummary?.channelsSold || 0}</span>
                 </div>
-                {(selectedChat.dealSummary?.channels || []).length > 0 ? (
-                  <div className="pt-3 border-t border-xsm-medium-gray">
-                    <p className="text-sm text-xsm-light-gray mb-2">Deal channels and prices</p>
-                    {(selectedChat.dealSummary?.channels || []).map((channel, index) => (
-                      <div key={`${channel}-${index}`} className="flex justify-between text-sm py-1">
-                        <span className="truncate pr-3">{channel}</span>
-                        <span>${selectedChat.dealSummary?.prices?.[index] || 0}</span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-xsm-light-gray pt-3 border-t border-xsm-medium-gray">No completed deals with this user yet.</p>
-                )}
+            {(
+  selectedChat.dealSummary?.deals && selectedChat.dealSummary.deals.length > 0
+    ? selectedChat.dealSummary.deals
+    : (selectedChat.dealSummary?.channels || []).map((channel, index) => ({
+        channel,
+        price: selectedChat.dealSummary?.prices?.[index] || 0,
+        role: '',
+        status: ''
+      }))
+).length > 0 ? (
+  <div className="pt-3 border-t border-xsm-medium-gray">
+    <p className="text-sm text-xsm-light-gray mb-2">All deals with this seller</p>
+    {(
+      selectedChat.dealSummary?.deals && selectedChat.dealSummary.deals.length > 0
+        ? selectedChat.dealSummary.deals
+        : (selectedChat.dealSummary?.channels || []).map((channel, index) => ({
+            channel,
+            price: selectedChat.dealSummary?.prices?.[index] || 0,
+            role: '',
+            status: ''
+          }))
+    ).map((deal, index) => (
+      <div
+        key={`${deal.channel}-${index}`}
+        className="flex items-center justify-between gap-3 text-sm py-2 border-b border-xsm-medium-gray/40 last:border-b-0"
+      >
+        <div className="min-w-0">
+          <p className="text-white truncate">{deal.channel || 'Deal'}</p>
+          {(deal.role || deal.status) && (
+            <p className="text-xs text-xsm-light-gray capitalize">
+              {[deal.role, deal.status].filter(Boolean).join(' · ')}
+            </p>
+          )}
+        </div>
+        <span className="text-xsm-yellow font-semibold whitespace-nowrap">
+          ${Number(deal.price || 0).toLocaleString()}
+        </span>
+      </div>
+    ))}
+  </div>
+) : (
+  <p className="text-sm text-xsm-light-gray pt-3 border-t border-xsm-medium-gray">
+    No completed deals with this user yet.
+  </p>
+)}
               </div>
             </div>
           </div>

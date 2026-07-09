@@ -336,6 +336,104 @@ function handleAdRoutes($controller, $path, $method) {
     error_log("Matched /ads/user/my-ads route");
     $controller->getMyAds();
     break;
+    case preg_match('/^\/ads\/user\/(\d+)\/activity$/', $path, $matches) && $method === 'GET':
+    error_log("Matched public user activity route for user ID: " . $matches[1]);
+
+    try {
+        $userId = (int)$matches[1];
+
+        $database = new Database();
+        $pdo = $database->getConnection();
+
+        $stmt = $pdo->prepare("
+            SELECT 
+                id,
+                title,
+                platform,
+                price,
+                status,
+                subscribers,
+                isMonetized,
+                thumbnail,
+                createdAt
+            FROM ads
+            WHERE userId = ?
+            ORDER BY createdAt DESC
+        ");
+        $stmt->execute([$userId]);
+
+        $ads = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $totalListings = count($ads);
+        $activeListings = 0;
+        $previousListings = 0;
+        $soldListings = 0;
+        $lastListedAt = null;
+        $previousItems = [];
+
+        foreach ($ads as $ad) {
+            $statusRaw = isset($ad['status']) ? trim((string)$ad['status']) : '';
+            $status = strtolower($statusRaw);
+
+            $isActive = (
+                $status === '' ||
+                $status === '1' ||
+                $status === 'active' ||
+                $status === 'approved'
+            );
+
+            $isSold = (
+                $status === 'sold' ||
+                $status === 'completed' ||
+                $status === 'closed'
+            );
+
+            if (!$lastListedAt && !empty($ad['createdAt'])) {
+                $lastListedAt = $ad['createdAt'];
+            }
+
+            if ($isActive) {
+                $activeListings++;
+            } else {
+                $previousListings++;
+
+                if ($isSold) {
+                    $soldListings++;
+                }
+
+                if (count($previousItems) < 8) {
+                    $previousItems[] = [
+                        'id' => isset($ad['id']) ? (int)$ad['id'] : 0,
+                        'title' => $ad['title'] ?? 'Untitled listing',
+                        'platform' => $ad['platform'] ?? '',
+                        'price' => isset($ad['price']) ? (float)$ad['price'] : 0,
+                        'status' => $statusRaw ?: 'previous',
+                        'subscribers' => isset($ad['subscribers']) ? (int)$ad['subscribers'] : 0,
+                        'isMonetized' => isset($ad['isMonetized']) ? (bool)$ad['isMonetized'] : false,
+                        'thumbnail' => $ad['thumbnail'] ?? null,
+                        'createdAt' => $ad['createdAt'] ?? null
+                    ];
+                }
+            }
+        }
+
+        Response::json([
+            'success' => true,
+            'data' => [
+                'totalListings' => $totalListings,
+                'activeListings' => $activeListings,
+                'previousListings' => $previousListings,
+                'soldListings' => $soldListings,
+                'lastListedAt' => $lastListedAt,
+                'previousItems' => $previousItems
+            ]
+        ]);
+    } catch (Exception $e) {
+        error_log('Public user activity route error: ' . $e->getMessage());
+        Response::error('Failed to load seller activity: ' . $e->getMessage(), 500);
+    }
+
+    break;
 case preg_match('/^\/ads\/user\/(\d+)$/', $path, $matches) && $method === 'GET':
     error_log("Matched public user ads route for user ID: " . $matches[1]);
 

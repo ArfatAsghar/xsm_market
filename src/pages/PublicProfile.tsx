@@ -18,6 +18,24 @@ interface PublicUser {
   isEmailVerified?: boolean;
 }
 
+interface PreviousListing {
+  id: number;
+  title: string;
+  platform?: string;
+  price: number;
+  status?: string;
+  createdAt?: string | null;
+}
+
+interface SellerActivity {
+  totalListings: number;
+  activeListings: number;
+  previousListings: number;
+  soldListings: number;
+  lastListedAt?: string | null;
+  previousItems: PreviousListing[];
+}
+
 const PublicProfile: React.FC = () => {
   const { username } = useParams<{ username: string }>();
   const navigate = useNavigate();
@@ -27,8 +45,9 @@ const PublicProfile: React.FC = () => {
   const [profileUser, setProfileUser] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activity, setActivity] = useState<SellerActivity | null>(null);
+  const [activityLoading, setActivityLoading] = useState(false);
 
-  // Check if viewing own profile
   const isOwnProfile = isLoggedIn && currentUser?.username === username;
 
   useEffect(() => {
@@ -38,7 +57,6 @@ const PublicProfile: React.FC = () => {
       return;
     }
 
-    // If user is viewing their own profile, redirect to edit mode
     if (isOwnProfile) {
       navigate(`/u/${username}/edit`, { replace: true });
       return;
@@ -56,6 +74,7 @@ const PublicProfile: React.FC = () => {
 
       if (data.success) {
         setProfileUser(data.data);
+        fetchSellerActivity(data.data.id);
       } else {
         setError(data.message || 'Failed to load profile');
       }
@@ -75,6 +94,52 @@ const PublicProfile: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchSellerActivity = async (sellerId: string) => {
+    try {
+      setActivityLoading(true);
+
+      const response = await fetch(`${API_URL}/ads/user/${sellerId}/activity`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setActivity(data.data);
+      } else {
+        console.error('Failed to load seller activity:', data);
+        setActivity(null);
+      }
+    } catch (error) {
+      console.error('Error fetching seller activity:', error);
+      setActivity(null);
+    } finally {
+      setActivityLoading(false);
+    }
+  };
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(price || 0);
+  };
+
+  const formatStatus = (status?: string) => {
+    if (!status) return 'Previous';
+
+    const clean = status.toString().trim();
+
+    if (clean === '1') return 'Active';
+
+    return clean.charAt(0).toUpperCase() + clean.slice(1);
   };
 
   const formatDate = (dateString: string) => {
@@ -224,7 +289,6 @@ const PublicProfile: React.FC = () => {
                   )}
                 </div>
 
-                {/* Edit button for own profile */}
                 {isOwnProfile && (
                   <button
                     type="button"
@@ -247,7 +311,6 @@ const PublicProfile: React.FC = () => {
                   @{profileUser.username}
                 </p>
 
-                {/* Verification Status */}
                 {profileUser.isEmailVerified && (
                   <div className="inline-flex items-center gap-1 bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs">
                     <div className="w-2 h-2 bg-green-400 rounded-full"></div>
@@ -256,7 +319,6 @@ const PublicProfile: React.FC = () => {
                 )}
               </div>
 
-              {/* Profile Actions for Own Profile */}
               {isOwnProfile && (
                 <div className="mb-6">
                   <button
@@ -266,20 +328,6 @@ const PublicProfile: React.FC = () => {
                   >
                     <Edit className="w-4 h-4" />
                     Edit Profile
-                  </button>
-                </div>
-              )}
-
-              {/* Message button for visitors */}
-              {!isOwnProfile && (
-                <div className="mb-6">
-                  <button
-                    type="button"
-                    onClick={handleMessageSeller}
-                    className="w-full bg-xsm-yellow text-black px-4 py-2 rounded-lg hover:bg-yellow-500 transition-colors font-medium flex items-center justify-center gap-2"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    Message
                   </button>
                 </div>
               )}
@@ -302,23 +350,19 @@ const PublicProfile: React.FC = () => {
                 </div>
               </div>
 
+              {!isOwnProfile && (
+                <div className="mb-6">
+                  <button
+                    type="button"
+                    onClick={handleMessageSeller}
+                    className="w-full bg-xsm-yellow text-black px-4 py-3 rounded-lg hover:bg-yellow-500 transition-colors font-semibold flex items-center justify-center gap-2"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    Message
+                  </button>
+                </div>
+              )}
 
-{/* Message button for seller public profile */}
-{!isOwnProfile && (
-  <div className="mb-6">
-    <button
-      type="button"
-      onClick={handleMessageSeller}
-      className="w-full bg-xsm-yellow text-black px-4 py-3 rounded-lg hover:bg-yellow-500 transition-colors font-semibold flex items-center justify-center gap-2"
-    >
-      <MessageCircle className="w-5 h-5" />
-      Message
-    </button>
-  </div>
-)}
-
-
-              {/* Call to Action for Non-logged in Users */}
               {!isLoggedIn && (
                 <div className="text-center">
                   <p className="text-xsm-light-gray text-sm mb-3">
@@ -380,6 +424,88 @@ const PublicProfile: React.FC = () => {
               </div>
             )}
 
+            {/* Previous Activity */}
+            <div className="bg-xsm-dark-gray rounded-xl p-6 shadow-lg border border-xsm-medium-gray/30">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold text-xsm-yellow">Previous Activity</h2>
+                <span className="text-xsm-light-gray bg-xsm-medium-gray px-3 py-1 rounded-full text-sm">
+                  Seller history
+                </span>
+              </div>
+
+              {activityLoading ? (
+                <div className="text-center py-6">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-xsm-yellow mx-auto mb-3"></div>
+                  <p className="text-xsm-light-gray text-sm">Loading seller activity...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                    <div className="bg-xsm-black/50 rounded-lg p-4 border border-xsm-medium-gray/20">
+                      <p className="text-xsm-light-gray text-xs mb-1">Total listings</p>
+                      <p className="text-white text-xl font-bold">{activity?.totalListings || 0}</p>
+                    </div>
+
+                    <div className="bg-xsm-black/50 rounded-lg p-4 border border-xsm-medium-gray/20">
+                      <p className="text-xsm-light-gray text-xs mb-1">Active listings</p>
+                      <p className="text-green-400 text-xl font-bold">{activity?.activeListings || 0}</p>
+                    </div>
+
+                    <div className="bg-xsm-black/50 rounded-lg p-4 border border-xsm-medium-gray/20">
+                      <p className="text-xsm-light-gray text-xs mb-1">Previous listings</p>
+                      <p className="text-xsm-yellow text-xl font-bold">{activity?.previousListings || 0}</p>
+                    </div>
+
+                    <div className="bg-xsm-black/50 rounded-lg p-4 border border-xsm-medium-gray/20">
+                      <p className="text-xsm-light-gray text-xs mb-1">Sold listings</p>
+                      <p className="text-blue-400 text-xl font-bold">{activity?.soldListings || 0}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between mb-4 text-sm">
+                    <span className="text-xsm-light-gray">Last listed</span>
+                    <span className="text-white">
+                      {activity?.lastListedAt ? formatDate(activity.lastListedAt) : 'No listing activity yet'}
+                    </span>
+                  </div>
+
+                  {activity?.previousItems && activity.previousItems.length > 0 ? (
+                    <div className="border-t border-xsm-medium-gray/40 pt-4">
+                      <h3 className="text-white font-semibold mb-3">Previous listings</h3>
+
+                      <div className="space-y-3">
+                        {activity.previousItems.map((item) => (
+                          <div
+                            key={item.id}
+                            className="bg-xsm-black/40 rounded-lg p-4 border border-xsm-medium-gray/20 flex items-center justify-between gap-4"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-white font-medium truncate">{item.title}</p>
+                              <p className="text-xs text-xsm-light-gray">
+                                {item.platform ? `${item.platform} · ` : ''}
+                                {item.createdAt ? formatDate(item.createdAt) : 'Date unavailable'}
+                              </p>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <p className="text-xsm-yellow font-semibold">{formatPrice(item.price)}</p>
+                              <p className="text-xs text-xsm-light-gray">{formatStatus(item.status)}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="border-t border-xsm-medium-gray/40 pt-4 text-center">
+                      <p className="text-xsm-light-gray text-sm">
+                        No previous listings yet. Only active listings are currently available.
+                      </p>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
             {/* User's Listings */}
             <div className="bg-xsm-dark-gray rounded-xl p-6 shadow-lg border border-xsm-medium-gray/30">
               <div className="flex items-center justify-between mb-6">
@@ -391,7 +517,6 @@ const PublicProfile: React.FC = () => {
                 </span>
               </div>
 
-              {/* Listings - UserAdList for own profile, PublicAdList for others */}
               {isOwnProfile ? (
                 <UserAdList />
               ) : (

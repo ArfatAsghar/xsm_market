@@ -266,17 +266,20 @@ const Chat: React.FC = () => {
   };
 
   // Handle URL parameters to auto-select chat
-  useEffect(() => {
-    const chatId = searchParams.get('chatId');
-    if (chatId && chats.length > 0) {
-      const targetChat = chats.find(chat => chat.id.toString() === chatId);
-      if (targetChat) {
-        setSelectedChat(targetChat);
-        fetchMessages(targetChat.id);
-        // Clear the URL parameter after selecting the chat
-            setSearchParams(new URLSearchParams(), { replace: true });      }
-    }
-  }, [chats, searchParams, setSearchParams]);
+useEffect(() => {
+  const chatId = searchParams.get('chatId');
+
+  if (chatId && chats.length > 0) {
+    const targetChat = chats.find(chat => chat.id.toString() === chatId);
+
+    if (targetChat) {
+      setSelectedChat(targetChat);
+      fetchMessages(targetChat.id);
+
+      // Clear the URL parameter without adding another chat page to browser history
+            setSearchParams(new URLSearchParams(), { replace: true });    }
+  }
+}, [chats, searchParams, setSearchParams]);
 
   const fetchMessages = async (chatId: number) => {
     try {
@@ -556,23 +559,14 @@ const Chat: React.FC = () => {
   };
 
   const handleCloseChat = () => {
-  const referrer = document.referrer;
+  const historyState = window.history.state as { idx?: number } | null;
 
-  if (referrer && referrer.startsWith(window.location.origin)) {
-    const referrerUrl = new URL(referrer);
-
-    if (!referrerUrl.pathname.startsWith('/chat')) {
-      navigate(referrerUrl.pathname + referrerUrl.search);
-      return;
-    }
-  }
-
-  if (window.history.length > 1) {
+  if (historyState?.idx && historyState.idx > 0) {
     navigate(-1);
     return;
   }
 
-  navigate('/');
+  navigate('/', { replace: true });
 };
 
   const handleOpenWebsiteAgent = async () => {

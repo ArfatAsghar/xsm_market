@@ -290,15 +290,17 @@ function handleUserRoutes($controller, $path, $method) {
         case $path === '/user/password/cooldown-status' && $method === 'GET':
             $controller->getPasswordChangeCooldown();
             break;
-        case preg_match('/^\/user\/(\d+)$/', $path, $matches) && $method === 'GET':
-            $controller->getUserById($matches[1]);
-            break;
-        case preg_match('/^\/user\/(@.+)$/', $path, $matches) && $method === 'GET':
-            $controller->getUserByUsername($matches[1]);
-            break;
-        default:
-            Response::error('User route not found', 404);
-    }
+        case preg_match('/^\/user\/u\/([^\/]+)$/', $path, $matches) && $method === 'GET':
+    $controller->getUserByUsername(urldecode($matches[1]));
+    break;
+case preg_match('/^\/user\/(\d+)$/', $path, $matches) && $method === 'GET':
+    $controller->getUserById($matches[1]);
+    break;
+case preg_match('/^\/user\/@(.+)$/', $path, $matches) && $method === 'GET':
+    $controller->getUserByUsername(urldecode($matches[1]));
+    break;
+default:
+    Response::error('User route not found', 404);}
 }
 
 function handleAdRoutes($controller, $path, $method) {
@@ -331,12 +333,56 @@ function handleAdRoutes($controller, $path, $method) {
             $controller->getMyAds();
             break;
         case $path === '/ads/user/my-ads' && $method === 'GET':
-            error_log("Matched /ads/user/my-ads route");
-            $controller->getMyAds();
-            break;
-        case $path === '/ads/search' && $method === 'GET':
-            $controller->searchAds();
-            break;
+    error_log("Matched /ads/user/my-ads route");
+    $controller->getMyAds();
+    break;
+case preg_match('/^\/ads\/user\/(\d+)$/', $path, $matches) && $method === 'GET':
+    error_log("Matched public user ads route for user ID: " . $matches[1]);
+
+    try {
+        $userId = (int)$matches[1];
+
+        $database = new Database();
+        $pdo = $database->getConnection();
+
+        $stmt = $pdo->prepare("
+            SELECT *
+            FROM ads
+            WHERE userId = ?
+            ORDER BY createdAt DESC
+        ");
+        $stmt->execute([$userId]);
+
+        $ads = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($ads as &$ad) {
+            $ad['id'] = isset($ad['id']) ? (int)$ad['id'] : 0;
+            $ad['price'] = isset($ad['price']) ? (float)$ad['price'] : 0;
+            $ad['subscribers'] = isset($ad['subscribers']) ? (int)$ad['subscribers'] : 0;
+            $ad['monthlyIncome'] = isset($ad['monthlyIncome']) ? (float)$ad['monthlyIncome'] : 0;
+            $ad['isMonetized'] = isset($ad['isMonetized']) ? (bool)$ad['isMonetized'] : false;
+
+            if (!empty($ad['screenshots'])) {
+                $decodedScreenshots = json_decode($ad['screenshots'], true);
+                $ad['screenshots'] = is_array($decodedScreenshots) ? $decodedScreenshots : [];
+            } else {
+                $ad['screenshots'] = [];
+            }
+        }
+
+        Response::json([
+            'success' => true,
+            'data' => $ads
+        ]);
+    } catch (Exception $e) {
+        error_log('Public user ads route error: ' . $e->getMessage());
+        Response::error('Failed to load listings: ' . $e->getMessage(), 500);
+    }
+
+    break;
+case $path === '/ads/search' && $method === 'GET':
+    $controller->searchAds();
+    break;
         case $path === '/ads/upload/screenshots' && $method === 'POST':
             error_log("Matched ad screenshot upload route");
             $uploadController = new AdUploadController();

@@ -41,6 +41,7 @@ interface ChannelData {
   seller: {
     id: number;
     name: string;
+    username: string;
     rating: number;
     sales: number;
     profilePicture?: string;
@@ -231,8 +232,16 @@ const AdDetails: React.FC = () => {
         earningMethods: data.earningMethods || ['Ad Revenue', 'Sponsorships'],
         promotionStrategies: data.promotionStrategies || ['SEO Optimization', 'Social Media'],
         seller: {
-          id: data.seller?.id || 0,
-          name: data.seller?.username || data.seller?.name || 'Unknown',
+          id: data.seller?.id || data.sellerId || data.userId || 0,
+          name: data.seller?.name || data.seller?.username || data.sellerName || 'Unknown',
+          username:
+            data.seller?.username ||
+            data.sellerUsername ||
+            data.username ||
+            data.ownerUsername ||
+            data.user?.username ||
+            data.seller?.name ||
+            'Unknown',
           rating: data.seller?.rating || 4.8,
           sales: data.seller?.sales || 0,
           profilePicture: data.seller?.profilePicture,
@@ -280,7 +289,7 @@ const AdDetails: React.FC = () => {
               const remainingMs = fourDaysMs - diffMs;
               const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
               const hours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-              const minutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
+              const minutes = Math.floor((remainingMs % (60 * 1000)) / (60 * 1000));
               const seconds = Math.floor((remainingMs % (60 * 1000)) / 1000);
               
               setPullCooldown({
@@ -679,7 +688,7 @@ const AdDetails: React.FC = () => {
                   {/* Seller Details */}
                   <div className="text-center">
                     <button
-                      onClick={() => navigate(`/u/${channel.seller.name}`)}
+                      onClick={() => navigate(`/u/${encodeURIComponent(channel.seller.username)}`)}
                       className="text-white font-semibold text-lg hover:text-xsm-yellow transition-colors underline decoration-dotted cursor-pointer mb-2"
                     >
                       {channel.seller.name}
@@ -1034,7 +1043,6 @@ const AdDetails: React.FC = () => {
             category: channel.category,
             price: channel.price,
             subscribers: channel.subscribers,
-            
             isMonetized: channel.monetized,
             status: 'active',
             views: channel.views,

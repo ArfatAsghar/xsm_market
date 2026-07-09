@@ -523,11 +523,11 @@ class ChatController {
             $sellerName = $input['sellerName'] ?? null;
             $buyerId = (int)$user['id'];
             
-            if (!$adId) {
-                http_response_code(400);
-                echo json_encode(['message' => 'Ad ID is required']);
-                return;
-            }
+           if (!$adId) {
+    http_response_code(400);
+    echo json_encode(['message' => 'Ad ID is required']);
+    return;
+}
             
             // Get ad details
             $stmt = $this->db->prepare("
@@ -802,11 +802,20 @@ class ChatController {
             }
             
             // Insert message with admin sender
-            $stmt = $this->db->prepare("
-                INSERT INTO messages (content, senderId, chatId, messageType, createdAt, updatedAt)
-                VALUES (?, ?, ?, 'text', NOW(), NOW())
-            ");
-            $stmt->execute([$content, $currentUser['id'], $chatId]);
+           if (!empty(trim($message))) {
+    $stmt = $this->db->prepare("
+        INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt)
+        VALUES (?, ?, ?, 'text', 0, NOW())
+    ");
+    $stmt->execute([$chatId, $buyerId, trim($message)]);
+
+    $stmt = $this->db->prepare("
+        UPDATE chats
+        SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW()
+        WHERE id = ?
+    ");
+    $stmt->execute([trim($message), $chatId]);
+}
             $messageId = $this->db->lastInsertId();
             
             // Update chat's last message

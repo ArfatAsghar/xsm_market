@@ -1,7 +1,3 @@
--- XSM Market Database Schema
--- Generated on: July 27, 2025
--- Database: xsm_market_local
-
 -- =============================================================================
 -- TABLE: users
 -- Purpose: Store user account information and authentication data

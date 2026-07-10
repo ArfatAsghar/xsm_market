@@ -1,78 +1,95 @@
-# Logs
-logs
+﻿# Environment files - never commit secrets
+.env
+.env.*
+!.env.example
+
+php-backend/.env
+php-backend/.env.*
+!php-backend/.env.example
+
+# Dependencies
+node_modules/
+php-backend/vendor/
+
+# Build output
+dist/
+dist-ssr/
+build/
+
+# Runtime uploads
+php-backend/uploads/*
+!php-backend/uploads/.gitkeep
+
+# Logs and cache
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
+.pnpm-debug.log*
+.cache/
+.vite/
 
-# Dependencies
-node_modules
-dist
-dist-ssr
-*.local
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
+# OS/editor
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+Thumbs.db
+.vscode/
+.idea/
 
-# Environment files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-backend/.env
-backend/.env.local
-backend/.env.production
-
-# Database
-*.sqlite
-*.db
-
-# Deployment files
-xsm-market-full-deploy-*/
-xsm-market-full-deploy-*.zip
-deploy-temp/
+# ZIP/backups/generated copies
 *.zip
+xsm-production-final/
+package.json.backup
 
-# Backend specific
-backend/dist/
-backend/logs/
-backend/uploads/
+# Messy backup PHP files
+php-backend/controllers/*-complete.php
+php-backend/controllers/*-backup.php
+php-backend/controllers/*-clean.php
+php-backend/controllers/*-fixed.php
+php-backend/controllers/*-complex.php
+php-backend/controllers/*-simple.php
+php-backend/index-complete.php
 
-# Temporary files
-temp/
-tmp/
-.temp/
+# Debug/test/helper PHP files - not production source
+php-backend/test-*.php
+php-backend/debug-*.php
+php-backend/check-*.php
+php-backend/verify-*.php
+php-backend/create-deals-table*.php
+php-backend/migrate-*.php
+php-backend/run_*migration*.php
+php-backend/setup-admin.php
+php-backend/set-user-admin.php
+php-backend/simple-delete.php
+php-backend/delete.php
+php-backend/hybrid-router.php
+php-backend/router-manager.php
+php-backend/server.php
 
-# Build artifacts
-build/
-out/
+# Extra documentation drafts - keep repo clean
+ADMIN_ACCESS_CONTROL.md
+API_DOCUMENTATION.md
+API_INTEGRATION_GUIDE.md
+DEPLOYMENT_CHECKLIST.md
+HOSTINGER_DEPLOYMENT.md
+IMAGES_NOT_SHOWING_QUICK_FIX.md
+IMAGE_UPLOAD_TROUBLESHOOTING.md
+IMPLEMENTATION_GUIDE_REVISION_04-05-26.md
+NOWPAYMENTS_INTEGRATION_COMPLETE.md
+PASSWORD_CHANGE_FIX.md
+PROJECT_SUMMARY.md
+RECAPTCHA_INTEGRATION_SUMMARY.md
+SCREENSHOT_URL_FIX.md
+SOCIAL_BLADE_SETUP_GUIDE.md
+SOCIAL_MEDIA_API_GUIDE.md
+google-oauth-password-complete.md
+profile-management-complete.md
 
-# Package manager lock files (optional - remove if you want to commit them)
-package-lock.json
-yarn.lock
-
-# Runtime
-.pid
-.seed
-.pid.lock
-
-node_modules/
-dist/
-.env
-.env.local
-php-backend/.env
-*.log
-uploads/
-php-backend/uploads/
-.DS_Store
+# Misc local/generated files
+1curl
+social-media-demo.html
+generate-favicons.js
+optimize-logo-favicon.cjs
+deploy-to-hostinger.sh
+deployment-summary.sh
+update-hostinger-backend.sh
+start.sh

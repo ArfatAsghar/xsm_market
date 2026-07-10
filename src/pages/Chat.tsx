@@ -96,7 +96,7 @@ interface ChatData {
   name?: string;
   lastMessage?: string;
   lastMessageTime?: string;
-  otherParticipants: Array<{
+  otherParticipants?: Array<{
     id: string;
     username: string;
     email: string;
@@ -106,19 +106,19 @@ interface ChatData {
     title: string;
     price: number;
   };
- dealSummary?: {
-  totalDeals: number;
-  channels: string[];
-  prices: number[];
-  channelsBought: number;
-  channelsSold: number;
-  deals?: Array<{
-    channel: string;
-    price: number;
-    role?: string;
-    status?: string;
-  }>;
-};
+  dealSummary?: {
+    totalDeals: number;
+    channels: string[];
+    prices: number[];
+    channelsBought: number;
+    channelsSold: number;
+    deals?: Array<{
+      channel: string;
+      price: number;
+      role?: string;
+      status?: string;
+    }>;
+  };
 }
 
 const Chat: React.FC = () => {
@@ -261,31 +261,48 @@ const Chat: React.FC = () => {
           'Authorization': `Bearer ${token}`
         }
       });
+
       const data = await response.json();
-      setChats(data);
-      setFilteredChats(data);
+
+      if (!response.ok || !Array.isArray(data)) {
+        console.error('Invalid chats response:', data);
+        setChats([]);
+        setFilteredChats([]);
+        return;
+      }
+
+      const normalizedChats = data.map((chat: ChatData) => ({
+        ...chat,
+        otherParticipants: Array.isArray(chat.otherParticipants) ? chat.otherParticipants : []
+      }));
+
+      setChats(normalizedChats);
+      setFilteredChats(normalizedChats);
     } catch (error) {
       console.error('Error fetching chats:', error);
+      setChats([]);
+      setFilteredChats([]);
     } finally {
       setLoading(false);
     }
   };
 
   // Handle URL parameters to auto-select chat
-useEffect(() => {
-  const chatId = searchParams.get('chatId');
+  useEffect(() => {
+    const chatId = searchParams.get('chatId');
 
-  if (chatId && chats.length > 0) {
-    const targetChat = chats.find(chat => chat.id.toString() === chatId);
+    if (chatId && chats.length > 0) {
+      const targetChat = chats.find(chat => chat.id.toString() === chatId);
 
-    if (targetChat) {
-      setSelectedChat(targetChat);
-      fetchMessages(targetChat.id);
+      if (targetChat) {
+        setSelectedChat(targetChat);
+        fetchMessages(targetChat.id);
 
-      // Clear the URL parameter without adding another chat page to browser history
-            setSearchParams(new URLSearchParams(), { replace: true });    }
-  }
-}, [chats, searchParams, setSearchParams]);
+        // Clear the URL parameter without adding another chat page to browser history
+        setSearchParams(new URLSearchParams(), { replace: true });
+      }
+    }
+  }, [chats, searchParams, setSearchParams]);
 
   const fetchMessages = async (chatId: number) => {
     try {
@@ -565,15 +582,15 @@ useEffect(() => {
   };
 
   const handleCloseChat = () => {
-  const historyState = window.history.state as { idx?: number } | null;
+    const historyState = window.history.state as { idx?: number } | null;
 
-  if (historyState?.idx && historyState.idx > 0) {
-    navigate(-1);
-    return;
-  }
+    if (historyState?.idx && historyState.idx > 0) {
+      navigate(-1);
+      return;
+    }
 
-  navigate('/', { replace: true });
-};
+    navigate('/', { replace: true });
+  };
 
   const handleOpenWebsiteAgent = async () => {
     try {
@@ -600,39 +617,104 @@ useEffect(() => {
     }
   };
 
-  const handleOpenParticipantProfile = (chat: ChatData) => {
-    const otherUser = chat.otherParticipants?.[0];
-    if (!otherUser || chat.name === 'Website Agent') return;
-    navigate(`/u/${otherUser.username}`);
+  const cleanProfileUsername = (value?: string | null) => {
+    if (!value) return null;
+
+    const cleaned = value
+      .replace(/^@/, '')
+      .replace(/^Chat with\s+/i, '')
+      .trim();
+
+    if (
+      !cleaned ||
+      cleaned === 'Unknown' ||
+      cleaned === 'Website Agent' ||
+      cleaned.startsWith('Inquiry:')
+    ) {
+      return null;
+    }
+
+    return cleaned;
   };
 
-  const getChatDisplayName = (chat: ChatData) => {
+  const getChatDisplayName = (chat?: ChatData | null) => {
+    if (!chat) {
+      return 'Unknown';
+    }
+
     if (chat.name === 'Website Agent') {
-  return 'Website Agent';
-}
+      return 'Website Agent';
+    }
+
+    const otherParticipants = Array.isArray(chat.otherParticipants)
+      ? chat.otherParticipants
+      : [];
+
     // For ad inquiries, show seller name instead of ad title
     if (chat.type === 'ad_inquiry') {
-      if (chat.otherParticipants.length > 0) {
-        const otherUser = chat.otherParticipants[0];
-        return otherUser.username;
+      if (otherParticipants.length > 0) {
+        return otherParticipants[0].username;
       }
+
+      if (chat.name) {
+        return chat.name.replace(/^Chat with\s+/i, '').trim();
+      }
+
       // Fallback to ad title if no participants
       if (chat.ad) {
         return `Inquiry: ${chat.ad.title}`;
       }
     }
-    
+
     // For direct chats, show the other participant's name
-    if (chat.otherParticipants.length > 0) {
-      return chat.otherParticipants[0].username;
+    if (otherParticipants.length > 0) {
+      return otherParticipants[0].username;
     }
-    
+
     // Use chat name if available
     if (chat.name) {
-      return chat.name;
+      return chat.name.replace(/^Chat with\s+/i, '').trim();
     }
-    
+
     return 'Unknown';
+  };
+
+  const getProfileUsernameFromChat = (chat?: ChatData | null) => {
+    if (!chat || chat.name === 'Website Agent') return null;
+
+    const otherParticipants = Array.isArray(chat.otherParticipants)
+      ? chat.otherParticipants
+      : [];
+
+    const otherUser = otherParticipants[0];
+    const usernameFromParticipant = cleanProfileUsername(otherUser?.username);
+
+    if (usernameFromParticipant) {
+      return usernameFromParticipant;
+    }
+
+    const usernameFromChatName = cleanProfileUsername(chat.name);
+    if (usernameFromChatName) {
+      return usernameFromChatName;
+    }
+
+    const usernameFromDisplayName = cleanProfileUsername(getChatDisplayName(chat));
+    if (usernameFromDisplayName) {
+      return usernameFromDisplayName;
+    }
+
+    return null;
+  };
+
+  const handleOpenParticipantProfile = (chat?: ChatData | null) => {
+    const username = getProfileUsernameFromChat(chat);
+
+    if (!username) {
+      console.warn('Could not open profile because no username was found for chat:', chat);
+      return;
+    }
+
+    navigate(`/u/${encodeURIComponent(username)}`);
   };
 
   if (!isLoggedIn) {
@@ -765,9 +847,18 @@ useEffect(() => {
                       </div>
                       <div>
                         <button
+                          type="button"
                           onClick={() => handleOpenParticipantProfile(selectedChat)}
-                          className="text-white font-medium hover:text-xsm-yellow transition-colors text-left"
-                          title="Open seller profile"
+                          className={`text-white font-medium transition-colors text-left ${
+                            getProfileUsernameFromChat(selectedChat)
+                              ? 'hover:text-xsm-yellow cursor-pointer'
+                              : 'cursor-default'
+                          }`}
+                          title={
+                            getProfileUsernameFromChat(selectedChat)
+                              ? 'Open seller profile'
+                              : 'Profile unavailable'
+                          }
                         >
                           {getChatDisplayName(selectedChat)}
                         </button>
@@ -782,7 +873,7 @@ useEffect(() => {
                         className="flex items-center gap-2 text-sm border border-xsm-yellow/40 text-xsm-yellow px-3 py-2 rounded-lg hover:bg-xsm-yellow hover:text-black transition-colors"
                       >
                         <BarChart3 className="w-4 h-4" />
-                        Deals
+                        Deals ({selectedChat.dealSummary?.totalDeals || 0})
                       </button>
                     )}
                   </div>

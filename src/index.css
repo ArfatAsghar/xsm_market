@@ -1,0 +1,97 @@
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* XSM Market Design System - Black and Yellow Theme */
+
+@layer base {
+  :root {
+    --background: 0 0% 0%;
+    --foreground: 60 100% 50%;
+
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 0 0% 10%;
+    --popover-foreground: 60 100% 50%;
+
+    --primary: 60 100% 50%;
+    --primary-foreground: 0 0% 0%;
+
+    --secondary: 0 0% 10%;
+    --secondary-foreground: 60 100% 50%;
+
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 80%;
+
+    --accent: 60 100% 50%;
+    --accent-foreground: 0 0% 0%;
+
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 60 100% 50%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 80%;
+    --sidebar-primary: 60 100% 50%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 0 0% 15%;
+    --sidebar-ring: 60 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-xsm-black text-white font-sans;
+    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply text-xsm-yellow;
+  }
+}
+
+@layer components {
+  .xsm-card {
+    @apply bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg p-6 hover:border-xsm-yellow transition-all duration-300 hover:shadow-lg hover:shadow-xsm-yellow/20;
+  }
+
+  .xsm-button {
+    @apply bg-xsm-yellow text-xsm-black px-6 py-3 rounded-lg font-semibold hover:bg-yellow-400 transition-all duration-200 transform hover:scale-105;
+  }
+
+  .xsm-button-secondary {
+    @apply bg-transparent border-2 border-xsm-yellow text-xsm-yellow px-6 py-3 rounded-lg font-semibold hover:bg-xsm-yellow hover:text-xsm-black transition-all duration-200;
+  }
+
+  .xsm-input {
+    @apply bg-xsm-dark-gray border border-xsm-medium-gray text-white px-4 py-3 rounded-lg focus:border-xsm-yellow focus:ring-2 focus:ring-xsm-yellow/20 transition-all duration-200;
+  }
+
+  .xsm-badge {
+    @apply bg-xsm-yellow text-xsm-black px-3 py-1 rounded-full text-sm font-semibold;
+  }
+
+  .xsm-badge-premium {
+    @apply bg-gradient-to-r from-yellow-400 to-yellow-600 text-black px-3 py-1 rounded-full text-sm font-bold shadow-lg;
+  }
+}
+
+@layer utilities {
+  .overflow-wrap-anywhere {
+    overflow-wrap: anywhere;
+  }
+}

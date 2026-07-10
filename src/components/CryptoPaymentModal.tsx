@@ -133,10 +133,6 @@ const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
       });
 
       console.log('Create payment response status:', response.status);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
 
       const result = await response.json();
       console.log('Create payment result:', result);
@@ -144,11 +140,11 @@ const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
       if (result.success) {
         setPaymentData(result.payment);
       } else {
-        setError(result.message || 'Failed to create payment');
+        setError(result.error || result.message || 'Failed to create payment');
       }
     } catch (error) {
       console.error('Payment creation error:', error);
-      setError('Failed to create payment. Please try again.');
+      setError('Failed to connect to payment service. Please try again.');
     } finally {
       setIsCreating(false);
     }

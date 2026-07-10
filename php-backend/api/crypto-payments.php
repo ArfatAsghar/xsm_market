@@ -21,6 +21,9 @@ if (!class_exists('AuthMiddleware')) {
 if (!class_exists('NOWPaymentsAPI')) {
     require_once __DIR__ . '/../utils/NOWPaymentsAPI.php';
 }
+if (!function_exists('markTransactionFeePaid')) {
+    require_once __DIR__ . '/../utils/PaymentHelpers.php';
+}
 
 // Helper function for getting current user
 function getCurrentUser() {
@@ -362,12 +365,26 @@ function getPaymentStatus($dealId) {
             // Update our database if status changed
             if ($latestStatus['payment_status'] !== $payment['payment_status']) {
                 $updateStmt = $pdo->prepare("
-                    UPDATE crypto_payments 
-                    SET payment_status = ?, updated_at = NOW()
+                    UPDATE crypto_payments
+                    SET payment_status = ?, actually_paid = ?, pay_currency = ?, updated_at = NOW()
                     WHERE id = ?
                 ");
-                $updateStmt->execute([$latestStatus['payment_status'], $payment['id']]);
+                $updateStmt->execute([
+                    $latestStatus['payment_status'],
+                    $latestStatus['actually_paid'] ?? $payment['actually_paid'],
+                    $latestStatus['pay_currency'] ?? $payment['pay_currency'],
+                    $payment['id']
+                ]);
                 $payment['payment_status'] = $latestStatus['payment_status'];
+            }
+
+            // The webhook may never reach us (e.g. local dev with no public URL),
+            // so also mark the deal paid here once we observe a finished/confirmed status.
+            if (in_array($payment['payment_status'], ['finished', 'confirmed'])) {
+                markTransactionFeePaid($pdo, $dealId, $payment['nowpayments_payment_id'], [
+                    'actually_paid' => $latestStatus['actually_paid'] ?? $payment['actually_paid'],
+                    'pay_currency' => $latestStatus['pay_currency'] ?? $payment['pay_currency']
+                ]);
             }
         } catch (Exception $e) {
             // If we can't fetch from NOWPayments, just use our stored data

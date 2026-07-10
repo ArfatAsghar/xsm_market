@@ -12,6 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../utils/NOWPaymentsAPI.php';
+require_once __DIR__ . '/../utils/PaymentHelpers.php';
 
 // Load environment variables - try multiple locations
 $envFile = __DIR__ . '/../.env';
@@ -302,187 +303,11 @@ function handleSuccessfulPayment($pdo, $dealId, $paymentId, $webhookData) {
         'currency' => $webhookData['pay_currency'] ?? 'N/A'
     ]);
 
-    // Get deal details to find buyer_id for action_by field
-    $dealStmt = $pdo->prepare("SELECT buyer_id FROM deals WHERE id = ?");
-    $dealStmt->execute([$dealId]);
-    $deal = $dealStmt->fetch(PDO::FETCH_ASSOC);
-    
-    if (!$deal) {
-        throw new Exception("Deal not found: $dealId");
-    }
-    
-    $buyerId = $deal['buyer_id'];
+    $applied = markTransactionFeePaid($pdo, $dealId, $paymentId, $webhookData);
 
-    // Update deal status to indicate transaction fee has been paid
-    $stmt = $pdo->prepare("
-        UPDATE deals 
-        SET transaction_fee_paid = 1,
-            transaction_fee_paid_at = NOW(),
-            transaction_fee_payment_method = 'crypto',
-            deal_status = 'fee_paid',
-            updated_at = NOW()
-        WHERE id = ?
-    ");
-    $result = $stmt->execute([$dealId]);
-    
-    if ($result) {
-        $rowsAffected = $stmt->rowCount();
-        logWebhook('✅ Deal updated successfully', [
-            'deal_id' => $dealId,
-            'rows_affected' => $rowsAffected,
-            'new_status' => 'fee_paid'
-        ]);
-    } else {
-        logWebhook('❌ Failed to update deal', ['deal_id' => $dealId]);
-    }
-
-    // Add to deal history with buyer_id as action_by
-    $historyStmt = $pdo->prepare("
-        INSERT INTO deal_history (deal_id, action_type, action_by, action_description, created_at)
-        VALUES (?, 'fee_paid', ?, ?, NOW())
-    ");
-    $description = "Transaction fee paid via cryptocurrency. Payment ID: {$paymentId}. Amount: {$webhookData['actually_paid']} {$webhookData['pay_currency']}";
-    $historyResult = $historyStmt->execute([$dealId, $buyerId, $description]);
-    
-    if ($historyResult) {
-        logWebhook('✅ Deal history updated', ['deal_id' => $dealId]);
-    } else {
-        logWebhook('❌ Failed to update deal history', ['deal_id' => $dealId]);
-    }
-
-    // Get deal details for notifications
-    $dealStmt = $pdo->prepare("
-        SELECT d.*, 
-               buyer.email as buyer_email, buyer.username as buyer_username,
-               seller.email as seller_email, seller.username as seller_username
-        FROM deals d
-        LEFT JOIN users buyer ON d.buyer_id = buyer.id
-        LEFT JOIN users seller ON d.seller_id = seller.id
-        WHERE d.id = ?
-    ");
-    $dealStmt->execute([$dealId]);
-    $deal = $dealStmt->fetch(PDO::FETCH_ASSOC);
-
-    if ($deal) {
-        logWebhook('✅ Deal updated - transaction fee paid via crypto!', [
-            'deal_id' => $dealId,
-            'transaction_id' => $deal['transaction_id'],
-            'buyer' => $deal['buyer_username'],
-            'seller' => $deal['seller_username'],
-            'channel' => $deal['channel_title'],
-            'fee_paid' => $deal['transaction_fee_paid'],
-            'payment_method' => $deal['transaction_fee_payment_method'],
-            'deal_status' => $deal['deal_status']
-        ]);
-        
-        // Send agent email to seller via chat (same as in deals.php)
-        try {
-            // Get admin email from environment - try different environment variable names
-            $admin_email = $_ENV['ADMIN_EMAIL'] ?? $_ENV['admin_email'] ?? 'hamzasheikh1228@gmail.com';
-            
-            logWebhook('Using admin email', ['admin_email' => $admin_email]);
-            
-            // Find the chat for this deal (based on seller and channel)
-            $chatStmt = $pdo->prepare("
-                SELECT c.id as chat_id FROM chats c
-                INNER JOIN chat_participants cp1 ON c.id = cp1.chatId
-                INNER JOIN chat_participants cp2 ON c.id = cp2.chatId
-                WHERE c.type = 'ad_inquiry'
-                AND cp1.userId = ? AND cp1.isActive = 1
-                AND cp2.userId = ? AND cp2.isActive = 1
-                AND cp1.chatId = cp2.chatId
-                LIMIT 1
-            ");
-            $chatStmt->execute([$deal['buyer_id'], $deal['seller_id']]);
-            $chat = $chatStmt->fetch(PDO::FETCH_ASSOC);
-            
-            logWebhook('Chat search result', [
-                'buyer_id' => $deal['buyer_id'],
-                'seller_id' => $deal['seller_id'],
-                'chat_found' => !empty($chat),
-                'chat_id' => $chat['chat_id'] ?? 'none'
-            ]);
-            
-            if ($chat) {
-                // Send automatic message with agent email
-                $message_content = "🎉 Great news! The cryptocurrency payment has been confirmed and your deal is now proceeding to the next step.\n\n📧 **Agent Email for Account Rights**: {$admin_email}\n\nPlease add this email as a manager/collaborator to your account so our agent can verify everything and facilitate the secure transfer. Once you've given rights to this email, please confirm below.\n\n⚠️ **Important**: Only give manager/collaborator access, NOT ownership. Our agent will handle the ownership transfer securely.";
-                
-                // Insert system message
-                $messageStmt = $pdo->prepare("
-                    INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
-                    VALUES (?, 1, ?, 'system', 0, NOW(), NOW())
-                ");
-                $messageStmt->execute([$chat['chat_id'], $message_content]);
-                
-                // Update chat last message
-                $chatUpdateStmt = $pdo->prepare("
-                    UPDATE chats SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW()
-                    WHERE id = ?
-                ");
-                $chatUpdateStmt->execute(['System: Agent email provided for account access', $chat['chat_id']]);
-                
-                logWebhook('✅ Agent email message sent to chat', ['chat_id' => $chat['chat_id']]);
-            } else {
-                logWebhook('⚠️ No chat found for this deal - agent email will still be marked as sent');
-            }
-            
-            // ALWAYS update deal with agent email sent status (even if chat not found)
-            $agentEmailStmt = $pdo->prepare("
-                UPDATE deals 
-                SET agent_email_sent = TRUE,
-                    agent_email_sent_at = NOW(),
-                    deal_status = 'agent_access_pending',
-                    updated_at = NOW()
-                WHERE id = ?
-            ");
-            $agentEmailResult = $agentEmailStmt->execute([$dealId]);
-            
-            logWebhook('Agent email status update', [
-                'deal_id' => $dealId,
-                'update_success' => $agentEmailResult,
-                'rows_affected' => $agentEmailStmt->rowCount()
-            ]);
-            
-            // Add history record for agent email sent
-            $agentHistoryStmt = $pdo->prepare("
-                INSERT INTO deal_history (deal_id, action_type, action_by, action_description, created_at)
-                VALUES (?, 'agent_email_sent', 1, ?, NOW())
-            ");
-            $agent_email_description = "Agent email ({$admin_email}) sent to seller for account access via webhook";
-            $agentHistoryResult = $agentHistoryStmt->execute([$dealId, $agent_email_description]);
-            
-            logWebhook('Agent email history update', [
-                'deal_id' => $dealId,
-                'history_success' => $agentHistoryResult
-            ]);
-            
-            logWebhook('✅ Agent email process completed', [
-                'deal_status_updated' => $agentEmailResult,
-                'chat_message_sent' => !empty($chat)
-            ]);
-            
-        } catch (Exception $e) {
-            logWebhook('❌ Error in agent email process', ['error' => $e->getMessage()]);
-            
-            // Even if there's an error, try to mark as sent to avoid blocking the deal
-            try {
-                $fallbackStmt = $pdo->prepare("
-                    UPDATE deals 
-                    SET agent_email_sent = TRUE,
-                        agent_email_sent_at = NOW(),
-                        updated_at = NOW()
-                    WHERE id = ?
-                ");
-                $fallbackStmt->execute([$dealId]);
-                logWebhook('✅ Fallback: Agent email marked as sent despite error');
-            } catch (Exception $fallbackError) {
-                logWebhook('❌ Fallback failed too', ['error' => $fallbackError->getMessage()]);
-            }
-        }
-        
-    } else {
-        logWebhook('❌ Could not find deal after update', ['deal_id' => $dealId]);
-    }
+    logWebhook($applied ? '✅ Deal marked as fee paid via webhook' : 'ℹ️ Deal already marked as fee paid, skipping', [
+        'deal_id' => $dealId
+    ]);
 }
 
 function handleFailedPayment($pdo, $dealId, $paymentId, $webhookData) {

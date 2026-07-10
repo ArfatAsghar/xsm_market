@@ -9,6 +9,7 @@ error_log("Request method: " . ($method ?? 'undefined'));
 // Include required dependencies
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../utils/jwt.php';
+require_once __DIR__ . '/../utils/SystemUser.php';
 
 // Function to get current user from JWT token
 function getCurrentUser() {
@@ -682,9 +683,9 @@ try {
                         // Insert system message
                         $stmt = $pdo->prepare("
                             INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
-                            VALUES (?, 1, ?, 'system', 0, NOW(), NOW())
+                            VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
                         ");
-                        $stmt->execute([$chat['chat_id'], $message_content]);
+                        $stmt->execute([$chat['chat_id'], getSystemUserId($pdo), $message_content]);
                         
                         // Update chat last message
                         $stmt = $pdo->prepare("
@@ -897,9 +898,9 @@ try {
                     // Insert system message
                     $stmt = $pdo->prepare("
                         INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
-                        VALUES (?, 1, ?, 'system', 0, NOW(), NOW())
+                        VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
                     ");
-                    $stmt->execute([$chat['chat_id'], $message_content]);
+                    $stmt->execute([$chat['chat_id'], getSystemUserId($pdo), $message_content]);
                     
                     // Update chat last message
                     $stmt = $pdo->prepare("
@@ -1189,9 +1190,9 @@ try {
                     // Insert system message
                     $stmt = $pdo->prepare("
                         INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
-                        VALUES (?, 1, ?, 'system', 0, NOW(), NOW())
+                        VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
                     ");
-                    $stmt->execute([$chat['chat_id'], $message_content]);
+                    $stmt->execute([$chat['chat_id'], getSystemUserId($pdo), $message_content]);
                     
                     // Update chat last message
                     $stmt = $pdo->prepare("
@@ -1323,9 +1324,9 @@ try {
                     // Insert system message
                     $stmt = $pdo->prepare("
                         INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
-                        VALUES (?, 1, ?, 'system', 0, NOW(), NOW())
+                        VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
                     ");
-                    $stmt->execute([$chat['chat_id'], $message_content]);
+                    $stmt->execute([$chat['chat_id'], getSystemUserId($pdo), $message_content]);
                     
                     // Update chat's last message
                     $stmt = $pdo->prepare("
@@ -1459,9 +1460,9 @@ try {
                     // Insert system message
                     $stmt = $pdo->prepare("
                         INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
-                        VALUES (?, 1, ?, 'system', 0, NOW(), NOW())
+                        VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
                     ");
-                    $stmt->execute([$chat['chat_id'], $message_content]);
+                    $stmt->execute([$chat['chat_id'], getSystemUserId($pdo), $message_content]);
                     
                     // Update chat's last message
                     $stmt = $pdo->prepare("
@@ -1596,9 +1597,9 @@ try {
                     // Insert system message
                     $stmt = $pdo->prepare("
                         INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
-                        VALUES (?, 1, ?, 'system', 0, NOW(), NOW())
+                        VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
                     ");
-                    $stmt->execute([$chat['chat_id'], $message_content]);
+                    $stmt->execute([$chat['chat_id'], getSystemUserId($pdo), $message_content]);
                     
                     // Update chat's last message
                     $stmt = $pdo->prepare("
@@ -1800,9 +1801,9 @@ try {
                     // Insert system message
                     $stmt = $pdo->prepare("
                         INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
-                        VALUES (?, 1, ?, 'system', 0, NOW(), NOW())
+                        VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
                     ");
-                    $stmt->execute([$chat['chat_id'], $message_content]);
+                    $stmt->execute([$chat['chat_id'], getSystemUserId($pdo), $message_content]);
                     
                     // Update chat's last message
                     $stmt = $pdo->prepare("

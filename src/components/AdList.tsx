@@ -92,17 +92,27 @@ const AdList: React.FC<AdListProps> = ({
         console.log('📡 AdList: Response received:', response);
         
         if (response && response.ads) {
-          // Ensure data types are consistent
+          // Ensure data types are consistent and preserve VIP flags
           const formattedAds = response.ads.map((ad: any) => ({
             ...ad,
             id: Number(ad.id),
+            isVip: Boolean(ad.isVip || ad.seller_isVip || ad.seller?.isVip),
+            seller_isVip: Boolean(ad.isVip || ad.seller_isVip || ad.seller?.isVip),
             seller: {
               id: Number(ad.seller?.id || ad.User?.id || 0),
               username: ad.seller?.username || ad.User?.username || 'Anonymous',
-              profilePicture: ad.seller?.profilePicture || ad.User?.profilePicture || ''
+              profilePicture: ad.seller?.profilePicture || ad.User?.profilePicture || '',
+              isVip: Boolean(ad.seller?.isVip || ad.isVip || ad.seller_isVip),
+              vipUntil: ad.seller?.vipUntil || null
             }
           }));
           
+          // Sort: pinned first, then newest first by createdAt
+          formattedAds.sort((a: any, b: any) => {
+            if (b.pinned !== a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          });
+
           console.log('📡 AdList: Formatted ads:', formattedAds.length);
           setAllAds(formattedAds);
         } else {
@@ -205,6 +215,12 @@ const AdList: React.FC<AdListProps> = ({
         return ad.monthlyIncome >= min && ad.monthlyIncome <= max;
       });
     }
+
+    // Always keep newest-first order (pinned first, then by createdAt DESC)
+    filtered.sort((a: any, b: any) => {
+      if (b.pinned !== a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
 
     console.log('📊 AdList: Filtered results:', filtered.length, 'out of', allAds.length);
     setFilteredAds(filtered);

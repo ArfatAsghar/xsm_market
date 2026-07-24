@@ -74,8 +74,8 @@ const SellChannel: React.FC<SellChannelProps> = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
 
+  // Title comes from auto-extraction; not required to be typed manually
   const isFormValid = 
-    formData.title.trim().length > 0 &&
     formData.channelUrl.trim().length > 0 &&
     formData.category.trim().length > 0 &&
     formData.price.trim().length > 0 && parseFloat(formData.price) >= 5 &&
@@ -691,35 +691,33 @@ if (files.length > 0) {
               </h1>
 
           <div className="space-y-6">
-            {/* Title Input */}
-            <div>
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleInputChange}
-                className="xsm-input w-full"
-                placeholder="Listing title (e.g., 'Premium Gaming YouTube Channel')"
-              />
-            </div>
-
-            {/* Profile Picture Preview */}
-            {formData.profilePicture && (
-              <div>
-                <label className="block text-white font-medium mb-2">Profile Picture (Auto-extracted)</label>
-                <div className="flex items-center gap-4">
-                  <img 
-                    src={formData.profilePicture} 
-                    alt="Profile" 
-                    className="w-16 h-16 rounded-full object-cover"
+            {/* Auto-extracted Channel Info (read-only display) */}
+            {(formData.profilePicture || formData.title) && (
+              <div className="flex items-center gap-4 p-4 bg-xsm-dark-gray/60 rounded-lg border border-xsm-medium-gray/30">
+                {formData.profilePicture && (
+                  <img
+                    src={formData.profilePicture}
+                    alt="Channel Profile"
+                    className="w-14 h-14 rounded-full object-cover flex-shrink-0 ring-2 ring-xsm-yellow/40"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       target.style.display = 'none';
                     }}
                   />
-                  <div className="text-sm text-xsm-light-gray">
-                    Profile picture automatically extracted from your social media URL
-                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  {formData.title && (
+                    <p className="text-white font-semibold text-base truncate">{formData.title}</p>
+                  )}
+                  {formData.subscribers && (
+                    <p className="text-xsm-light-gray text-sm mt-0.5">
+                      {parseInt(formData.subscribers) >= 1000000
+                        ? (parseInt(formData.subscribers) / 1000000).toFixed(1) + 'M'
+                        : parseInt(formData.subscribers) >= 1000
+                        ? (parseInt(formData.subscribers) / 1000).toFixed(1) + 'K'
+                        : formData.subscribers} subscribers
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -821,15 +819,18 @@ if (files.length > 0) {
               />
             </div>
 
-            {/* Subscribers Input */}
+            {/* Subscribers Input — read-only when auto-extracted */}
             <div>
               <input
                 type="number"
                 name="subscribers"
                 value={formData.subscribers}
-                onChange={handleInputChange}
-                className="xsm-input w-full"
-                placeholder="Number of subscribers/followers (optional)"
+                onChange={extractedData ? undefined : handleInputChange}
+                readOnly={!!extractedData}
+                className={`xsm-input w-full ${
+                  extractedData ? 'opacity-70 cursor-not-allowed bg-xsm-dark-gray/60' : ''
+                }`}
+                placeholder="Number of subscribers/followers"
               />
             </div>
 

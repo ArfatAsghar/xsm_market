@@ -131,8 +131,12 @@ async function main() {
       await fs.remove(nestedApiDir);
     }
 
-    console.log('🤐 Zipping deployment package using native tar...');
-    execSync('tar.exe -a -c -f xsm-market-deploy.zip -C deploy-temp .', { stdio: 'inherit' });
+    console.log('🤐 Zipping deployment package using standard PKZip format for Hostinger compatibility...');
+    if (process.platform === 'win32') {
+      execSync('powershell -Command "Remove-Item -Force xsm-market-deploy.zip -ErrorAction SilentlyContinue; Compress-Archive -Path \'deploy-temp\\*\' -DestinationPath \'xsm-market-deploy.zip\' -Force"', { stdio: 'inherit' });
+    } else {
+      execSync('cd deploy-temp && zip -r ../xsm-market-deploy.zip .', { stdio: 'inherit' });
+    }
 
     console.log('✅ Deployment structure successfully packaged and zipped in xsm-market-deploy.zip');
   } catch (error) {

@@ -34,21 +34,41 @@ class ChatController {
             $user = $this->authMiddleware->authenticate();
             $userId = (int)$user['id'];
 
-            $stmt = $this->db->prepare("
-                SELECT DISTINCT c.*,
-                       a.id as ad_id, a.title as ad_title, a.price as ad_price,
-                       m.content as last_message_content, m.createdAt as last_message_time,
-                       sender.id as last_sender_id, sender.username as last_sender_username
-                FROM chats c
-                INNER JOIN chat_participants cp ON c.id = cp.chatId
-                LEFT JOIN ads a ON c.adId = a.id
-                LEFT JOIN messages m ON c.id = m.chatId
-                LEFT JOIN users sender ON m.senderId = sender.id
-                LEFT JOIN messages m2 ON c.id = m2.chatId AND m.createdAt < m2.createdAt
-                WHERE cp.userId = ? AND cp.isActive = 1 AND m2.id IS NULL
-                ORDER BY c.lastMessageTime DESC, c.updatedAt DESC, c.createdAt DESC
-            ");
-            $stmt->execute([$userId]);
+            $adminEmail = getenv('ADMIN_EMAIL');
+            $isAdmin = ($adminEmail && strtolower($user['email']) === strtolower($adminEmail)) || !empty($user['isAdmin']) || in_array($user['role'] ?? '', ['admin', 'manager', 'viewer']);
+
+            if ($isAdmin) {
+                $stmt = $this->db->prepare("
+                    SELECT DISTINCT c.*,
+                           a.id as ad_id, a.title as ad_title, a.price as ad_price,
+                           m.content as last_message_content, m.createdAt as last_message_time,
+                           sender.id as last_sender_id, sender.username as last_sender_username
+                    FROM chats c
+                    LEFT JOIN ads a ON c.adId = a.id
+                    LEFT JOIN messages m ON c.id = m.chatId
+                    LEFT JOIN users sender ON m.senderId = sender.id
+                    LEFT JOIN messages m2 ON c.id = m2.chatId AND m.createdAt < m2.createdAt
+                    WHERE m2.id IS NULL
+                    ORDER BY c.lastMessageTime DESC, c.updatedAt DESC, c.createdAt DESC
+                ");
+                $stmt->execute();
+            } else {
+                $stmt = $this->db->prepare("
+                    SELECT DISTINCT c.*,
+                           a.id as ad_id, a.title as ad_title, a.price as ad_price,
+                           m.content as last_message_content, m.createdAt as last_message_time,
+                           sender.id as last_sender_id, sender.username as last_sender_username
+                    FROM chats c
+                    INNER JOIN chat_participants cp ON c.id = cp.chatId
+                    LEFT JOIN ads a ON c.adId = a.id
+                    LEFT JOIN messages m ON c.id = m.chatId
+                    LEFT JOIN users sender ON m.senderId = sender.id
+                    LEFT JOIN messages m2 ON c.id = m2.chatId AND m.createdAt < m2.createdAt
+                    WHERE cp.userId = ? AND cp.isActive = 1 AND m2.id IS NULL
+                    ORDER BY c.lastMessageTime DESC, c.updatedAt DESC, c.createdAt DESC
+                ");
+                $stmt->execute([$userId]);
+            }
             $chats = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             $result = [];

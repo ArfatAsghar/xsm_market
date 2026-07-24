@@ -32,8 +32,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = () => {
   const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
 
   const navigateToChat = (chatId: string) => {
-    setSelectedChatId(chatId);
-    setActiveView('review-chats');
+    if (chatId) {
+      navigate(`/chat?chatId=${chatId}`);
+    } else {
+      navigate('/chat');
+    }
   };
   const [stats, setStats] = useState([
     { title: 'Total Users', value: '-', icon: Users },

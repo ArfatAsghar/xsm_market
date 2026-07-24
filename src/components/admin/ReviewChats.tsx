@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getAllChats, adminSendMessage, adminDeleteMessage, adminDeleteChat, resolveSupportChat } from '@/services/admin';
-import { Send, Trash2, MessageSquare, AlertTriangle, CheckCircle, Plus, Edit, Clipboard, Sparkles, Search } from 'lucide-react';
+import { Send, Trash2, MessageSquare, AlertTriangle, CheckCircle, Plus, Edit, Clipboard, Sparkles, Search, ExternalLink } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 
 interface Participant {
@@ -57,6 +58,7 @@ interface ReviewChatsProps {
 }
 
 const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
+  const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const currentUserRole = (currentUser as any)?.role || 'user';
   const isCurrentUserAdmin = currentUserRole === 'admin' || (currentUser as any)?.isAdmin === true;
@@ -496,6 +498,14 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  onClick={() => navigate(`/chat?chatId=${selectedChat.id}`)}
+                  className="px-3 py-1.5 text-sm bg-xsm-yellow text-black hover:bg-yellow-400 rounded flex items-center gap-1.5 transition-colors font-semibold shadow-md"
+                  title="Open this conversation in full screen chat"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  Open Full Chat
+                </button>
                 {!isCurrentUserViewer && selectedChat.support_requested && (
                   <button
                     onClick={handleResolveSupport}

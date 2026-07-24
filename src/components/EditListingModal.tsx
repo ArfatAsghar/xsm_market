@@ -5,6 +5,7 @@ import { extractProfileData, detectPlatform, formatFollowerCount } from '../serv
 import { uploadScreenshots } from '../services/uploadService';
 import { useToast } from "@/components/ui/use-toast";
 import { getImageUrl } from "@/config/api";
+import { compressImage } from '../utils/imageCompressor';
 
 interface UserAd {
   id: number;
@@ -432,9 +433,38 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
 
       if (files.length > 0) {
         try {
-          console.log('Uploading new screenshots...', files.length, 'files');
+          console.log('Compressing new screenshots client-side...');
+          const compressedFiles: File[] = [];
+          const compressionToast = toast({
+            title: "Compressing images... ⚙️",
+            description: `Preparing ${files.length} screenshots for upload...`,
+          });
 
-          const uploadResult = await uploadScreenshots(files);
+          for (const file of files) {
+            try {
+              const compressed = await compressImage(file, 1200, 1200, 0.75);
+              compressedFiles.push(compressed);
+            } catch (e) {
+              console.warn('Failed to compress file, using original:', file.name, e);
+              compressedFiles.push(file);
+            }
+          }
+
+          compressionToast.dismiss();
+
+          console.log('Uploading new screenshots...', compressedFiles.length, 'files');
+          const uploadToast = toast({
+            title: "Uploading screenshots... ⬆️",
+            description: `0 of ${compressedFiles.length} uploaded...`,
+          });
+
+          const uploadResult = await uploadScreenshots(compressedFiles, (current, total) => {
+            uploadToast.update({
+              id: uploadToast.id,
+              title: "Uploading screenshots... ⬆️",
+              description: `${current} of ${total} uploaded...`,
+            });
+          });
           const newScreenshots = uploadResult.screenshots || [];
 
           if (!Array.isArray(newScreenshots) || newScreenshots.length === 0) {
@@ -444,6 +474,7 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
           screenshotData = [...screenshotData, ...newScreenshots];
 
           console.log('Screenshots uploaded successfully:', newScreenshots);
+          uploadToast.dismiss();
         } catch (uploadError: any) {
           console.error('Error uploading screenshots:', uploadError);
 

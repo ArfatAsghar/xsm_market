@@ -15,6 +15,17 @@ class ChatController {
         $database = new Database();
         $this->db = $database->getConnection();
         $this->authMiddleware = new AuthMiddleware();
+        
+        // Ensure support_requested columns exist on chats table
+        try {
+            $check = $this->db->query("SHOW COLUMNS FROM chats LIKE 'support_requested'");
+            if (!$check->fetch()) {
+                $this->db->exec("ALTER TABLE chats ADD COLUMN support_requested TINYINT(1) DEFAULT 0");
+                $this->db->exec("ALTER TABLE chats ADD COLUMN support_requested_at DATETIME NULL");
+            }
+        } catch (Exception $e) {
+            error_log('Error adding support_requested columns: ' . $e->getMessage());
+        }
     }
 
     // Get all chats for a user
@@ -61,6 +72,8 @@ class ChatController {
                     'type' => $chat['type'],
                     'name' => $chat['name'],
                     'adId' => $chat['ad_id'] ? (int)$chat['ad_id'] : null,
+                    'support_requested' => isset($chat['support_requested']) ? (bool)$chat['support_requested'] : false,
+                    'support_requested_at' => $chat['support_requested_at'] ?? null,
                     'lastMessage' => $chat['lastMessage'],
                     'lastMessageTime' => $chat['lastMessageTime'],
                     'createdAt' => $chat['createdAt'],
@@ -208,21 +221,26 @@ class ChatController {
             $limit = (int)($_GET['limit'] ?? 50);
             $offset = ($page - 1) * $limit;
 
-            $stmt = $this->db->prepare("
-                SELECT id FROM chat_participants
-                WHERE chatId = ? AND userId = ? AND isActive = 1
-            ");
-            $stmt->execute([$chatId, $userId]);
+            $adminEmail = getenv('ADMIN_EMAIL');
+            $isAdmin = ($adminEmail && strtolower($user['email']) === strtolower($adminEmail)) || !empty($user['isAdmin']);
 
-            if (!$stmt->fetch()) {
-                http_response_code(403);
-                echo json_encode(['message' => 'Access denied']);
-                return;
+            if (!$isAdmin) {
+                $stmt = $this->db->prepare("
+                    SELECT id FROM chat_participants
+                    WHERE chatId = ? AND userId = ? AND isActive = 1
+                ");
+                $stmt->execute([$chatId, $userId]);
+
+                if (!$stmt->fetch()) {
+                    http_response_code(403);
+                    echo json_encode(['message' => 'Access denied']);
+                    return;
+                }
             }
 
             $stmt = $this->db->prepare("
                 SELECT m.*,
-                       sender.id as sender_id, sender.username as sender_username,
+                       sender.id as sender_id, sender.username as sender_username, sender.isAdmin as sender_isAdmin, sender.email as sender_email,
                        reply.id as reply_id, reply.content as reply_content,
                        reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username
                 FROM messages m
@@ -242,7 +260,7 @@ class ChatController {
             ");
             $stmt->execute([$chatId, $userId]);
 
-            $result = array_map(function($msg) {
+            $result = array_map(function($msg) use ($adminEmail) {
                 $formatted = [
                     'id' => (int)$msg['id'],
                     'content' => $msg['content'],
@@ -258,7 +276,8 @@ class ChatController {
                     'updatedAt' => $msg['updatedAt'],
                     'sender' => [
                         'id' => (int)$msg['sender_id'],
-                        'username' => $msg['sender_username']
+                        'username' => $msg['sender_username'],
+                        'isAdmin' => (!empty($msg['sender_isAdmin']) || ($adminEmail && strtolower($msg['sender_email'] ?? '') === strtolower($adminEmail)))
                     ]
                 ];
 
@@ -394,9 +413,10 @@ class ChatController {
             ");
             $stmt->execute([$content, $chatId]);
 
+            $adminEmail = getenv('ADMIN_EMAIL');
             $stmt = $this->db->prepare("
                 SELECT m.*,
-                       sender.id as sender_id, sender.username as sender_username,
+                       sender.id as sender_id, sender.username as sender_username, sender.isAdmin as sender_isAdmin, sender.email as sender_email,
                        reply.id as reply_id, reply.content as reply_content,
                        reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username
                 FROM messages m
@@ -420,7 +440,8 @@ class ChatController {
                 'updatedAt' => $messageData['updatedAt'],
                 'sender' => [
                     'id' => (int)$messageData['sender_id'],
-                    'username' => $messageData['sender_username']
+                    'username' => $messageData['sender_username'],
+                    'isAdmin' => (!empty($messageData['sender_isAdmin']) || ($adminEmail && strtolower($messageData['sender_email'] ?? '') === strtolower($adminEmail)))
                 ]
             ];
 
@@ -713,7 +734,7 @@ class ChatController {
     public function adminSendMessage($chatId) {
         try {
             $currentUser = $this->authMiddleware->authenticate();
-            $this->checkAdminAccess($currentUser);
+            $this->checkManagerAccess($currentUser);
 
             $input = json_decode(file_get_contents('php://input'), true);
             $content = trim($input['content'] ?? '');
@@ -775,7 +796,11 @@ class ChatController {
     public function adminDeleteMessage($messageId) {
         try {
             $currentUser = $this->authMiddleware->authenticate();
-            $this->checkAdminAccess($currentUser);
+            $this->checkManagerAccess($currentUser);
+
+            // Nullify replyToId references first to avoid foreign key constraint errors
+            $stmt = $this->db->prepare("UPDATE messages SET replyToId = NULL WHERE replyToId = ?");
+            $stmt->execute([$messageId]);
 
             $stmt = $this->db->prepare("DELETE FROM messages WHERE id = ?");
             $stmt->execute([$messageId]);
@@ -798,9 +823,13 @@ class ChatController {
     public function adminDeleteChat($chatId) {
         try {
             $currentUser = $this->authMiddleware->authenticate();
-            $this->checkAdminAccess($currentUser);
+            $this->checkManagerAccess($currentUser); // Allow both admin and manager
 
             $this->db->beginTransaction();
+
+            // Nullify replyToId references first to avoid self-referential foreign key constraint errors
+            $stmt = $this->db->prepare("UPDATE messages SET replyToId = NULL WHERE chatId = ?");
+            $stmt->execute([$chatId]);
 
             $stmt = $this->db->prepare("DELETE FROM messages WHERE chatId = ?");
             $stmt->execute([$chatId]);
@@ -917,6 +946,102 @@ class ChatController {
         }
     }
 
+    public function requestAgentForChat($chatId) {
+        try {
+            $user = $this->authMiddleware->authenticate();
+            if (!$user) {
+                http_response_code(401);
+                echo json_encode(['message' => 'Unauthorized']);
+                return;
+            }
+
+            // Verify the chat belongs to the requesting user
+            $stmt = $this->db->prepare("
+                SELECT cp.chatId FROM chat_participants cp
+                WHERE cp.chatId = ? AND cp.userId = ? AND cp.isActive = 1
+                LIMIT 1
+            ");
+            $stmt->execute([$chatId, $user['id']]);
+            if (!$stmt->fetch()) {
+                http_response_code(403);
+                echo json_encode(['message' => 'Access denied']);
+                return;
+            }
+
+            // Mark chat as support requested (add column if not exists, or skip gracefully)
+            try {
+                $stmt = $this->db->prepare("
+                    UPDATE chats SET support_requested = 1, support_requested_at = NOW()
+                    WHERE id = ?
+                ");
+                $stmt->execute([$chatId]);
+            } catch (Exception $e) {
+                // Column may not exist yet — silently ignore, still insert system message
+                error_log('support_requested column not found: ' . $e->getMessage());
+            }
+
+            // Insert a system message into the chat
+            $systemMsg = '⚠️ ' . ($user['username'] ?? 'User') . ' has requested admin assistance in this conversation.';
+            $stmt = $this->db->prepare("
+                INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
+                VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
+            ");
+            $stmt->execute([$chatId, $user['id'], $systemMsg]);
+
+            // Also update the chat's last message time
+            $this->db->prepare("UPDATE chats SET updatedAt = NOW(), lastMessageTime = NOW() WHERE id = ?")->execute([$chatId]);
+
+            http_response_code(200);
+            echo json_encode(['success' => true, 'message' => 'Agent request sent successfully']);
+        } catch (Exception $e) {
+            error_log('requestAgentForChat error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['message' => 'Server error', 'error' => $e->getMessage()]);
+        }
+    }
+
+    public function resolveSupportForChat($chatId) {
+        try {
+            $user = $this->authMiddleware->authenticate();
+            if (!$user) {
+                http_response_code(401);
+                echo json_encode(['message' => 'Unauthorized']);
+                return;
+            }
+
+            // Require admin or manager auth
+            if (!AuthMiddleware::checkRole($user, ['admin', 'manager'])) {
+                http_response_code(403);
+                echo json_encode(['message' => 'Access denied: Manager or Admin only']);
+                return;
+            }
+
+            $stmt = $this->db->prepare("
+                UPDATE chats SET support_requested = 0, support_requested_at = NULL
+                WHERE id = ?
+            ");
+            $stmt->execute([$chatId]);
+
+            // Add a system message stating support is resolved
+            $systemMsg = 'ℹ️ Support request has been resolved by Admin.';
+            $stmt = $this->db->prepare("
+                INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
+                VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
+            ");
+            $stmt->execute([$chatId, $user['id'], $systemMsg]);
+
+            // Also update the chat's last message time
+            $this->db->prepare("UPDATE chats SET updatedAt = NOW(), lastMessageTime = NOW() WHERE id = ?")->execute([$chatId]);
+
+            http_response_code(200);
+            echo json_encode(['success' => true, 'message' => 'Support request marked as resolved']);
+        } catch (Exception $e) {
+            error_log('resolveSupportForChat error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['message' => 'Server error', 'error' => $e->getMessage()]);
+        }
+    }
+
     private function buildChatResponse($chatId, $currentUserId, $otherUserId = null) {
         $stmt = $this->db->prepare("
             SELECT c.*, a.id as ad_id, a.title as ad_title, a.price as ad_price
@@ -960,6 +1085,8 @@ class ChatController {
             'type' => $chatData['type'],
             'name' => $chatData['name'],
             'adId' => $chatData['ad_id'] ? (int)$chatData['ad_id'] : null,
+            'support_requested' => isset($chatData['support_requested']) ? (bool)$chatData['support_requested'] : false,
+            'support_requested_at' => $chatData['support_requested_at'] ?? null,
             'lastMessage' => $chatData['lastMessage'] ?? null,
             'lastMessageTime' => $chatData['lastMessageTime'] ?? null,
             'createdAt' => $chatData['createdAt'],
@@ -1098,20 +1225,25 @@ class ChatController {
     }
 
     private function checkAdminAccess($user) {
-        $adminEmail = getenv('ADMIN_EMAIL');
-        $isAdmin = false;
-
-        if ($adminEmail && strtolower($user['email']) === strtolower($adminEmail)) {
-            $isAdmin = true;
-        }
-
-        if (isset($user['isAdmin']) && $user['isAdmin']) {
-            $isAdmin = true;
-        }
-
-        if (!$isAdmin) {
+        if (!AuthMiddleware::checkRole($user, ['admin'])) {
             http_response_code(403);
             echo json_encode(['message' => 'Access denied. Admin privileges required.']);
+            exit;
+        }
+    }
+
+    private function checkManagerAccess($user) {
+        if (!AuthMiddleware::checkRole($user, ['admin', 'manager'])) {
+            http_response_code(403);
+            echo json_encode(['message' => 'Access denied. Manager or Admin privileges required.']);
+            exit;
+        }
+    }
+
+    private function checkViewerAccess($user) {
+        if (!AuthMiddleware::checkRole($user, ['admin', 'manager', 'viewer'])) {
+            http_response_code(403);
+            echo json_encode(['message' => 'Access denied. Authorized dashboard access required.']);
             exit;
         }
     }

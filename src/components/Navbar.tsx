@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, PlusCircle, LogOut, Settings, Heart, Star, MessageSquare, FileText } from 'lucide-react';
+import { Menu, X, User, PlusCircle, LogOut, Settings, Heart, Star, MessageSquare, FileText, Crown } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { logout } from '@/services/auth';
 import { isCurrentUserAdmin } from '@/utils/adminConfig';
+import VipSubscriptionModal from './VipSubscriptionModal';
 import AuthWidget from './AuthWidget';
 import {
   Avatar,
@@ -29,7 +30,8 @@ const Navbar: React.FC<NavbarProps> = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [showAuthWidget, setShowAuthWidget] = useState(false);
   const [isUserAdmin, setIsUserAdmin] = useState(false);
-  const { isLoggedIn, setIsLoggedIn, user } = useAuth();
+  const [showVipModal, setShowVipModal] = useState(false);
+  const { isLoggedIn, setIsLoggedIn, user, setUser } = useAuth();
 
   // Helper function to navigate and scroll to top
   const navigateToPage = (page: string) => {
@@ -38,13 +40,20 @@ const Navbar: React.FC<NavbarProps> = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Check admin status when user changes
+  // Check dashboard access when user changes (admin, manager, or viewer)
   useEffect(() => {
     const checkAdminStatus = async () => {
       if (isLoggedIn && user) {
-        // First check if user has isAdmin flag set to true
+        const role = (user as any).role;
+        
+        // Grant dashboard access to admin, manager, or viewer roles
+        if (role === 'admin' || role === 'manager' || role === 'viewer') {
+          setIsUserAdmin(true);
+          return;
+        }
+        
+        // Legacy: check if user has isAdmin flag set to true
         if ((user as any).isAdmin === true) {
-          console.log('✅ User is admin (isAdmin flag set to true)');
           setIsUserAdmin(true);
           return;
         }
@@ -62,7 +71,7 @@ const Navbar: React.FC<NavbarProps> = () => {
     };
 
     checkAdminStatus();
-  }, [isLoggedIn, user?.email, user?.username, (user as any)?.isAdmin]);
+  }, [isLoggedIn, user?.email, user?.username, (user as any)?.isAdmin, (user as any)?.role]);
 
   const handleLogout = () => {
     logout();
@@ -157,14 +166,21 @@ const Navbar: React.FC<NavbarProps> = () => {
               {isLoggedIn ? (
                 <div className="flex items-center space-x-3">
                   {/* Greeting text */}
-                  <span className="text-white text-sm hidden md:block">
+                  <span className="text-white text-sm hidden md:block flex items-center gap-1">
                     Hi, <span className="text-xsm-yellow font-medium">{user?.username || 'User'}</span>
+                    {(user as any)?.isVip && (
+                      <Crown className="w-3.5 h-3.5 text-yellow-400 animate-pulse fill-yellow-400/20" title="VIP Member" />
+                    )}
                   </span>
                   
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <button className="flex items-center space-x-2 hover:opacity-80 transition-opacity">
-                        <div className="w-8 h-8 bg-xsm-yellow rounded-full overflow-hidden">
+                      <button className="flex items-center space-x-2 hover:opacity-80 transition-opacity relative">
+                        <div className={`w-8 h-8 rounded-full overflow-hidden ${
+                          (user as any)?.isVip 
+                            ? 'ring-2 ring-yellow-400 bg-gradient-to-tr from-yellow-500 to-amber-500' 
+                            : 'bg-xsm-yellow'
+                        }`}>
                           {user?.profilePicture ? (
                             <img
                               src={user.profilePicture}
@@ -175,12 +191,21 @@ const Navbar: React.FC<NavbarProps> = () => {
                             <User className="w-5 h-5 text-black m-1.5" />
                           )}
                         </div>
+                        {(user as any)?.isVip && (
+                          <div className="absolute -top-1 -right-1 bg-yellow-400 text-black rounded-full p-0.5 shadow-md">
+                            <Crown className="w-2.5 h-2.5 fill-current" />
+                          </div>
+                        )}
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="bg-xsm-dark-gray border-xsm-medium-gray">
                       <DropdownMenuItem onClick={() => navigateToPage(`/u/${user?.username}`)} className="cursor-pointer">
                         <User className="mr-2 h-4 w-4" />
                         <span>Profile</span>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setShowVipModal(true)} className="cursor-pointer text-yellow-400 hover:text-yellow-300 font-semibold focus:text-yellow-300">
+                        <Crown className="mr-2 h-4 w-4 fill-yellow-400/20" />
+                        <span>VIP Membership</span>
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => navigateToPage('my-deals')} className="cursor-pointer">
                         <FileText className="mr-2 h-4 w-4" />
@@ -190,6 +215,7 @@ const Navbar: React.FC<NavbarProps> = () => {
                         <FileText className="mr-2 h-4 w-4" />
                         <span>Seller Deals</span>
                       </DropdownMenuItem>
+                      <DropdownMenuSeparator className="bg-xsm-medium-gray/40" />
                       <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                         <LogOut className="mr-2 h-4 w-4" />
                         <span>Logout</span>
@@ -231,13 +257,20 @@ const Navbar: React.FC<NavbarProps> = () => {
                 <>
                   {/* User greeting for mobile view */}
                   <div className="flex items-center px-3 py-2 space-x-2">
-                    <Avatar className="w-8 h-8 border-2 border-xsm-medium-gray">
+                    <Avatar className={`w-8 h-8 border-2 ${
+                      (user as any)?.isVip ? 'border-yellow-400' : 'border-xsm-medium-gray'
+                    }`}>
                       <AvatarImage src={user?.profilePicture || '/placeholder.svg'} alt={user?.username || 'User'} />
                       <AvatarFallback className="bg-xsm-medium-gray text-white">
                         <User className="w-4 h-4" />
                       </AvatarFallback>
                     </Avatar>
-                    <span className="text-white">Hi, <span className="text-xsm-yellow font-medium">{user?.username || 'User'}</span></span>
+                    <span className="text-white flex items-center gap-1">
+                      Hi, <span className="text-xsm-yellow font-medium">{user?.username || 'User'}</span>
+                      {(user as any)?.isVip && (
+                        <Crown className="w-3.5 h-3.5 text-yellow-400 animate-pulse fill-yellow-400/20" />
+                      )}
+                    </span>
                   </div>
                   {/* Show nav items in mobile menu */}
                   {navItems.map((item) => (
@@ -262,6 +295,17 @@ const Navbar: React.FC<NavbarProps> = () => {
                     </button>
                   ))}
                   
+                  <button
+                    onClick={() => {
+                      setShowVipModal(true);
+                      setIsMenuOpen(false);
+                    }}
+                    className="flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium text-yellow-400 hover:text-yellow-300 hover:bg-xsm-medium-gray"
+                  >
+                    <Crown className="w-5 h-5 fill-yellow-400/20" />
+                    <span>VIP Membership</span>
+                  </button>
+
                   <button
                     onClick={() => {
                       navigateToPage(`/u/${user?.username}`);
@@ -339,6 +383,20 @@ const Navbar: React.FC<NavbarProps> = () => {
           </div>
         )}
       </nav>
+
+      {isLoggedIn && (
+        <VipSubscriptionModal
+          isOpen={showVipModal}
+          onClose={() => setShowVipModal(false)}
+          onSuccess={(vipUntil) => {
+            if (user) {
+              const updatedUser = { ...user, isVip: true, vipUntil };
+              localStorage.setItem('userData', JSON.stringify(updatedUser));
+              setUser(updatedUser as any);
+            }
+          }}
+        />
+      )}
     </>
   );
 };

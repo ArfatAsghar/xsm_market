@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Users, Star } from 'lucide-react';
+import { Play, Users, Star, Crown } from 'lucide-react';
 
 interface ChannelData {
   id: string;
@@ -20,6 +20,7 @@ interface ChannelData {
     name: string;
     rating: number;
     sales: number;
+    isVip?: boolean;
   };
 }
 
@@ -52,7 +53,7 @@ const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onShowMore }) => {
               alt={channel.name} 
               className="w-full h-full object-cover"
             />
-          ) : (channel.screenshots && channel.screenshots.length > 0) ? (
+          ) : (Array.isArray(channel.screenshots) && channel.screenshots.length > 0) ? (
             <img 
               src={channel.screenshots[0].url || channel.screenshots[0]} 
               alt={channel.name} 
@@ -71,6 +72,11 @@ const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onShowMore }) => {
         
         {/* Badges */}
         <div className="absolute top-2 left-2 flex space-x-2">
+          {channel.seller?.isVip && (
+            <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black px-2 py-0.5 rounded text-[10px] font-black shadow-lg shadow-yellow-900/40">
+              <Crown className="w-2.5 h-2.5" /> VIP
+            </span>
+          )}
           {channel.premium && (
             <span className="xsm-badge-premium">PREMIUM</span>
           )}

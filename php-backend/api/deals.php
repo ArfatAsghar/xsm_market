@@ -83,8 +83,8 @@ function createDeal() {
     // Get JSON input
     $input = json_decode(file_get_contents('php://input'), true);
     
-    // Validate required fields
-    $required_fields = ['seller_id', 'channel_id', 'channel_title', 'channel_price', 'escrow_fee', 'buyer_email', 'payment_methods', 'transaction_id'];
+    // Validate required fields (transaction_id is generated server-side)
+    $required_fields = ['seller_id', 'channel_id', 'channel_title', 'channel_price', 'escrow_fee', 'buyer_email', 'payment_methods'];
     foreach ($required_fields as $field) {
         if (!isset($input[$field]) || empty($input[$field])) {
             http_response_code(400);
@@ -96,6 +96,12 @@ function createDeal() {
     try {
         $pdo->beginTransaction();
         
+        // Generate a sequential, unique transaction ID server-side
+        $max_stmt = $pdo->query("SELECT COALESCE(MAX(id), 0) as max_id FROM deals");
+        $max_row  = $max_stmt->fetch(PDO::FETCH_ASSOC);
+        $next_seq = (int)$max_row['max_id'] + 1;
+        $transaction_id = 'TXN-' . str_pad($next_seq, 6, '0', STR_PAD_LEFT);
+
         // Insert main deal record
         $stmt = $pdo->prepare("
             INSERT INTO deals (
@@ -109,7 +115,7 @@ function createDeal() {
         $transaction_type = $input['transaction_type'] ?? 'safest';
         
         $stmt->execute([
-            $input['transaction_id'],
+            $transaction_id,
             $user['id'],
             $input['seller_id'],
             $input['channel_id'],

@@ -8,7 +8,7 @@ class AdminController {
     
     // Get all users (admin only)
     public function getUsers() {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireViewer();
         
         $page = intval($_GET['page'] ?? 1);
         $limit = intval($_GET['limit'] ?? 50);
@@ -47,7 +47,7 @@ class AdminController {
     
     // Get all ads (admin only)
     public function getAds() {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireViewer();
         
         $page = intval($_GET['page'] ?? 1);
         $limit = intval($_GET['limit'] ?? 50);
@@ -60,8 +60,12 @@ class AdminController {
             if ($status) $filters['status'] = $status;
             if ($search) $filters['search'] = $search;
             
-            // For admin, we want to see all ads regardless of status
+            // For admin, we want to see all ads regardless of status and including banned ones
+            $filters['includeBanned'] = true;
+            $filters['isAdmin'] = true;
+            
             $ads = Ad::getAll($limit, $offset, $filters);
+
             $total = Ad::count($filters);
             
             Response::json([
@@ -82,10 +86,11 @@ class AdminController {
     
     // Ban user
     public function banUser($userId) {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireManager();
         
         $input = json_decode(file_get_contents('php://input'), true);
         $reason = trim($input['reason'] ?? '');
+        $duration = trim($input['duration'] ?? 'permanent'); // 'permanent', '7d', '30d'
         
         try {
             $user = User::findById($userId);
@@ -98,13 +103,17 @@ class AdminController {
                 Response::error('Cannot ban admin users', 400);
             }
             
-            if ($user['isBanned']) {
-                Response::error('User is already banned', 400);
+            $banExpires = null;
+            if ($duration === '7d') {
+                $banExpires = date('Y-m-d H:i:s', strtotime('+7 days'));
+            } elseif ($duration === '30d') {
+                $banExpires = date('Y-m-d H:i:s', strtotime('+30 days'));
             }
             
             User::update($userId, [
                 'isBanned' => true,
                 'banReason' => $reason,
+                'banExpires' => $banExpires,
                 'bannedAt' => date('Y-m-d H:i:s'),
                 'bannedBy' => $admin['id']
             ]);
@@ -119,7 +128,7 @@ class AdminController {
     
     // Unban user
     public function unbanUser($userId) {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireManager();
         
         try {
             $user = User::findById($userId);
@@ -135,6 +144,7 @@ class AdminController {
             User::update($userId, [
                 'isBanned' => false,
                 'banReason' => null,
+                'banExpires' => null,
                 'bannedAt' => null,
                 'bannedBy' => null,
                 'unbannedAt' => date('Y-m-d H:i:s'),
@@ -148,10 +158,160 @@ class AdminController {
             Response::error('Server error: ' . $e->getMessage(), 500);
         }
     }
+
+    // Toggle VIP status (admin/manager)
+    public function toggleVip($userId) {
+        $admin = AuthMiddleware::requireManager();
+        $pdo = Database::getConnection();
+
+        try {
+            $stmt = $pdo->prepare("SELECT id, vipUntil FROM users WHERE id = ?");
+            $stmt->execute([$userId]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$user) {
+                Response::error('User not found', 404);
+                return;
+            }
+
+            $currentVipUntil = $user['vipUntil'] ?? null;
+            $isCurrentlyVip = !empty($currentVipUntil) && strtotime($currentVipUntil) > time();
+
+            if ($isCurrentlyVip) {
+                // Remove VIP
+                $newVipUntil = null;
+                $message = 'VIP status removed for user';
+            } else {
+                // Grant 30 days VIP
+                $dt = new DateTime();
+                $dt->modify('+30 days');
+                $newVipUntil = $dt->format('Y-m-d H:i:s');
+                $message = 'VIP status granted (30 days) for user';
+            }
+
+            $update = $pdo->prepare("UPDATE users SET vipUntil = ? WHERE id = ?");
+            $update->execute([$newVipUntil, $userId]);
+
+            Response::json([
+                'success' => true,
+                'message' => $message,
+                'isVip' => !$isCurrentlyVip,
+                'vipUntil' => $newVipUntil
+            ]);
+        } catch (Exception $e) {
+            error_log('Toggle VIP error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
     
+    // Update user role (admin only)
+    public function updateUserRole($userId) {
+        $admin = AuthMiddleware::requireAdmin();
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+        $role = trim($input['role'] ?? '');
+        
+        if (!in_array($role, ['admin', 'manager', 'viewer', 'user'])) {
+            Response::error('Invalid role specified', 400);
+            return;
+        }
+        
+        try {
+            $user = User::findById($userId);
+            
+            if (!$user) {
+                Response::error('User not found', 404);
+                return;
+            }
+            
+            // Sync isAdmin column for backward compatibility
+            $isAdminVal = ($role === 'admin') ? 1 : 0;
+            
+            User::update($userId, [
+                'role' => $role,
+                'isAdmin' => $isAdminVal
+            ]);
+            
+            Response::json(['success' => true, 'message' => 'User role updated successfully']);
+            
+        } catch (Exception $e) {
+            error_log('Update user role error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+    
+    // Ban a listing (admin/manager)
+    public function banListing($adId) {
+        $admin = AuthMiddleware::requireManager();
+
+        $input = json_decode(file_get_contents('php://input'), true);
+        $reason = trim($input['reason'] ?? '');
+
+        if (!$reason) {
+            Response::error('A ban reason is required', 400);
+            return;
+        }
+
+        try {
+            $pdo = Database::getConnection();
+            $stmt = $pdo->prepare("SELECT id, userId, title FROM ads WHERE id = ?");
+            $stmt->execute([$adId]);
+            $ad = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$ad) {
+                Response::error('Listing not found', 404);
+                return;
+            }
+
+            $stmt = $pdo->prepare(
+                "UPDATE ads SET isBanned = 1, banReason = ?, bannedAt = NOW(), bannedBy = ? WHERE id = ?"
+            );
+            $stmt->execute([$reason, $admin['id'], $adId]);
+
+            Response::json([
+                'success' => true,
+                'message' => 'Listing banned successfully',
+                'sellerId' => $ad['userId'],
+                'listingTitle' => $ad['title']
+            ]);
+
+        } catch (Exception $e) {
+            error_log('Ban listing error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    // Unban a listing (admin/manager)
+    public function unbanListing($adId) {
+        $admin = AuthMiddleware::requireManager();
+
+        try {
+            $pdo = Database::getConnection();
+            $stmt = $pdo->prepare("SELECT id FROM ads WHERE id = ?");
+            $stmt->execute([$adId]);
+            $ad = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$ad) {
+                Response::error('Listing not found', 404);
+                return;
+            }
+
+            $stmt = $pdo->prepare(
+                "UPDATE ads SET isBanned = 0, banReason = NULL, bannedAt = NULL, bannedBy = NULL WHERE id = ?"
+            );
+            $stmt->execute([$adId]);
+
+            Response::json(['success' => true, 'message' => 'Listing unbanned successfully']);
+
+        } catch (Exception $e) {
+            error_log('Unban listing error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
     // Delete ad (admin)
     public function deleteAd($adId) {
-        // Remove admin authentication - just delete the ad
+        $admin = AuthMiddleware::requireManager();
         try {
             $ad = Ad::findById($adId);
             
@@ -163,7 +323,7 @@ class AdminController {
             $result = Ad::delete($adId);
             
             if ($result) {
-                Response::json(['message' => 'Ad deleted successfully']);
+                Response::json(['success' => true, 'message' => 'Ad deleted successfully']);
             } else {
                 Response::error('Failed to delete ad', 500);
             }
@@ -176,7 +336,7 @@ class AdminController {
     
     // Approve ad
     public function approveAd($adId) {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireManager();
         
         try {
             $ad = Ad::findById($adId);
@@ -201,7 +361,7 @@ class AdminController {
     
     // Reject ad
     public function rejectAd($adId) {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireManager();
         
         $input = json_decode(file_get_contents('php://input'), true);
         $reason = trim($input['reason'] ?? '');
@@ -230,7 +390,7 @@ class AdminController {
     
     // Get admin dashboard stats
     public function getDashboardStats() {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireViewer();
         
         try {
             $database = new Database();
@@ -301,7 +461,7 @@ class AdminController {
     
     // Get recent activities (admin only)
     public function getRecentActivities() {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireViewer();
         
         try {
             $database = new Database();
@@ -357,7 +517,7 @@ class AdminController {
     
     // Get all chats (admin only)
     public function getChats() {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireViewer();
         
         $page = intval($_GET['page'] ?? 1);
         $limit = intval($_GET['limit'] ?? 50);
@@ -370,13 +530,12 @@ class AdminController {
             // Get chats with participant info
             $stmt = $pdo->prepare("
                 SELECT c.*, 
-                       GROUP_CONCAT(u.username SEPARATOR ', ') as participants,
-                       COUNT(m.id) as messageCount
+                       (SELECT GROUP_CONCAT(u.username SEPARATOR ', ') 
+                        FROM chat_participants cp 
+                        INNER JOIN users u ON cp.userId = u.id 
+                        WHERE cp.chatId = c.id AND cp.isActive = 1) as participants,
+                       (SELECT COUNT(*) FROM messages m WHERE m.chatId = c.id) as messageCount
                 FROM chats c
-                LEFT JOIN chat_participants cp ON c.id = cp.chatId
-                LEFT JOIN users u ON cp.userId = u.id
-                LEFT JOIN messages m ON c.id = m.chatId
-                GROUP BY c.id
                 ORDER BY c.lastMessageTime DESC, c.createdAt DESC
                 LIMIT ? OFFSET ?
             ");
@@ -403,7 +562,7 @@ class AdminController {
     
     // Get all deals (admin only)
     public function getDeals() {
-        $admin = AuthMiddleware::requireAdmin();
+        $admin = AuthMiddleware::requireViewer();
         
         $page = intval($_GET['page'] ?? 1);
         $limit = intval($_GET['limit'] ?? 50);
@@ -561,6 +720,161 @@ class AdminController {
         } catch (Exception $e) {
             error_log('Get admin email error: ' . $e->getMessage());
             Response::error('Server error', 500);
+        }
+    }
+
+    public function getSupportRequests() {
+        try {
+            $user = AuthMiddleware::requireViewer();
+
+            $pdo = Database::getConnection();
+
+            // Try querying support_requested column — graceful fallback if it doesn't exist
+            try {
+                $stmt = $pdo->prepare("
+                    SELECT c.id, c.type, c.support_requested_at,
+                           u1.username as user1, u2.username as user2
+                    FROM chats c
+                    LEFT JOIN chat_participants cp1 ON cp1.chatId = c.id AND cp1.isActive = 1
+                    LEFT JOIN users u1 ON cp1.userId = u1.id
+                    LEFT JOIN chat_participants cp2 ON cp2.chatId = c.id AND cp2.isActive = 1 AND cp2.userId != u1.id
+                    LEFT JOIN users u2 ON cp2.userId = u2.id
+                    WHERE c.support_requested = 1
+                    GROUP BY c.id
+                    ORDER BY c.support_requested_at DESC
+                    LIMIT 100
+                ");
+                $stmt->execute();
+                $chats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                Response::json([
+                    'success' => true,
+                    'count' => count($chats),
+                    'data' => $chats
+                ]);
+            } catch (Exception $e) {
+                // Column doesn't exist yet — return empty
+                Response::json([
+                    'success' => true,
+                    'count' => 0,
+                    'data' => [],
+                    'note' => 'support_requested column not yet created in DB'
+                ]);
+            }
+
+        } catch (Exception $e) {
+            error_log('getSupportRequests error: ' . $e->getMessage());
+            Response::error('Server error', 500);
+        }
+    }
+    // Delete a user entirely (admin only)
+    public function deleteUser($userId) {
+        $admin = AuthMiddleware::requireAdmin();
+
+        $db = Database::getConnection();
+        try {
+            // Verify user exists
+            $stmt = $db->prepare("SELECT id, username FROM users WHERE id = ?");
+            $stmt->execute([$userId]);
+            $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$user) {
+                Response::error('User not found', 404);
+                return;
+            }
+
+            // Prevent deleting yourself
+            if ($user['id'] == $admin['id']) {
+                Response::error('You cannot delete your own account', 403);
+                return;
+            }
+
+            $db->beginTransaction();
+
+            // 1. Clear messages dependencies (replyToId reference)
+            $stmt = $db->prepare("SELECT id FROM messages WHERE senderId = ?");
+            $stmt->execute([$userId]);
+            $messageIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            if (!empty($messageIds)) {
+                $inClause = implode(',', array_fill(0, count($messageIds), '?'));
+                $db->prepare("UPDATE messages SET replyToId = NULL WHERE replyToId IN ($inClause)")->execute($messageIds);
+            }
+
+            $db->prepare("UPDATE messages SET replyToId = NULL WHERE senderId = ?")->execute([$userId]);
+            $db->prepare("DELETE FROM messages WHERE senderId = ?")->execute([$userId]);
+
+            // 2. Clear deals dependencies
+            $stmt = $db->prepare("SELECT id FROM deals WHERE buyer_id = ? OR seller_id = ?");
+            $stmt->execute([$userId, $userId]);
+            $dealIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            if (!empty($dealIds)) {
+                $inClause = implode(',', array_fill(0, count($dealIds), '?'));
+                $db->prepare("DELETE FROM crypto_payments WHERE deal_id IN ($inClause)")->execute($dealIds);
+                $db->prepare("DELETE FROM deal_history WHERE deal_id IN ($inClause)")->execute($dealIds);
+                $db->prepare("DELETE FROM deal_payment_methods WHERE deal_id IN ($inClause)")->execute($dealIds);
+                $db->prepare("DELETE FROM deals WHERE id IN ($inClause)")->execute($dealIds);
+            }
+
+            // 3. Clear ad references in chats
+            $db->prepare("UPDATE chats SET adId = NULL WHERE adId IN (SELECT id FROM ads WHERE userId = ?)")->execute([$userId]);
+
+            // 4. Delete ads
+            $db->prepare("DELETE FROM ads WHERE userId = ?")->execute([$userId]);
+
+            // 5. Delete chat participants
+            $db->prepare("DELETE FROM chat_participants WHERE userId = ?")->execute([$userId]);
+
+            // 6. Delete user
+            $db->prepare("DELETE FROM users WHERE id = ?")->execute([$userId]);
+
+            $db->commit();
+
+            Response::json(['success' => true, 'message' => 'User deleted successfully']);
+        } catch (Exception $e) {
+            if ($db->inTransaction()) {
+                $db->rollBack();
+            }
+            error_log('deleteUser error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    // Update deal status (admin only)
+    public function updateDealStatus($dealId) {
+        $admin = AuthMiddleware::requireViewer();
+        $data = json_decode(file_get_contents('php://input'), true);
+        $status = strtolower(trim($data['status'] ?? ''));
+
+        $validStatuses = ['pending', 'accepted', 'rejected', 'cancelled', 'canceled', 'failed', 'completed', 'terms_agreed', 'fee_paid'];
+        if (!in_array($status, $validStatuses)) {
+            Response::error('Invalid deal status. Allowed: Pending, Accepted, Rejected, Cancelled, Failed, Completed', 400);
+            return;
+        }
+
+        try {
+            $database = new Database();
+            $pdo = $database->getConnection();
+
+            $stmt = $pdo->prepare("UPDATE deals SET deal_status = ?, updated_at = NOW() WHERE id = ?");
+            $stmt->execute([$status, $dealId]);
+
+            // Add history entry
+            $historyStmt = $pdo->prepare("
+                INSERT INTO deal_history (deal_id, action_type, action_by, action_description)
+                VALUES (?, 'admin_status_change', ?, ?)
+            ");
+            $historyStmt->execute([$dealId, $admin['userId'], "Status updated to " . ucfirst($status) . " by admin"]);
+
+            Response::json([
+                'success' => true,
+                'message' => "Deal status updated to " . ucfirst($status),
+                'deal_status' => $status
+            ]);
+        } catch (Exception $e) {
+            error_log('updateDealStatus error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
         }
     }
 }

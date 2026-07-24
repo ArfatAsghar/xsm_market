@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Send, Shield, MessageCircle, Image as ImageIcon, Video, X, BarChart3 } from 'lucide-react';
+import { Send, Shield, MessageCircle, Image as ImageIcon, Video, X, BarChart3, HeadphonesIcon } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { API_URL } from '@/services/auth';
 import { getImageUrl } from '@/config/api';
+import { toast } from '@/components/ui/use-toast';
 
 // Custom scrollbar styles
 const scrollbarStyles = `
@@ -87,6 +88,7 @@ interface Message {
   sender: {
     id: string;
     username: string;
+    isAdmin?: boolean;
   };
 }
 
@@ -119,6 +121,7 @@ interface ChatData {
       status?: string;
     }>;
   };
+  support_requested?: boolean;
 }
 
 const Chat: React.FC = () => {
@@ -140,6 +143,46 @@ const Chat: React.FC = () => {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [videoUploading, setVideoUploading] = useState(false);
   const [showDealSummary, setShowDealSummary] = useState(false);
+  const [isSendingAgentRequest, setIsSendingAgentRequest] = useState(false);
+
+  const handleRequestAgent = async () => {
+    if (!selectedChat || !user) return;
+    setIsSendingAgentRequest(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/chat/chats/${selectedChat.id}/request-agent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        toast({
+          title: '✅ Request Sent',
+          description: 'An admin has been notified to assist in this conversation.',
+        });
+        // Immediately disable the button for both users by updating local state
+        setSelectedChat(prev => prev ? { ...prev, support_requested: true } : null);
+        setChats(prev => prev.map(c => c.id === selectedChat.id ? { ...c, support_requested: true } : c));
+      } else {
+        const data = await response.json().catch(() => ({}));
+        toast({
+          variant: 'destructive',
+          title: 'Failed to send request',
+          description: data.message || 'Please try again.',
+        });
+      }
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Network Error',
+        description: 'Could not reach the server. Please try again.',
+      });
+    } finally {
+      setIsSendingAgentRequest(false);
+    }
+  };
 
   // Remove Socket.IO and replace with polling-based real-time updates
   useEffect(() => {
@@ -868,13 +911,31 @@ const Chat: React.FC = () => {
                       </div>
                     </div>
                     {selectedChat.name !== 'Website Agent' && (
-                      <button
-                        onClick={() => setShowDealSummary(true)}
-                        className="flex items-center gap-2 text-sm border border-xsm-yellow/40 text-xsm-yellow px-3 py-2 rounded-lg hover:bg-xsm-yellow hover:text-black transition-colors"
-                      >
-                        <BarChart3 className="w-4 h-4" />
-                        Deals ({selectedChat.dealSummary?.totalDeals || 0})
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => setShowDealSummary(true)}
+                          className="flex items-center gap-2 text-sm border border-xsm-yellow/40 text-xsm-yellow px-3 py-2 rounded-lg hover:bg-xsm-yellow hover:text-black transition-colors"
+                        >
+                          <BarChart3 className="w-4 h-4" />
+                          Deals ({selectedChat.dealSummary?.totalDeals || 0})
+                        </button>
+                        {selectedChat.support_requested ? (
+                          <div className="flex items-center gap-2 text-sm border border-orange-500/40 bg-orange-950/20 text-orange-400 px-3 py-2 rounded-lg cursor-default select-none font-medium">
+                            <HeadphonesIcon className="w-4 h-4" />
+                            Agent Requested
+                          </div>
+                        ) : (
+                          <button
+                            onClick={handleRequestAgent}
+                            disabled={isSendingAgentRequest}
+                            className="flex items-center gap-2 text-sm border border-blue-500/50 text-blue-400 px-3 py-2 rounded-lg hover:bg-blue-500 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Ask a website admin to assist in this conversation"
+                          >
+                            <HeadphonesIcon className="w-4 h-4" />
+                            {isSendingAgentRequest ? 'Sending...' : 'Ask Agent'}
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -891,7 +952,20 @@ const Chat: React.FC = () => {
                     ) : (
                       messages.map(message => {
                         const isMyMessage = message.senderId === user?.id || String(message.senderId) === String(user?.id);
-                        console.log('Message:', message.id, 'SenderId:', message.senderId, 'UserId:', user?.id, 'IsMyMessage:', isMyMessage);
+                        const isSystem = message.messageType === 'system';
+
+                        // System messages render as centered notification pills
+                        if (isSystem) {
+                          return (
+                            <div key={message.id} className="flex justify-center w-full my-2">
+                              <div className="flex items-center gap-2 bg-yellow-950/20 border border-xsm-yellow/30 text-xsm-yellow px-4 py-2 rounded-full text-xs font-medium max-w-md text-center shadow-md select-none">
+                                <HeadphonesIcon className="w-3.5 h-3.5 flex-shrink-0" />
+                                <span>{message.content}</span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        const isSenderAdmin = !!message.sender?.isAdmin;
                         
                         return (
                           <div
@@ -900,22 +974,34 @@ const Chat: React.FC = () => {
                           >
                             <div
                               className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                                isMyMessage
-                                  ? 'bg-xsm-yellow text-xsm-black'
-                                  : 'bg-xsm-medium-gray text-white'
+                                isSenderAdmin
+                                  ? 'bg-gradient-to-br from-red-950/95 to-red-900/95 text-white border border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.25)]'
+                                  : isMyMessage
+                                    ? 'bg-xsm-yellow text-xsm-black'
+                                    : 'bg-xsm-medium-gray text-white'
                               }`}
                             >
-                              {!isMyMessage && (
-                                <p className="text-xs font-medium mb-1 opacity-75">
-                                  {message.sender?.username}
+                              {isSenderAdmin ? (
+                                <p className="flex items-center gap-1 text-[11px] font-bold mb-1.5 text-red-400 select-none">
+                                  <Shield className="w-3 h-3 text-red-500 fill-red-500/10" />
+                                  <span>{message.sender?.username}</span>
+                                  <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider ml-1">
+                                    Admin
+                                  </span>
                                 </p>
+                              ) : (
+                                !isMyMessage && (
+                                  <p className="text-xs font-medium mb-1 opacity-75">
+                                    {message.sender?.username}
+                                  </p>
+                                )
                               )}
                               {message.messageType === 'image' && (message.mediaUrl || message.content) ? (
                                 <div className="relative">
                                   <img
                                     src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content}
                                     alt="Sent image"
-                                    className="rounded-lg max-w-[200px] max-h-[200px] mb-2 border border-xsm-yellow cursor-pointer"
+                                    className={`rounded-lg max-w-[200px] max-h-[200px] mb-2 border cursor-pointer ${isSenderAdmin ? 'border-red-500/60' : 'border-xsm-yellow'}`}
                                     style={{ objectFit: 'cover' }}
                                     onClick={() => window.open(getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content, '_blank')}
                                     onError={(e) => {
@@ -944,7 +1030,7 @@ const Chat: React.FC = () => {
                                           const url = getImageUrl(message.content) || message.content;
                                           window.open(url, '_blank');
                                         }}
-                                        className="mt-2 px-3 py-1 bg-xsm-yellow text-black rounded text-xs hover:bg-yellow-500"
+                                        className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isSenderAdmin ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}
                                       >
                                         Try Opening
                                       </button>
@@ -952,7 +1038,7 @@ const Chat: React.FC = () => {
                                   </div>
                                 </div>
                               ) : message.messageType === 'video' && (message.mediaUrl || message.content) ? (
-                                <div className="relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border border-xsm-yellow bg-black">
+                                <div className={`relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border bg-black ${isSenderAdmin ? 'border-red-500/60' : 'border-xsm-yellow'}`}>
                                   <video
                                     className="w-full h-full object-cover"
                                     controls
@@ -1014,7 +1100,7 @@ const Chat: React.FC = () => {
                                           console.log('Attempting to open video:', url);
                                           window.open(url, '_blank');
                                         }}
-                                        className="mt-2 px-3 py-1 bg-xsm-yellow text-black rounded text-xs hover:bg-yellow-500"
+                                        className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isSenderAdmin ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}
                                       >
                                         Open Video
                                       </button>
@@ -1026,7 +1112,11 @@ const Chat: React.FC = () => {
                               )}
                               <p
                                 className={`text-xs mt-1 ${
-                                  isMyMessage ? 'text-xsm-dark-gray' : 'text-gray-400'
+                                  isSenderAdmin
+                                    ? 'text-red-300/70 text-right'
+                                    : isMyMessage
+                                      ? 'text-xsm-dark-gray'
+                                      : 'text-gray-400'
                                 }`}
                               >
                                 {formatTime(message.createdAt)}
@@ -1141,14 +1231,6 @@ const Chat: React.FC = () => {
                 <div className="flex justify-between">
                   <span className="text-xsm-light-gray">Total deals</span>
                   <span className="font-semibold">{selectedChat.dealSummary?.totalDeals || 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xsm-light-gray">Channels bought</span>
-                  <span>{selectedChat.dealSummary?.channelsBought || 0}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-xsm-light-gray">Channels sold</span>
-                  <span>{selectedChat.dealSummary?.channelsSold || 0}</span>
                 </div>
             {(
   selectedChat.dealSummary?.deals && selectedChat.dealSummary.deals.length > 0

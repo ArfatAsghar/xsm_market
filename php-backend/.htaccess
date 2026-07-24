@@ -1,26 +1,19 @@
-# XSM Market - Production .htaccess
+# XSM Market - Production .htaccess (LiteSpeed / cPanel / Hostinger)
 RewriteEngine On
 
-# Basic Security - Prevent access to sensitive files
-<Files ~ "^\.">
-    Order allow,deny
-    Deny from all
-</Files>
-
-<FilesMatch "\.(env|log|sql|md|json|lock|sh|git)$">
+# ─── Security: block dotfiles ────────────────────────────────────────────────
+<FilesMatch "^\.">
     Order allow,deny
     Deny from all
 </FilesMatch>
 
-# Handle CORS preflight requests globally
-RewriteCond %{REQUEST_METHOD} OPTIONS
-RewriteRule ^(.*)$ $1 [R=200,L]
+# Block sensitive extensions
+<FilesMatch "\.(env|log|sql|sh|git)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
 
-# Remove www from domain
-RewriteCond %{HTTP_HOST} ^www\.(.*)$ [NC]
-RewriteRule ^(.*)$ https://%1/$1 [R=301,L]
-
-# Enable CORS headers
+# ─── CORS: handle pre-flight OPTIONS ─────────────────────────────────────────
 <IfModule mod_headers.c>
     Header always set Access-Control-Allow-Origin "*"
     Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
@@ -29,38 +22,44 @@ RewriteRule ^(.*)$ https://%1/$1 [R=301,L]
     Header always set Access-Control-Max-Age "3600"
 </IfModule>
 
-# API Routes - Handle API requests first (route to server.php)
-RewriteCond %{REQUEST_URI} ^/api/
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_METHOD} OPTIONS
+RewriteRule ^ - [R=200,L]
+
+# ─── Remove www ──────────────────────────────────────────────────────────────
+RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+RewriteRule ^ https://%1%{REQUEST_URI} [R=301,L]
+
+# ─── API routes → api/index.php ──────────────────────────────────────────────
+# Skip real files (uploads, webhooks, check scripts)
 RewriteCond %{REQUEST_URI} !^/api/uploads/
 RewriteCond %{REQUEST_URI} !^/api/webhooks/
-RewriteRule ^api/(.*)$ api/server.php [QSA,L]
+RewriteRule ^api/(.*)$ api/index.php [QSA,L]
 
-# Direct API endpoints (backward compatibility) - route to server.php
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_URI} !^/api/uploads/
-RewriteRule ^(auth|user|ads|chat|admin|contact|social-media|debug|health)/(.*)$ api/server.php [QSA,L]
+# Direct shorthand endpoints (auth, ads, chat …)
+RewriteRule ^(auth|user|ads|chat|admin|contact|social-media|debug|health)(/.*)?$ api/index.php [QSA,L]
 
-# Webhook handling
+# ─── Webhook ─────────────────────────────────────────────────────────────────
 RewriteRule ^api/webhooks/nowpayments/?$ api/webhooks/nowpayments.php [QSA,L]
-RewriteRule ^webhooks/nowpayments/?$ api/webhooks/nowpayments.php [QSA,L]
+RewriteRule ^webhooks/nowpayments/?$     api/webhooks/nowpayments.php [QSA,L]
 
-# Frontend routing - React Router (catch-all for non-API routes)
+# ─── Serve uploads directly ──────────────────────────────────────────────────
+RewriteRule ^uploads/(.*)$ api/uploads/$1 [L]
+
+# ─── React SPA catch-all ─────────────────────────────────────────────────────
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_URI} !^/api/
-RewriteRule . index.html [L]
+RewriteCond %{REQUEST_URI}      !^/api/
+RewriteRule ^ index.html [L]
 
-# Basic PHP settings
-<IfModule mod_php.c>
+# ─── Error pages ─────────────────────────────────────────────────────────────
+ErrorDocument 404 /index.html
+
+# ─── PHP / upload limits (LiteSpeed php.ini override) ────────────────────────
+<IfModule LiteSpeed>
     php_value upload_max_filesize 10M
     php_value post_max_size 10M
     php_value max_execution_time 60
     php_value memory_limit 256M
-    php_flag display_errors Off
-    php_flag log_errors On
 </IfModule>
 
 # Compression
@@ -68,16 +67,13 @@ RewriteRule . index.html [L]
     AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json
 </IfModule>
 
-# Cache static files
+# Cache static assets
 <IfModule mod_expires.c>
     ExpiresActive On
-    ExpiresByType text/css "access plus 1 month"
+    ExpiresByType text/css              "access plus 1 month"
     ExpiresByType application/javascript "access plus 1 month"
-    ExpiresByType image/png "access plus 1 month"
-    ExpiresByType image/jpg "access plus 1 month"
-    ExpiresByType image/jpeg "access plus 1 month"
-    ExpiresByType image/gif "access plus 1 month"
+    ExpiresByType image/png             "access plus 1 month"
+    ExpiresByType image/jpeg            "access plus 1 month"
+    ExpiresByType image/gif             "access plus 1 month"
+    ExpiresByType image/webp            "access plus 1 month"
 </IfModule>
-
-# Error handling
-ErrorDocument 404 /index.html

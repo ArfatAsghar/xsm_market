@@ -368,6 +368,36 @@ class AuthController {
                 return;
             }
             
+            // Check ban status before issuing tokens
+            if ($user['isBanned']) {
+                // Check if ban has expired for time-limited bans
+                $stillBanned = true;
+                if (!empty($user['banExpires'])) {
+                    $expires = strtotime($user['banExpires']);
+                    if ($expires > 0 && $expires <= time()) {
+                        // Auto-unban
+                        $stmt = $this->db->prepare(
+                            "UPDATE users SET isBanned=0, banReason=NULL, bannedAt=NULL, bannedBy=NULL, banExpires=NULL, unbannedAt=NOW() WHERE id=?"
+                        );
+                        $stmt->execute([$user['id']]);
+                        $stillBanned = false;
+                    }
+                }
+
+                if ($stillBanned) {
+                    $reason = $user['banReason'] ? ' Reason: ' . $user['banReason'] : '';
+                    $until  = !empty($user['banExpires'])
+                        ? ' Your ban expires on ' . date('Y-m-d H:i', strtotime($user['banExpires'])) . ' UTC.'
+                        : ' This ban is permanent.';
+                    Response::error('Your account has been suspended.' . $reason . $until, 403, [
+                        'banned'     => true,
+                        'banReason'  => $user['banReason'],
+                        'banExpires' => $user['banExpires']
+                    ]);
+                    return;
+                }
+            }
+
             // Generate tokens - exact match to Node.js
             $tokens = JWT::generateTokens($user['id']);
             
@@ -385,7 +415,10 @@ class AuthController {
                     'profilePicture' => $user['profilePicture'],
                     'isEmailVerified' => (bool)$user['isEmailVerified'],
                     'isAdmin' => (bool)$user['isAdmin'],
-                    'authProvider' => $user['authProvider']
+                    'role' => $user['role'] ?? 'user',
+                    'authProvider' => $user['authProvider'],
+                    'vipUntil' => $user['vipUntil'] ?? null,
+                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time()
                 ]
             ]);
             
@@ -470,7 +503,10 @@ class AuthController {
                     'profilePicture' => $user['profilePicture'],
                     'isEmailVerified' => true,
                     'isAdmin' => (bool)$user['isAdmin'],
-                    'authProvider' => $user['authProvider']
+                    'role' => $user['role'] ?? 'user',
+                    'authProvider' => $user['authProvider'],
+                    'vipUntil' => $user['vipUntil'] ?? null,
+                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time()
                 ]
             ]);
             
@@ -585,10 +621,10 @@ class AuthController {
                     $stmt = $this->db->prepare("
                         UPDATE users SET 
                         googleId = ?, authProvider = 'google', isEmailVerified = 1,
-                        profilePicture = COALESCE(NULLIF(profilePicture, ''), ?), updatedAt = NOW()
+                        updatedAt = NOW()
                         WHERE id = ?
                     ");
-                    $stmt->execute([$googleId, $picture, $user['id']]);
+                    $stmt->execute([$googleId, $user['id']]);
                 }
                 
                 // Refresh user data
@@ -606,9 +642,9 @@ class AuthController {
                 
                 $stmt = $this->db->prepare("
                     INSERT INTO users (username, email, password, googleId, profilePicture, authProvider, isEmailVerified, createdAt, updatedAt) 
-                    VALUES (?, ?, ?, ?, ?, 'google', 1, NOW(), NOW())
+                    VALUES (?, ?, ?, ?, NULL, 'google', 1, NOW(), NOW())
                 ");
-                $stmt->execute([$uniqueUsername, $email, $hashedPassword, $googleId, $picture]);
+                $stmt->execute([$uniqueUsername, $email, $hashedPassword, $googleId]);
                 
                 $userId = $this->db->lastInsertId();
                 
@@ -620,11 +656,13 @@ class AuthController {
                 error_log('New Google user created: ' . json_encode(['id' => $userId, 'username' => $uniqueUsername]));
             }
             
-            // Generate token - exact match to Node.js response
-            $jwtToken = JWT::generateToken($user['id']);
+            // Generate tokens - exact match to Node.js response
+            $tokens = JWT::generateTokens($user['id']);
             
             Response::success([
-                'token' => $jwtToken,
+                'token' => $tokens['accessToken'],
+                'refreshToken' => $tokens['refreshToken'],
+                'expiresIn' => 3600,
                 'user' => [
                     'id' => (int)$user['id'],
                     'username' => $user['username'],
@@ -633,7 +671,10 @@ class AuthController {
                     'profilePicture' => $user['profilePicture'],
                     'isEmailVerified' => (bool)$user['isEmailVerified'],
                     'isAdmin' => (bool)$user['isAdmin'],
-                    'authProvider' => $user['authProvider']
+                    'role' => $user['role'] ?? 'user',
+                    'authProvider' => $user['authProvider'],
+                    'vipUntil' => $user['vipUntil'] ?? null,
+                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time()
                 ]
             ]);
             
@@ -902,7 +943,9 @@ class AuthController {
                     'email' => $user['email'],
                     'profilePicture' => $user['profilePicture'],
                     'isEmailVerified' => (bool)$user['isEmailVerified'],
-                    'authProvider' => $user['authProvider']
+                    'authProvider' => $user['authProvider'],
+                    'vipUntil' => $user['vipUntil'] ?? null,
+                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time()
                 ]
             ]);
             

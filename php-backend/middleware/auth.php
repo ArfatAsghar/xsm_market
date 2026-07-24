@@ -4,6 +4,56 @@ require_once __DIR__ . '/../utils/Response.php';
 require_once __DIR__ . '/../models/User.php';
 
 class AuthMiddleware {
+
+    /**
+     * Central ban checker:
+     * - If user is not banned: returns the user as-is.
+     * - If user is permanently banned: returns null (or sends error based on $hard).
+     * - If user has a time-limited ban that has already EXPIRED: auto-unbans and returns fresh user.
+     * - If user has a time-limited ban still active: returns null (or sends error based on $hard).
+     *
+     * @param array $user  The user row from the database.
+     * @param bool  $hard  If true, immediately send an HTTP error response; if false, return null silently.
+     * @return array|null  The (possibly refreshed) user, or null if still banned.
+     */
+    private static function resolveBanStatus(array $user, bool $hard = false) {
+        if (!$user['isBanned']) {
+            return $user;
+        }
+
+        if (!empty($user['banExpires'])) {
+            $expires = strtotime($user['banExpires']);
+            if ($expires > 0 && $expires <= time()) {
+                // Ban has expired — auto-unban and allow access
+                User::update($user['id'], [
+                    'isBanned'   => 0,
+                    'banReason'  => null,
+                    'bannedAt'   => null,
+                    'bannedBy'   => null,
+                    'banExpires' => null,
+                    'unbannedAt' => date('Y-m-d H:i:s'),
+                    'unbannedBy' => null
+                ]);
+                return User::findById($user['id']);
+            }
+        }
+
+        // Still banned
+        if ($hard) {
+            $reason = $user['banReason'] ? ' Reason: ' . $user['banReason'] : '';
+            $until  = !empty($user['banExpires'])
+                ? ' Your ban expires on ' . date('Y-m-d H:i', strtotime($user['banExpires'])) . ' UTC.'
+                : ' This ban is permanent.';
+            Response::error('Your account has been suspended.' . $reason . $until, 403, [
+                'banned'     => true,
+                'banReason'  => $user['banReason'],
+                'banExpires' => $user['banExpires']
+            ]);
+        }
+
+        return null;
+    }
+
     public static function protect() {
         $token = null;
         
@@ -44,13 +94,17 @@ class AuthMiddleware {
             }
             
             // Check if user still exists
-            $user = new User();
-            $currentUser = $user->findById($decoded['userId']);
+            $currentUser = User::findById($decoded['userId']);
             
             if (!$currentUser) {
                 Response::error('The user belonging to this token no longer exists.', 401);
             }
-            
+
+            // Check ban status — send hard 403 if banned
+            $currentUser = self::resolveBanStatus($currentUser, true);
+            // resolveBanStatus will have already called Response::error() if banned;
+            // reaching here means the user is allowed.
+
             // Update user's last seen timestamp
             User::updateLastSeen($currentUser['id']);
             
@@ -109,40 +163,54 @@ class AuthMiddleware {
             
             // Get user from database
             $user = User::findById($payload['userId']);
-            if (!$user || $user['isBanned']) {
+            if (!$user) {
                 return null;
             }
-            
-            return $user;
+
+            // Resolve ban (auto-unban if expired, return null if still banned)
+            return self::resolveBanStatus($user, false);
         } catch (Exception $e) {
             return null;
         }
     }
     
-    public static function requireAdmin() {
-        $user = self::authenticate();
+    public static function checkRole($user, $allowedRoles) {
+        $role = $user['role'] ?? 'user';
         
-        // Get admin email from environment
-        $adminEmail = getenv('ADMIN_EMAIL');
-        
-        // Debug logging
-        error_log('Admin check debug:');
-        error_log('User email: ' . ($user['email'] ?? 'null'));
-        error_log('Admin email from env: ' . ($adminEmail ?? 'null'));
-        error_log('User isAdmin flag: ' . ($user['isAdmin'] ?? 'null'));
-        error_log('User isAdmin type: ' . gettype($user['isAdmin'] ?? null));
-        
-        // Check if user is admin by email or isAdmin flag
-        $isAdminByEmail = $adminEmail && strtolower($user['email']) === strtolower($adminEmail);
-        $isAdminByFlag = !empty($user['isAdmin']);
-        
-        error_log('Is admin by email: ' . ($isAdminByEmail ? 'true' : 'false'));
-        error_log('Is admin by flag: ' . ($isAdminByFlag ? 'true' : 'false'));
-        
-        if (!$isAdminByEmail && !$isAdminByFlag) {
-            Response::error('Admin access required. Only authorized admin users can access this resource.', 403);
+        // Fallback for admins
+        if ($role === 'user') {
+            $adminEmail = getenv('ADMIN_EMAIL');
+            $isAdminByEmail = $adminEmail && strtolower($user['email']) === strtolower($adminEmail);
+            $isAdminByFlag = !empty($user['isAdmin']);
+            if ($isAdminByEmail || $isAdminByFlag) {
+                $role = 'admin';
+            }
         }
         
+        return in_array($role, $allowedRoles);
+    }
+
+    public static function requireAdmin() {
+        $user = self::authenticate();
+        if (!self::checkRole($user, ['admin'])) {
+            Response::error('Admin access required. Only authorized admin users can access this resource.', 403);
+        }
+        return $user;
+    }
+    
+    public static function requireManager() {
+        $user = self::authenticate();
+        if (!self::checkRole($user, ['admin', 'manager'])) {
+            Response::error('Access denied: Manager or Admin access required.', 403);
+        }
+        return $user;
+    }
+    
+    public static function requireViewer() {
+        $user = self::authenticate();
+        if (!self::checkRole($user, ['admin', 'manager', 'viewer'])) {
+            Response::error('Access denied: Authorized viewer access required.', 403);
+        }
         return $user;
     }
 }

@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, ShoppingCart } from 'lucide-react';
-import { encodeId } from '@/utils/idEncoder';
+import { Eye, ShoppingCart, Crown } from 'lucide-react';
+import { encodeId, generateAdSlug } from '@/utils/idEncoder';
 import { getImageUrl } from '@/config/api';
+import DealCreationModal from '@/components/DealCreationModal';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
@@ -25,6 +26,8 @@ interface PublicAd {
   screenshots?: any[];
   thumbnail?: string;
   description?: string;
+  sellerId?: string | number;
+  isVip?: boolean;
 }
 
 interface PublicAdListProps {
@@ -37,6 +40,8 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
   const [ads, setAds] = useState<PublicAd[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showDealModal, setShowDealModal] = useState(false);
+  const [selectedAd, setSelectedAd] = useState<PublicAd | null>(null);
 
   useEffect(() => {
     fetchPublicAds();
@@ -183,20 +188,25 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
   }
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
       {ads.map((ad) => (
         <div
           key={ad.id}
           className="bg-xsm-black/50 rounded-lg p-3 border border-xsm-medium-gray/20 shadow-sm flex flex-col items-center hover:border-xsm-yellow/30 transition-colors w-full max-w-[240px] mx-auto"
         >
-          {/* Profile Picture Circle with Platform Icon */}
+          {/* Profile Picture Circle with Platform Icon — clicks to Product Details */}
           <div className="relative mb-2 flex items-center">
             {/* Platform Icon on Left Side */}
             <div className="absolute -left-4 -top-0">
               {getPlatformIconSmall(ad.platform)}
             </div>
 
-            <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-xsm-medium-gray/30">
+            <div
+              className="w-20 h-20 rounded-full overflow-hidden border-2 border-xsm-medium-gray/30 cursor-pointer hover:ring-2 hover:ring-xsm-yellow/60 transition-all"
+              onClick={() => navigate(`/ad/${generateAdSlug(ad.id, ad.title)}`)}
+              title="View product details"
+            >
               <img
                 src={getImageUrl(ad.thumbnail && String(ad.thumbnail).trim() !== '0' ? ad.thumbnail : null) || '/default-avatar.png'}
                 alt="Profile"
@@ -205,10 +215,22 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
             </div>
           </div>
 
-          {/* Channel Name */}
-          <h4 className="text-white font-semibold text-xs text-center mb-0.5 truncate w-full">
+          {/* Channel Name — clicks to Product Details */}
+          <h4
+            className="text-white font-semibold text-xs text-center mb-0.5 truncate w-full cursor-pointer hover:text-xsm-yellow hover:underline transition-colors"
+            onClick={() => navigate(`/ad/${generateAdSlug(ad.id, ad.title)}`)}
+            title="View product details"
+          >
             {ad.title}
           </h4>
+
+          {Boolean((ad as any).isVip || (ad as any).seller_isVip || (ad as any).sellerIsVip || (ad as any).seller?.isVip) && (
+            <div className="flex justify-center mb-0.5">
+              <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[9px] px-2 py-0.5 rounded-full font-black shadow shadow-yellow-900/40">
+                <Crown className="w-2.5 h-2.5" /> VIP
+              </span>
+            </div>
+          )}
 
           {/* Subscribers */}
           <div className="text-center mb-0.5">
@@ -231,11 +253,14 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
             </span>
           </div>
 
-          {/* Requirement 16: Buy Button for Seller Profile Listings */}
+          {/* Buy Button — opens checkout modal directly */}
           <div className="flex items-center justify-center space-x-1 mt-auto">
             <button
               type="button"
-              onClick={() => navigate(`/ad/${encodeId(ad.id)}`)}
+              onClick={() => {
+                setSelectedAd(ad);
+                setShowDealModal(true);
+              }}
               className="bg-xsm-yellow text-black px-3 py-1.5 rounded-lg hover:bg-yellow-500 transition-colors text-xs font-medium"
             >
               <ShoppingCart className="w-3 h-3 inline mr-1" />
@@ -245,6 +270,19 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
         </div>
       ))}
     </div>
+
+      {/* Deal Creation Modal */}
+      {showDealModal && selectedAd && (
+        <DealCreationModal
+          isOpen={showDealModal}
+          onClose={() => setShowDealModal(false)}
+          channelPrice={selectedAd.price}
+          channelTitle={selectedAd.title}
+          sellerId={userId}
+          onNavigateToChat={() => navigate('/chat')}
+        />
+      )}
+    </>
   );
 };
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getUserAds, getUserAdsAlternative, deleteAd, togglePinAd, pullUpAd } from '../services/ads';
 import { useAuth } from '../context/useAuth';
 import { useNotifications } from '../context/NotificationContext';
-import { Star, Eye, Trash2, Edit, AlertCircle, TrendingUp, Pin, DollarSign, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Star, Eye, Trash2, Edit, AlertCircle, TrendingUp, Pin, DollarSign, CheckCircle, XCircle, Clock, Crown } from 'lucide-react';
 import EditListingModal from './EditListingModal';
 import { encodeId } from '@/utils/idEncoder';
 import { getImageUrl } from '@/config/api';
@@ -71,7 +71,10 @@ interface UserAd {
     id: number;
     username: string;
     profilePicture?: string;
+    isVip?: boolean;
   };
+  isBanned?: boolean | number;
+  banReason?: string;
 }
 
 interface UserAdListProps {
@@ -176,8 +179,8 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
       
       console.log('🔍 Fetching ads for user:', user.id, user.username);
       
-      // Use the alternative method which is more reliable (no filters)
-      const response = await getUserAdsAlternative({});
+      // Use the private user listings endpoint so that the owner's banned ads are fetched
+      const response = await getUserAds({});
       
       console.log('📊 User ads response:', response);
       console.log('📊 Ads array:', response.ads);
@@ -201,6 +204,8 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
           pinned: Boolean(ad.pinned), // Convert 0/1 to false/true
           isMonetized: Boolean(ad.isMonetized), // Also fix monetization display
           screenshots: parsedScreenshots, // Use parsed screenshots
+          isBanned: Boolean(ad.isBanned),
+          banReason: ad.banReason || '',
         };
       });
       
@@ -497,13 +502,17 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                 className="bg-xsm-black/50 rounded-lg p-3 border border-xsm-medium-gray/20 shadow-sm flex flex-col items-center hover:border-xsm-yellow/30 transition-colors w-full max-w-[240px] mx-auto cursor-pointer"
                 onClick={() => handleViewAd(ad)}
               >
-                {/* Ad Thumbnail Circle with Platform Icon */}
+                {/* Channel Thumbnail Circle with Platform Icon → Product Details */}
                 <div className="relative mb-2 flex items-center">
                   {/* Platform Icon on Left Side */}
                   <div className="absolute -left-4 -top-0">
                     {getPlatformIconSmall(ad.platform)}
                   </div>
-                  <div className="w-20 h-20 rounded-full overflow-hidden border-2 border-xsm-medium-gray/30">
+                  <div
+                    className="w-20 h-20 rounded-full overflow-hidden border-2 border-xsm-medium-gray/30 cursor-pointer hover:ring-2 hover:ring-xsm-yellow/60 hover:border-xsm-yellow/50 transition-all duration-200"
+                    onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
+                    title="View product details"
+                  >
                     <img
                       src={(() => {
                         // Product cards must use the listing profile image only, not gallery screenshots.
@@ -517,10 +526,30 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                   </div>
                 </div>
 
-              {/* Channel Name */}
-              <h4 className="text-white font-semibold text-xs text-center mb-0.5 truncate w-full">
+              {/* Banned Banner */}
+              {ad.isBanned && (
+                <div className="w-full mb-1.5 bg-red-900/80 border border-red-700 rounded-md px-2 py-1 flex items-center gap-1.5">
+                  <span className="text-red-400 text-xs font-bold">🚫 BANNED</span>
+                </div>
+              )}
+
+              {/* Channel Name → Product Details */}
+              <h4
+                className="text-white font-semibold text-xs text-center mb-0.5 truncate w-full cursor-pointer hover:text-xsm-yellow hover:underline transition-colors duration-200"
+                onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
+                title="View product details"
+              >
                 {ad.title}
               </h4>
+
+              {/* VIP Badge — shown when seller/listing is VIP */}
+              {Boolean((user as any)?.isVip || (ad as any)?.isVip || (ad as any)?.seller_isVip || (ad as any)?.seller?.isVip) && (
+                <div className="flex justify-center mb-0.5">
+                  <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[9px] px-2 py-0.5 rounded-full font-black shadow shadow-yellow-900/40">
+                    <Crown className="w-2.5 h-2.5" /> VIP
+                  </span>
+                </div>
+              )}
 
               {/* Pinned Badge */}
               {ad.pinned && (
@@ -553,43 +582,58 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                 </span>
               </div>
 
-              {/* Action Buttons - 4 Circles */}
+              {/* Action Buttons - show edit-only for banned listings */}
               <div className="flex justify-center space-x-1 w-full" onClick={(e) => e.stopPropagation()}>
-                {/* Edit Button - Yellow */}
-                <button
-                  onClick={() => handleEdit(ad)}
-                  className="w-6 h-6 bg-xsm-yellow hover:bg-yellow-500 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
-                  title="Edit"
-                >
-                  <Edit className="w-3 h-3 text-xsm-black" />
-                </button>
+                {ad.isBanned ? (
+                  <>
+                    <span className="text-red-400 text-[10px] text-center italic px-1">Banned — edit &amp; resubmit</span>
+                    <button
+                      onClick={() => handleEdit(ad)}
+                      className="w-6 h-6 bg-xsm-yellow hover:bg-yellow-500 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                      title="Edit to resubmit"
+                    >
+                      <Edit className="w-3 h-3 text-xsm-black" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {/* Edit Button - Yellow */}
+                    <button
+                      onClick={() => handleEdit(ad)}
+                      className="w-6 h-6 bg-xsm-yellow hover:bg-yellow-500 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                      title="Edit"
+                    >
+                      <Edit className="w-3 h-3 text-xsm-black" />
+                    </button>
 
-                {/* Delete Button - Red */}
-                <button
-                  onClick={() => handleDelete(ad.id)}
-                  className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
-                  title="Delete"
-                >
-                  <Trash2 className="w-3 h-3 text-white" />
-                </button>
+                    {/* Delete Button - Red */}
+                    <button
+                      onClick={() => handleDelete(ad.id)}
+                      className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-3 h-3 text-white" />
+                    </button>
 
-                {/* Pull Up Button - Always Green and Clickable */}
-                <button
-                  onClick={() => handlePullUp(ad.id)}
-                  className="w-6 h-6 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
-                  title="Pull Up"
-                >
-                  <TrendingUp className="w-3 h-3 text-white" />
-                </button>
+                    {/* Pull Up Button - Always Green and Clickable */}
+                    <button
+                      onClick={() => handlePullUp(ad.id)}
+                      className="w-6 h-6 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
+                      title="Pull Up"
+                    >
+                      <TrendingUp className="w-3 h-3 text-white" />
+                    </button>
 
-                {/* Pin Button - Orange/Yellow based on pinned status */}
-                <button
-                  onClick={() => handlePin(ad.id)}
-                  className={`w-6 h-6 ${ad.pinned ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-orange-500 hover:bg-orange-600'} rounded-full flex items-center justify-center transition-colors flex-shrink-0`}
-                  title={ad.pinned ? "Unpin Listing" : "Pin Listing"}
-                >
-                  <Pin className={`w-3 h-3 text-white ${ad.pinned ? 'fill-current' : ''}`} />
-                </button>
+                    {/* Pin Button - Orange/Yellow based on pinned status */}
+                    <button
+                      onClick={() => handlePin(ad.id)}
+                      className={`w-6 h-6 ${ad.pinned ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-orange-500 hover:bg-orange-600'} rounded-full flex items-center justify-center transition-colors flex-shrink-0`}
+                      title={ad.pinned ? "Unpin Listing" : "Pin Listing"}
+                    >
+                      <Pin className={`w-3 h-3 text-white ${ad.pinned ? 'fill-current' : ''}`} />
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}

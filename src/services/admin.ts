@@ -283,7 +283,7 @@ export const updateAdStatus = async (adId: number, status: string, rejectionReas
 };
 
 // Ban user (admin only)
-export const banUser = async (userId: number, reason: string) => {
+export const banUser = async (userId: string, reason: string, duration: 'permanent' | '7d' | '30d') => {
   const token = localStorage.getItem('token');
   if (!token) {
     throw new Error('Authentication required');
@@ -295,7 +295,7 @@ export const banUser = async (userId: number, reason: string) => {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ reason })
+    body: JSON.stringify({ reason, duration })
   });
 
   if (!response.ok) {
@@ -307,7 +307,7 @@ export const banUser = async (userId: number, reason: string) => {
 };
 
 // Unban user (admin only)
-export const unbanUser = async (userId: number) => {
+export const unbanUser = async (userId: string) => {
   const token = localStorage.getItem('token');
   if (!token) {
     throw new Error('Authentication required');
@@ -336,8 +336,7 @@ export const deleteListing = async (listingId: number) => {
     throw new Error('Authentication required');
   }
 
-  // Use the admin-specific DELETE endpoint
-  const response = await fetch(`/api/admin/ads/${listingId}`, {
+  const response = await fetch(`${ADMIN_API_URL}/admin/ads/${listingId}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -345,14 +344,13 @@ export const deleteListing = async (listingId: number) => {
     }
   });
 
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
+  let result: any = {};
+  try {
+    result = await response.json();
+  } catch (_) {}
 
-  const result = await response.json();
-  
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to delete listing');
+  if (!response.ok) {
+    throw new Error(result?.message || result?.error || `Failed to delete listing (HTTP ${response.status})`);
   }
 
   return result;
@@ -365,8 +363,7 @@ export const deleteUser = async (userId: string) => {
     throw new Error('Authentication required');
   }
 
-  // Use the admin-specific DELETE endpoint
-  const response = await fetch(`/api/admin/users/${userId}`, {
+  const response = await fetch(`${ADMIN_API_URL}/admin/users/${userId}`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
@@ -374,18 +371,18 @@ export const deleteUser = async (userId: string) => {
     }
   });
 
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
+  let result: any = {};
+  try {
+    result = await response.json();
+  } catch (_) {}
 
-  const result = await response.json();
-  
-  if (!result.success) {
-    throw new Error(result.error || 'Failed to delete user');
+  if (!response.ok) {
+    throw new Error(result?.message || result?.error || `Failed to delete user (HTTP ${response.status})`);
   }
 
   return result;
 };
+
 
 // Update user status (admin only)
 export const updateUserStatus = async (userId: string, status: string) => {
@@ -443,4 +440,147 @@ export const updateUserRole = async (userId: string, role: string) => {
   }
 
   return result;
+};
+
+// Resolve support request for a chat (admin only)
+export const resolveSupportChat = async (chatId: string) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(`${ADMIN_API_URL}/chat/chats/${chatId}/resolve-support`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to resolve support: ${response.statusText}`);
+  }
+
+  return await response.json();
+};
+
+// Ban a listing (admin/manager)
+export const banListing = async (listingId: number, reason: string) => {
+  const token = localStorage.getItem('token');
+  if (!token) throw new Error('Authentication required');
+
+  const response = await fetch(`${ADMIN_API_URL}/admin/ads/${listingId}/ban`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ reason })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to ban listing: ${response.statusText}`);
+  }
+
+  return await response.json();
+};
+
+// Unban a listing (admin/manager)
+export const unbanListing = async (listingId: number) => {
+  const token = localStorage.getItem('token');
+  if (!token) throw new Error('Authentication required');
+
+  const response = await fetch(`${ADMIN_API_URL}/admin/ads/${listingId}/unban`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to unban listing: ${response.statusText}`);
+  }
+
+  return await response.json();
+};
+
+// Fetch all ads including banned/all statuses (admin only)
+export const getAdminAds = async (filters: any = {}) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const queryParams = new URLSearchParams();
+  Object.keys(filters).forEach(key => {
+    if (filters[key] !== undefined && filters[key] !== null && filters[key] !== '') {
+      queryParams.append(key, filters[key]);
+    }
+  });
+
+  const response = await fetch(`${ADMIN_API_URL}/admin/ads?${queryParams}`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to fetch admin ads: ${response.statusText}`);
+  }
+
+  return await response.json();
+};
+
+// Update deal status (admin only)
+export const updateDealStatusAdmin = async (dealId: number, status: string) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(`${ADMIN_API_URL}/admin/deals/${dealId}/status`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ status })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to update deal status: ${response.statusText}`);
+  }
+
+  return await response.json();
+};
+
+// Toggle VIP status for user (admin only)
+export const toggleVipUser = async (userId: number | string) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(`${ADMIN_API_URL}/admin/users/${userId}/vip`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to toggle VIP status: ${response.statusText}`);
+  }
+
+  return await response.json();
 };

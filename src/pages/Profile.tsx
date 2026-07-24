@@ -11,6 +11,7 @@ import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import { User } from '@/context/AuthContext';
 import { updateProfile, getProfile, changePassword, logout, requestEmailChange, requestPasswordChange } from '@/services/auth';
+import { compressImage } from '@/utils/imageCompressor';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
@@ -39,9 +40,12 @@ interface ExtendedUser extends User {
   authProvider?: 'google' | 'email';
 }
 
+import VipSubscriptionModal from '@/components/VipSubscriptionModal';
+
 const Profile: React.FC<ProfileProps> = () => {
   const navigate = useNavigate();
   const { user, isLoggedIn, setUser, setIsLoggedIn } = useAuth();
+  const [showVipModal, setShowVipModal] = useState(false);
   const { showSuccess, showError, showInfo, showWarning } = useNotifications();
   const typedUser = user as ExtendedUser;
 
@@ -339,55 +343,6 @@ const Profile: React.FC<ProfileProps> = () => {
   }
 
   // Handle profile picture upload - immediately save to backend
-  // Image compression utility function
-  const compressImage = (file: File, maxWidth: number, maxHeight: number, quality: number): Promise<File> => {
-    return new Promise((resolve) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d')!;
-      const img = new Image();
-      
-      img.onload = () => {
-        // Calculate new dimensions while maintaining aspect ratio
-        let { width, height } = img;
-        
-        if (width > height) {
-          if (width > maxWidth) {
-            height = (height * maxWidth) / width;
-            width = maxWidth;
-          }
-        } else {
-          if (height > maxHeight) {
-            width = (width * maxHeight) / height;
-            height = maxHeight;
-          }
-        }
-        
-        canvas.width = width;
-        canvas.height = height;
-        
-        // Draw and compress
-        ctx.drawImage(img, 0, 0, width, height);
-        
-        canvas.toBlob(
-          (blob) => {
-            if (blob) {
-              const compressedFile = new File([blob], file.name, {
-                type: 'image/jpeg',
-                lastModified: Date.now(),
-              });
-              resolve(compressedFile);
-            } else {
-              resolve(file); // Fallback to original file
-            }
-          },
-          'image/jpeg',
-          quality
-        );
-      };
-      
-      img.src = URL.createObjectURL(file);
-    });
-  };
 
   const handleProfilePictureChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -696,19 +651,56 @@ const Profile: React.FC<ProfileProps> = () => {
                   />
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-white mb-2">
+              <h2 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-1.5">
                 {profile.username}
+                {(user as any)?.isVip && (
+                  <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400/20 animate-pulse" title="VIP Member" />
+                )}
               </h2>
               <p className="text-gray-300 font-medium mb-2">{profile.email}</p>
               
               {/* Joining Date */}
               <p className="text-sm text-gray-300 font-medium mb-4">
-  {formatJoinDate(profile.joinDate)}
-</p>
+                {formatJoinDate(profile.joinDate)}
+              </p>
               
               <div className="text-xs text-green-400 flex items-center justify-center gap-1 mb-4">
                 <div className="w-2 h-2 bg-green-400 rounded-full"></div>
                 <span>Active now</span>
+              </div>
+
+              {/* VIP Membership status & CTA */}
+              <div className="pt-2 border-t border-xsm-medium-gray/30 mt-2">
+                {(user as any)?.isVip ? (
+                  <div className="space-y-2">
+                    <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 text-center">
+                      <p className="text-xs text-yellow-400 font-semibold flex items-center justify-center gap-1">
+                        <Crown className="w-3.5 h-3.5 fill-yellow-400/20" /> VIP Active
+                      </p>
+                      {user.vipUntil && (
+                        <p className="text-[10px] text-gray-400 mt-1">
+                          Expires: {new Date(user.vipUntil).toLocaleDateString()}
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => setShowVipModal(true)}
+                      className="w-full bg-xsm-yellow hover:bg-yellow-500 text-black py-2 rounded-lg font-bold text-xs transition-colors"
+                    >
+                      Extend VIP Badge
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-400 text-center mb-1">Get special discounts & visibility perk</p>
+                    <button
+                      onClick={() => setShowVipModal(true)}
+                      className="w-full bg-gradient-to-r from-yellow-500 to-amber-600 hover:from-yellow-600 hover:to-amber-700 text-white py-2 rounded-lg font-bold text-xs transition-all shadow-md shadow-yellow-900/30 flex items-center justify-center gap-1"
+                    >
+                      <Crown className="w-3.5 h-3.5" /> Buy VIP Badge
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -1295,7 +1287,18 @@ const Profile: React.FC<ProfileProps> = () => {
         }}
         email={pendingPasswordEmail}
         verificationToken={passwordVerificationToken}
-        isGoogleUser={isGoogleUserPassword}
+      />
+
+      <VipSubscriptionModal
+        isOpen={showVipModal}
+        onClose={() => setShowVipModal(false)}
+        onSuccess={(vipUntil) => {
+          if (user) {
+            const updatedUser = { ...user, isVip: true, vipUntil };
+            localStorage.setItem('userData', JSON.stringify(updatedUser));
+            setUser(updatedUser as any);
+          }
+        }}
       />
     </div>
   );

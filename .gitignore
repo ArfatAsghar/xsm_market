@@ -1,4 +1,4 @@
-﻿# Environment files - never commit secrets
+# Environment files - never commit secrets
 .env
 .env.*
 !.env.example
@@ -93,3 +93,8 @@ deploy-to-hostinger.sh
 deployment-summary.sh
 update-hostinger-backend.sh
 start.sh
+deploy-temp/
+.claude/
+public/check.php
+public/unzip.php
+

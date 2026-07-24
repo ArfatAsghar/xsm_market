@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, TrendingUp, Pin, Clock } from 'lucide-react';
+import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, TrendingUp, Pin, Clock, Crown } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import DealCreationModal from '@/components/DealCreationModal';
@@ -46,6 +46,7 @@ interface ChannelData {
     sales: number;
     profilePicture?: string;
     lastSeenAt?: string;
+    isVip?: boolean;
   };
 }
 
@@ -128,6 +129,7 @@ const AdDetails: React.FC = () => {
     };
   }>({ canPull: true });
   const [isPinned, setIsPinned] = useState(false);
+  const [activeScreenshot, setActiveScreenshot] = useState<string | null>(null);
 
   // Decode the ID from the URL parameter
   console.log('AdDetails - received encodedAdId:', encodedAdId);
@@ -149,6 +151,15 @@ const AdDetails: React.FC = () => {
       setLoading(false);
     }
   }, [encodedAdId, decodedAdId]);
+
+  // Close lightbox on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setActiveScreenshot(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const fetchAdDetails = async () => {
     try {
@@ -245,7 +256,8 @@ const AdDetails: React.FC = () => {
           rating: data.seller?.rating || 4.8,
           sales: data.seller?.sales || 0,
           profilePicture: data.seller?.profilePicture,
-          lastSeenAt: data.seller?.lastSeenAt
+          lastSeenAt: data.seller?.lastSeenAt,
+          isVip: Boolean(data.seller?.isVip || data.seller_isVip || data.sellerIsVip || data.isVip)
         }
       };
       
@@ -689,10 +701,18 @@ const AdDetails: React.FC = () => {
                   <div className="text-center">
                     <button
                       onClick={() => navigate(`/u/${encodeURIComponent(channel.seller.username)}`)}
-                      className="text-white font-semibold text-lg hover:text-xsm-yellow transition-colors underline decoration-dotted cursor-pointer mb-2"
+                      className="text-white font-semibold text-lg hover:text-xsm-yellow transition-colors underline decoration-dotted cursor-pointer mb-1 flex items-center gap-1.5 justify-center"
                     >
                       {channel.seller.name}
+                      {channel.seller.isVip && <Crown className="w-4 h-4 text-yellow-400 flex-shrink-0" />}
                     </button>
+                    {channel.seller.isVip && (
+                      <div className="flex justify-center mb-2">
+                        <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-black shadow shadow-yellow-900/40">
+                          <Crown className="w-2.5 h-2.5" /> VIP Seller
+                        </span>
+                      </div>
+                    )}
                     {channel.seller.rating > 0 && (
                       <div className="flex items-center justify-center space-x-1 mb-2">
                         <Star className="w-5 h-5 fill-yellow-400 text-yellow-400" />
@@ -843,22 +863,28 @@ const AdDetails: React.FC = () => {
               <div className="xsm-card max-w-3xl mx-auto">
                 <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Channel Screenshots</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {channel.screenshots.map((screenshot, index) => {
+                   {channel.screenshots.map((screenshot, index) => {
                     const imageUrl = getImageUrl(screenshot);
                     return (
-                      <div key={index} className="relative group">
+                      <div
+                        key={index}
+                        className="relative group cursor-pointer overflow-hidden rounded-lg border border-xsm-medium-gray/30 hover:border-xsm-yellow transition-all duration-300"
+                        onClick={() => imageUrl && setActiveScreenshot(imageUrl)}
+                      >
                         <img
                           src={imageUrl || undefined}
                           alt={`${channel.name} screenshot ${index + 1}`}
-                          className="w-full h-48 object-cover rounded-lg border border-xsm-medium-gray/30 hover:border-xsm-yellow transition-all duration-200 cursor-pointer"
-                          onClick={() => imageUrl && window.open(imageUrl, '_blank')}
+                          className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-110"
                           onError={(e) => {
                             console.error('Image failed to load:', screenshot, 'Resolved to:', imageUrl);
                             e.currentTarget.style.display = 'none';
                           }}
                         />
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity duration-200 rounded-lg flex items-center justify-center">
-                          <div className="text-white text-sm font-medium">Click to enlarge</div>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                          <div className="bg-black/60 text-white text-xs font-semibold px-3 py-1.5 rounded-full backdrop-blur-sm flex items-center gap-1.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+                            View Full Size
+                          </div>
                         </div>
                       </div>
                     );
@@ -1092,6 +1118,33 @@ const AdDetails: React.FC = () => {
               </button>
             </div>
           </div>
+        </div>
+      )}
+      {/* Screenshot Lightbox */}
+      {activeScreenshot && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+          onClick={() => setActiveScreenshot(null)}
+        >
+          <div
+            className="relative max-w-5xl w-full max-h-[90vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close Button */}
+            <button
+              onClick={() => setActiveScreenshot(null)}
+              className="absolute -top-4 -right-4 z-10 w-10 h-10 bg-xsm-yellow text-black rounded-full flex items-center justify-center font-bold text-lg hover:bg-yellow-400 transition-colors shadow-lg hover:scale-110 active:scale-95 transition-transform"
+              aria-label="Close"
+            >
+              ×
+            </button>
+            <img
+              src={activeScreenshot}
+              alt="Screenshot fullscreen"
+              className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-xsm-yellow/20"
+            />
+          </div>
+          <p className="absolute bottom-4 text-xsm-medium-gray text-xs">Click outside or × to close</p>
         </div>
       )}
     </div>

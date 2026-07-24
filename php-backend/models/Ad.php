@@ -109,7 +109,8 @@ class Ad {
                    u.username as seller_username, 
                    u.email as seller_email,
                    u.profilePicture as seller_profilePicture,
-                   u.lastSeenAt as seller_lastSeenAt
+                   u.lastSeenAt as seller_lastSeenAt,
+                   u.vipUntil as seller_vipUntil
             FROM " . self::$table . " a
             INNER JOIN users u ON a.userId = u.id
             WHERE a.id = :id
@@ -122,18 +123,26 @@ class Ad {
         if ($ad) {
             self::formatJsonFields($ad);
             
+            // Compute seller isVip
+            $sellerVipUntil = $ad['seller_vipUntil'];
+            $sellerIsVip = !empty($sellerVipUntil) && strtotime($sellerVipUntil) > time();
+
             // Format seller data
             $ad['seller'] = [
                 'id' => $ad['seller_id'],
                 'username' => $ad['seller_username'],
                 'email' => $ad['seller_email'],
                 'profilePicture' => $ad['seller_profilePicture'],
-                'lastSeenAt' => $ad['seller_lastSeenAt']
+                'lastSeenAt' => $ad['seller_lastSeenAt'],
+                'isVip' => $sellerIsVip,
+                'vipUntil' => $sellerVipUntil
             ];
+            $ad['seller_isVip'] = $sellerIsVip;
+            $ad['isVip'] = $sellerIsVip;
             
             // Clean up
             unset($ad['seller_id'], $ad['seller_username'], $ad['seller_email'], 
-                  $ad['seller_profilePicture'], $ad['seller_lastSeenAt']);
+                  $ad['seller_profilePicture'], $ad['seller_lastSeenAt'], $ad['seller_vipUntil']);
         }
         
         return $ad;
@@ -142,18 +151,35 @@ class Ad {
     public static function getAll($limit = 50, $offset = 0, $filters = []) {
         $pdo = Database::getConnection();
         
-        // Match Node.js query structure exactly
+        $includeBanned = !empty($filters['includeBanned']);
+        $isAdmin = !empty($filters['isAdmin']);
+        
         $sql = "
             SELECT a.*, 
                    u.id as seller_id, 
                    u.username as seller_username, 
-                   u.profilePicture as seller_profilePicture
+                   u.profilePicture as seller_profilePicture,
+                   u.vipUntil as seller_vipUntil
             FROM " . self::$table . " a
             INNER JOIN users u ON a.userId = u.id
-            WHERE a.status = 'active'
+            WHERE 1=1
         ";
         
         $params = [];
+        
+        if ($isAdmin) {
+            if (!empty($filters['status']) && $filters['status'] !== 'all') {
+                $sql .= " AND a.status = :status";
+                $params[':status'] = $filters['status'];
+            }
+        } else {
+            $sql .= " AND a.status = 'active'";
+        }
+        
+        if (!$includeBanned) {
+            $sql .= " AND (a.isBanned = 0 OR a.isBanned IS NULL)";
+        }
+
         
         // Apply filters - exact match to Node.js
         if (!empty($filters['platform']) && $filters['platform'] !== 'all') {
@@ -204,12 +230,20 @@ class Ad {
         foreach ($ads as &$ad) {
             self::formatJsonFields($ad);
             
+            // Compute seller isVip
+            $sellerVipUntil = $ad['seller_vipUntil'] ?? null;
+            $sellerIsVip = !empty($sellerVipUntil) && strtotime($sellerVipUntil) > time();
+
             // Format seller info to match Node.js structure
             $ad['seller'] = [
                 'id' => (int)$ad['seller_id'],
                 'username' => $ad['seller_username'],
-                'profilePicture' => $ad['seller_profilePicture']
+                'profilePicture' => $ad['seller_profilePicture'],
+                'isVip' => $sellerIsVip,
+                'vipUntil' => $sellerVipUntil
             ];
+            $ad['seller_isVip'] = $sellerIsVip;
+            $ad['isVip'] = $sellerIsVip;
             
             // Convert numeric fields to proper types
             $ad['id'] = (int)$ad['id'];
@@ -225,7 +259,7 @@ class Ad {
             $ad['rating'] = $ad['rating'] ? (float)$ad['rating'] : 0;
             
             // Remove seller_ prefixed fields
-            unset($ad['seller_id'], $ad['seller_username'], $ad['seller_profilePicture']);
+            unset($ad['seller_id'], $ad['seller_username'], $ad['seller_profilePicture'], $ad['seller_vipUntil']);
         }
         
         return $ads;
@@ -305,6 +339,7 @@ class Ad {
             FROM " . self::$table . " a
             INNER JOIN users u ON a.userId = u.id
             WHERE a.status = 'active'
+            AND (a.isBanned = 0 OR a.isBanned IS NULL)
             AND (a.title LIKE :search OR a.description LIKE :search OR a.category LIKE :search)
             ORDER BY a.createdAt DESC
             LIMIT :limit
@@ -337,6 +372,10 @@ class Ad {
                 // Handle JSON fields
                 if (in_array($key, ['screenshots', 'additional_images', 'tags']) && is_array($value)) {
                     $params[":$key"] = json_encode($value);
+                }
+                // Sanitize thumbnail/primary_image — never store '0' or empty
+                elseif (in_array($key, ['thumbnail', 'primary_image']) && ($value === '0' || $value === 0 || $value === 'null' || $value === 'NULL' || trim((string)$value) === '')) {
+                    $params[":$key"] = null;
                 } else {
                     $params[":$key"] = $value;
                 }
@@ -375,17 +414,33 @@ class Ad {
     public static function count($filters = []) {
         $pdo = Database::getConnection();
         
-        $sql = "SELECT COUNT(*) as count FROM " . self::$table . " WHERE status = 'active'";
+        $includeBanned = !empty($filters['includeBanned']);
+        $isAdmin = !empty($filters['isAdmin']);
+        
+        $sql = "SELECT COUNT(*) as count FROM " . self::$table . " a WHERE 1=1";
         $params = [];
+        
+        if ($isAdmin) {
+            if (!empty($filters['status']) && $filters['status'] !== 'all') {
+                $sql .= " AND a.status = :status";
+                $params[':status'] = $filters['status'];
+            }
+        } else {
+            $sql .= " AND a.status = 'active'";
+        }
+        
+        if (!$includeBanned) {
+            $sql .= " AND (a.isBanned = 0 OR a.isBanned IS NULL)";
+        }
         
         // Apply filters
         if (!empty($filters['platform'])) {
-            $sql .= " AND platform = :platform";
+            $sql .= " AND a.platform = :platform";
             $params[':platform'] = $filters['platform'];
         }
         
         if (!empty($filters['category'])) {
-            $sql .= " AND category = :category";
+            $sql .= " AND a.category = :category";
             $params[':category'] = $filters['category'];
         }
         
@@ -394,22 +449,30 @@ class Ad {
         $result = $stmt->fetch();
         return $result['count'];
     }
+
     
     private static function formatJsonFields(&$ad) {
         // Decode JSON fields
-        if (!empty($ad['screenshots'])) {
-            $ad['screenshots'] = json_decode($ad['screenshots'], true);
+        if (isset($ad['screenshots']) && $ad['screenshots'] !== null && $ad['screenshots'] !== '' && $ad['screenshots'] !== '0' && $ad['screenshots'] !== 'NULL') {
+            $decoded = json_decode($ad['screenshots'], true);
+            $ad['screenshots'] = is_array($decoded) ? $decoded : [];
+        } else {
+            $ad['screenshots'] = [];
         }
         
-        if (!empty($ad['additional_images'])) {
-            $ad['additional_images'] = json_decode($ad['additional_images'], true);
+        if (isset($ad['additional_images']) && $ad['additional_images'] !== null && $ad['additional_images'] !== '' && $ad['additional_images'] !== '0' && $ad['additional_images'] !== 'NULL') {
+            $decoded = json_decode($ad['additional_images'], true);
+            $ad['additional_images'] = is_array($decoded) ? $decoded : [];
+        } else {
+            $ad['additional_images'] = [];
         }
         
-        if (!empty($ad['tags'])) {
-            $ad['tags'] = json_decode($ad['tags'], true);
+        if (isset($ad['tags']) && $ad['tags'] !== null && $ad['tags'] !== '' && $ad['tags'] !== '0' && $ad['tags'] !== 'NULL') {
+            $decoded = json_decode($ad['tags'], true);
+            $ad['tags'] = is_array($decoded) ? $decoded : [];
+        } else {
+            $ad['tags'] = [];
         }
-        
-        // No need to modify URLs since we're using base64 data URIs now
     }
     
     public static function updatePin($id, $pinned, $pinnedAt = null) {

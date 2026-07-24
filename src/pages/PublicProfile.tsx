@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { User as UserIcon, Edit, Calendar, MessageCircle } from 'lucide-react';
+import { User as UserIcon, Edit, Calendar, MessageCircle, Crown } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import { getPublicProfile, API_URL } from '@/services/auth';
@@ -16,6 +16,8 @@ interface PublicUser {
   createdAt: string;
   adCount?: number;
   isEmailVerified?: boolean;
+  isVip?: boolean;
+  vipUntil?: string | null;
 }
 
 interface PreviousListing {
@@ -303,20 +305,30 @@ const PublicProfile: React.FC = () => {
 
               {/* User Info */}
               <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold text-white mb-1">
+                <h1 className="text-2xl font-bold text-white mb-1 flex items-center justify-center gap-1.5">
                   {profileUser.fullName || profileUser.username}
+                  {profileUser.isVip && (
+                    <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400/20 animate-pulse" title="VIP Seller" />
+                  )}
                 </h1>
 
                 <p className="text-xsm-light-gray text-sm mb-3">
                   @{profileUser.username}
                 </p>
 
-                {profileUser.isEmailVerified && (
-                  <div className="inline-flex items-center gap-1 bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs">
-                    <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                    Verified
-                  </div>
-                )}
+                <div className="flex justify-center gap-2">
+                  {profileUser.isVip && (
+                    <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-black shadow shadow-yellow-900/40">
+                      <Crown className="w-2.5 h-2.5" /> VIP Seller
+                    </span>
+                  )}
+                  {profileUser.isEmailVerified && (
+                    <div className="inline-flex items-center gap-1 bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs">
+                      <div className="w-2.5 h-2.5 bg-green-400 rounded-full"></div>
+                      Verified
+                    </div>
+                  )}
+                </div>
               </div>
 
               {isOwnProfile && (

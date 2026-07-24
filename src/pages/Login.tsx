@@ -111,6 +111,14 @@ const Login: React.FC<LoginProps> = () => {
       resetRecaptcha();
       
       console.error('❌ Login error:', err);
+
+      // If the account is banned, the global BannedScreen in App.tsx
+      // will render automatically via the 'xsm:banned' event — no toast needed.
+      if ((err as any)?.banned) {
+        setIsLoading(false);
+        return;
+      }
+
       const errorMessage = err instanceof Error ? err.message : 'Failed to login';
       
       // Check if this is an email verification error

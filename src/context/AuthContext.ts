@@ -7,6 +7,8 @@ export interface User {
   email: string;
   profilePicture?: string;
   description?: string;
+  isAdmin?: boolean;
+  role?: 'admin' | 'manager' | 'viewer' | 'user';
 }
 
 export interface AuthContextType {

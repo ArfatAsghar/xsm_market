@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { X, Shield, DollarSign, CreditCard, Smartphone, Check } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Shield, DollarSign, CreditCard, Smartphone, Check, HelpCircle, Crown } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
+import { getBuyerStats } from '@/services/auth';
 
 
 const minWebsiteAgentFee = 2;
@@ -45,10 +46,22 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
   const [selectedTransactionType, setSelectedTransactionType] = useState<'safest' | 'fastest'>('safest');
   const [selectedPaymentMethods, setSelectedPaymentMethods] = useState<string[]>([]);
   const [buyerEmail, setBuyerEmail] = useState('');
-  const [feeOption, setFeeOption] = useState<'percentage' | 'flat'>('percentage'); // Fee selection
   const [step, setStep] = useState<'fee-selection' | 'payment-selection' | 'email-confirmation' | 'terms-conditions'>('fee-selection');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isCreatingDeal, setIsCreatingDeal] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
+  const [activeInstructionTab, setActiveInstructionTab] = useState<'youtube' | 'tiktok' | 'facebook' | 'instagram'>('youtube');
+  const [buyerTier, setBuyerTier] = useState<'standard' | 'repeat' | 'vip' | 'vip_repeat'>('standard');
+  const [buyerIsVip, setBuyerIsVip] = useState(false);
+
+  // Fetch buyer stats (VIP + repeat buyer tier) when modal opens
+  useEffect(() => {
+    if (!isOpen || !isLoggedIn) return;
+    getBuyerStats().then(stats => {
+      setBuyerTier(stats.tier);
+      setBuyerIsVip(stats.isVip);
+    }).catch(() => {});
+  }, [isOpen, isLoggedIn]);
 
   // Payment methods data
   const paymentMethods: PaymentMethod[] = [
@@ -69,10 +82,29 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
   // Ensure channelPrice is a number
   const numericPrice = typeof channelPrice === 'string' ? parseFloat(channelPrice) : channelPrice;
   
-  // Fee calculation - allow 5% or $2 flat
-  const percentageFee = (numericPrice * 5) / 100; // 5% fee
-  const flatFee = 2; // $2 flat fee
-  const escrowFee = feeOption === 'percentage' ? percentageFee : flatFee;
+  // 4-Tier fee calculation based on buyer's VIP & repeat buyer status
+  const calculateEscrowFee = (price: number, tier: typeof buyerTier = 'standard') => {
+    if (price <= 50) return 2; // All tiers: Min $2
+    if (tier === 'vip_repeat') {
+      return price <= 100 ? price * 0.035 : price * 0.025;
+    } else if (tier === 'vip') {
+      return price <= 100 ? price * 0.04 : price * 0.03;
+    } else if (tier === 'repeat') {
+      return price <= 100 ? price * 0.045 : price * 0.035;
+    } else {
+      return price <= 100 ? price * 0.05 : price * 0.04;
+    }
+  };
+  const escrowFee = calculateEscrowFee(numericPrice, buyerTier);
+
+  // Tier display info
+  const tierInfo: Record<typeof buyerTier, { label: string; color: string; icon?: string }> = {
+    standard: { label: 'Standard Rate', color: 'text-gray-400' },
+    repeat: { label: 'Repeat Buyer Discount', color: 'text-blue-400', icon: '🔁' },
+    vip: { label: 'VIP Member Discount', color: 'text-yellow-400', icon: '👑' },
+    vip_repeat: { label: 'VIP + Repeat Buyer — Best Rate!', color: 'text-emerald-400', icon: '⭐' }
+  };
+  const activeTier = tierInfo[buyerTier];
 
   const handlePaymentMethodToggle = (methodId: string) => {
     setSelectedPaymentMethods(prev => 
@@ -116,9 +148,6 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
     try {
       setIsCreatingDeal(true);
       
-      // Generate a unique transaction ID
-      const transactionId = `XSM${Date.now()}${Math.floor(Math.random() * 1000)}`;
-      
       // Prepare deal data for API
       const dealData = {
         seller_id: sellerId,
@@ -128,7 +157,6 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
         escrow_fee: escrowFee, // Use escrow_fee key instead of service_fee
         transaction_type: selectedTransactionType,
         buyer_email: buyerEmail.trim(),
-        transaction_id: transactionId,
         payment_methods: selectedPaymentMethods.map(id => {
           const method = paymentMethods.find(p => p.id === id);
           return {
@@ -153,11 +181,12 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
       const result = await response.json();
       
       if (response.ok) {
+        const officialTxnId = result.transaction_id || (result.deal_id ? `TXN-${String(result.deal_id).padStart(6, '0')}` : 'TXN-000001');
         // Success! Show deal created message
-        const feeDisplay = feeOption === 'percentage' ? `5% (${escrowFee.toFixed(2)})` : '$2';
+        const feeDisplay = `$${escrowFee.toFixed(2)}`;
         alert(`✅ Deal Created Successfully!
 
-Transaction ID: ${transactionId}
+Transaction ID: ${officialTxnId}
 Channel: ${channelTitle}
 Amount: $${numericPrice}
 Service Fee: ${feeDisplay}
@@ -188,9 +217,10 @@ Deal Status: Waiting for seller review`);
     setSelectedPaymentMethods([]);
     setBuyerEmail('');
     setSelectedTransactionType('safest');
-    setFeeOption('percentage');
     setAgreedToTerms(false);
     setIsCreatingDeal(false);
+    setShowInfo(false);
+    setActiveInstructionTab('youtube');
   };
 
   if (!isOpen) return null;
@@ -215,65 +245,61 @@ Deal Status: Waiting for seller review`);
         <div className="p-6">
           {step === 'fee-selection' && (
             <>
-              <h2 className="text-2xl font-bold text-white mb-8">Choose Your Service Fee</h2>
+              <div className="flex items-center justify-between mb-8">
+                <h2 className="text-2xl font-bold text-white">Escrow Service Fee</h2>
+                <button
+                  type="button"
+                  onClick={() => setShowInfo(true)}
+                  className="text-gray-400 hover:text-xsm-yellow p-1.5 transition-colors flex items-center gap-1.5 text-sm font-medium border border-gray-700 rounded-lg bg-gray-800/40"
+                  title="View Discount Fee Programs"
+                >
+                  <HelpCircle className="w-4.5 h-4.5" />
+                  <span>Discount Tiers</span>
+                </button>
+              </div>
               
-              <div className="space-y-4 mb-8">
-                {/* 5% Option */}
-                <div
-                  onClick={() => setFeeOption('percentage')}
-                  className={`p-6 rounded-lg border-2 cursor-pointer transition-all ${
-                    feeOption === 'percentage'
-                      ? 'border-xsm-yellow bg-xsm-yellow/10'
-                      : 'border-xsm-gray hover:border-xsm-yellow'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white mb-2">5% Service Fee</h3>
-                      <p className="text-xsm-light-gray">
-                        You pay 5% of the transaction amount: <span className="text-xsm-yellow font-bold">${percentageFee.toFixed(2)}</span>
-                      </p>
-                      <p className="text-xs text-xsm-gray mt-2">Recommended for larger transactions</p>
-                    </div>
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                      feeOption === 'percentage' ? 'border-xsm-yellow bg-xsm-yellow' : 'border-xsm-gray'
-                    }`}>
-                      {feeOption === 'percentage' && <Check className="w-4 h-4 text-black" />}
-                    </div>
-                  </div>
-                </div>
-
-                {/* $2 Flat Option */}
-                <div
-                  onClick={() => setFeeOption('flat')}
-                  className={`p-6 rounded-lg border-2 cursor-pointer transition-all ${
-                    feeOption === 'flat'
-                      ? 'border-xsm-yellow bg-xsm-yellow/10'
-                      : 'border-xsm-gray hover:border-xsm-yellow'
-                  }`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-xl font-semibold text-white mb-2">$2 Flat Service Fee</h3>
-                      <p className="text-xsm-light-gray">
-                        Fixed fee of <span className="text-xsm-yellow font-bold">$2.00</span> regardless of transaction amount
-                      </p>
-                      <p className="text-xs text-xsm-gray mt-2">Better for smaller transactions</p>
-                    </div>
-                    <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
-                      feeOption === 'flat' ? 'border-xsm-yellow bg-xsm-yellow' : 'border-xsm-gray'
-                    }`}>
-                      {feeOption === 'flat' && <Check className="w-4 h-4 text-black" />}
-                    </div>
-                  </div>
-                </div>
+              <div className="bg-xsm-gray rounded-lg p-6 mb-6">
+                <h3 className="text-lg font-semibold text-white mb-4">Standard Fee Structure</h3>
+                <table className="w-full text-left text-sm text-xsm-light-gray border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="py-2 text-white font-semibold">Deal Amount</th>
+                      <th className="py-2 text-white font-semibold">Fee</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr className="border-b border-gray-800">
+                      <td className="py-3 font-medium text-white">$1 – $50</td>
+                      <td className="py-3 text-xsm-yellow font-bold">Minimum $2</td>
+                    </tr>
+                    <tr className="border-b border-gray-800">
+                      <td className="py-3 font-medium text-white">$50 – $100</td>
+                      <td className="py-3 text-xsm-yellow font-bold">5%</td>
+                    </tr>
+                    <tr>
+                      <td className="py-3 font-medium text-white">Above $100</td>
+                      <td className="py-3 text-xsm-yellow font-bold">4%</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
 
-              {/* Fee Info */}
-              <div className="bg-xsm-gray/30 border border-xsm-gray rounded-lg p-4 mb-8">
-                <p className="text-xsm-light-gray text-sm">
-                  <span className="font-semibold text-white">Total with fee:</span> ${(numericPrice + escrowFee).toFixed(2)}
+              {/* Calculated Fee Summary */}
+              <div className="bg-gray-800/80 border border-gray-700 rounded-lg p-6 mb-8 text-center">
+                <p className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Your Calculated Service Fee</p>
+                <p className="text-4xl font-extrabold text-xsm-yellow mb-2">${escrowFee.toFixed(2)}</p>
+                <p className="text-xsm-light-gray text-xs leading-relaxed">
+                  Based on the channel price of <span className="text-white font-semibold">${numericPrice.toFixed(2)}</span>
                 </p>
+                {/* Active tier badge */}
+                <div className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${activeTier.color} bg-white/5 border border-white/10`}>
+                  {activeTier.icon && <span>{activeTier.icon}</span>}
+                  <span>{activeTier.label}</span>
+                </div>
+                <div className="mt-4 pt-3 border-t border-gray-700 flex justify-between items-center text-sm px-4">
+                  <span className="text-xsm-light-gray font-medium">Total with Fee:</span>
+                  <span className="text-white font-bold text-lg">${(numericPrice + escrowFee).toFixed(2)}</span>
+                </div>
               </div>
 
               {/* Continue Button */}
@@ -338,36 +364,70 @@ Deal Status: Waiting for seller review`);
                 </div>
               </div>
 
-              {/* Transaction Steps */}
-              <div className="mb-8">
-                <h3 className="text-xl font-semibold text-white mb-4">Transaction steps when using the website agent service:</h3>
-                <div className="bg-xsm-gray rounded-lg p-6">
-                  <ol className="space-y-3 text-white">
-                    <li className="flex">
-                      <span className="font-bold text-xsm-yellow mr-3">1.</span>
-                      <span>The buyer pays a service fee ({feeOption === 'percentage' ? '5%' : '$2 flat'}).</span>
-                    </li>
-                    <li className="flex">
-                      <span className="font-bold text-xsm-yellow mr-3">2.</span>
-                      <span>The seller designates the website agent as manager.</span>
-                    </li>
-                    <li className="flex">
-                      <span className="font-bold text-xsm-yellow mr-3">3.</span>
-                      <span>After 7 days, the seller assigns primary ownership rights to the website agent (7 days is the minimum amount of time required in order to assign a new primary owner in the control panel.)</span>
-                    </li>
-                    <li className="flex">
-                      <span className="font-bold text-xsm-yellow mr-3">4.</span>
-                      <span>The website agent verifies everything, removes the other managers, and notifies the buyer to pay the seller.</span>
-                    </li>
-                    <li className="flex">
-                      <span className="font-bold text-xsm-yellow mr-3">5.</span>
-                      <span>The buyer pays the seller.</span>
-                    </li>
-                    <li className="flex">
-                      <span className="font-bold text-xsm-yellow mr-3">6.</span>
-                      <span>After the seller's confirmation, the website agent assigns ownership rights to the buyer.</span>
-                    </li>
-                  </ol>
+              {/* Transaction Steps by Platform */}
+              <div className="mb-8 border border-gray-700 bg-gray-800/20 rounded-xl p-6">
+                <h3 className="text-xl font-semibold text-white mb-4">Transaction Instructions by Platform:</h3>
+                
+                {/* Tab Header Buttons */}
+                <div className="flex border-b border-gray-700 mb-6 overflow-x-auto gap-2">
+                  {(['youtube', 'tiktok', 'facebook', 'instagram'] as const).map((platform) => (
+                    <button
+                      key={platform}
+                      type="button"
+                      onClick={() => setActiveInstructionTab(platform)}
+                      className={`px-4 py-2 font-semibold capitalize border-b-2 transition-all whitespace-nowrap ${
+                        activeInstructionTab === platform
+                          ? 'border-xsm-yellow text-xsm-yellow bg-xsm-yellow/5'
+                          : 'border-transparent text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      {platform}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab Content */}
+                <div className="min-h-[160px]">
+                  {activeInstructionTab === 'youtube' && (
+                    <ol className="space-y-3 text-white list-decimal list-inside text-sm leading-relaxed">
+                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate the escrow process.</li>
+                      <li>The seller designates the website agent's email address as a <strong>Manager</strong> of the YouTube channel.</li>
+                      <li>Under Google's platform security rules, the website agent must remain a Manager for <strong>7 days</strong> before primary ownership can be transferred.</li>
+                      <li>After 7 days, the seller transfers <strong>Primary Ownership</strong> rights to the website agent.</li>
+                      <li>The agent verifies that the channel is secured, removes the seller's access, and notifies the buyer to pay the seller.</li>
+                      <li>The buyer pays the seller. Once the seller confirms payment, the website agent assigns the Primary Ownership rights to the buyer.</li>
+                    </ol>
+                  )}
+                  
+                  {activeInstructionTab === 'tiktok' && (
+                    <ol className="space-y-3 text-white list-decimal list-inside text-sm leading-relaxed">
+                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate the escrow process.</li>
+                      <li>The seller shares the login credentials and verification code with the website agent in the secure chat.</li>
+                      <li>The agent logs into the TikTok account, updates the recovery email, links a new phone number, and logs out of all other active sessions to fully secure the account.</li>
+                      <li>The agent verifies that the page details are correct and notifies the buyer to pay the seller.</li>
+                      <li>The buyer pays the seller. Once the seller confirms payment, the website agent transfers the login credentials and links the account to the buyer's secure email/phone.</li>
+                    </ol>
+                  )}
+
+                  {activeInstructionTab === 'facebook' && (
+                    <ol className="space-y-3 text-white list-decimal list-inside text-sm leading-relaxed">
+                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate the escrow process.</li>
+                      <li>The seller invites the website agent's profile or Business Manager account as an <strong>Admin</strong> of the Facebook Page.</li>
+                      <li>The agent accepts the invitation, checks for any other page owners or pending invitations, and removes the seller's admin access.</li>
+                      <li>The agent verifies all roles and notifies the buyer to pay the seller.</li>
+                      <li>The buyer pays the seller. Once the seller confirms payment, the agent invites the buyer as Admin and removes themselves.</li>
+                    </ol>
+                  )}
+
+                  {activeInstructionTab === 'instagram' && (
+                    <ol className="space-y-3 text-white list-decimal list-inside text-sm leading-relaxed">
+                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate the escrow process.</li>
+                      <li>The seller updates the Instagram account email address to the website agent's secure transfer email.</li>
+                      <li>The agent confirms the verification email, resets the account password, and updates the two-factor authentication (2FA) settings.</li>
+                      <li>The agent verifies that the account is fully secured and notifies the buyer to pay the seller.</li>
+                      <li>The buyer pays the seller. Once the seller confirms payment, the agent changes the email to the buyer's email and hands over the credentials.</li>
+                    </ol>
+                  )}
                 </div>
               </div>
 
@@ -416,7 +476,7 @@ Deal Status: Waiting for seller review`);
                   <div className="flex justify-between">
                     <span className="text-white">Service Fee:</span>
                     <span className="text-xsm-yellow font-semibold">
-                      {feeOption === 'percentage' ? `5% ($${escrowFee.toFixed(2)})` : `$2.00`}
+                      ${escrowFee.toFixed(2)}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -495,7 +555,7 @@ Deal Status: Waiting for seller review`);
                     <div>
                       <h4 className="font-semibold text-xsm-yellow mb-2">3. Transaction Process</h4>
                       <ul className="list-disc list-inside space-y-1 ml-4">
-                        <li>Buyer pays {feeOption === 'percentage' ? '5%' : '$2'} service fee (${escrowFee.toFixed(2)})</li>
+                        <li>Buyer pays the service fee (${escrowFee.toFixed(2)})</li>
                         <li>Seller designates website agent as account manager</li>
                         <li>After 7 days, seller transfers primary ownership to website agent</li>
                         <li>Website agent verifies account and notifies buyer</li>
@@ -598,6 +658,118 @@ Deal Status: Waiting for seller review`);
           )}
         </div>
       </div>
+
+      {/* Discount Programs Information Modal Overlay */}
+      {showInfo && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+          <div className="bg-xsm-dark-gray border border-gray-700 rounded-xl p-6 max-w-xl w-full max-h-[85vh] overflow-y-auto relative shadow-2xl">
+            <button
+              onClick={() => setShowInfo(false)}
+              className="absolute right-4 top-4 text-gray-400 hover:text-white transition-colors"
+              title="Close Panel"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <h3 className="text-xl font-bold text-xsm-yellow mb-1 flex items-center gap-2">
+              <HelpCircle className="w-5 h-5 text-xsm-yellow" />
+              Fee Discount Tiers
+            </h3>
+            <p className="text-xs text-gray-400 mb-5">Your active tier is highlighted below.</p>
+
+            <div className="space-y-3">
+              {/* Standard */}
+              <div className={`border rounded-lg p-4 transition-all ${
+                buyerTier === 'standard'
+                  ? 'border-gray-500 bg-gray-800/60 ring-1 ring-gray-500'
+                  : 'border-gray-800 bg-xsm-black/40'
+              }`}>
+                <h4 className="font-semibold text-gray-300 mb-2 text-sm flex items-center justify-between">
+                  <span>Standard Rate</span>
+                  {buyerTier === 'standard' && <span className="text-[10px] bg-gray-600 text-white px-2 py-0.5 rounded-full">YOUR TIER</span>}
+                </h4>
+                <table className="w-full text-left text-xs text-xsm-light-gray">
+                  <thead><tr className="border-b border-gray-800"><th className="py-1 text-white font-medium">Deal Amount</th><th className="py-1 text-white font-medium">Fee</th></tr></thead>
+                  <tbody>
+                    <tr className="border-b border-gray-800/40"><td className="py-1">$1 – $50</td><td className="py-1 text-white">Min $2</td></tr>
+                    <tr className="border-b border-gray-800/40"><td className="py-1">$50 – $100</td><td className="py-1 text-white">5%</td></tr>
+                    <tr><td className="py-1">Above $100</td><td className="py-1 text-white">4%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Repeat Buyer */}
+              <div className={`border rounded-lg p-4 transition-all ${
+                buyerTier === 'repeat'
+                  ? 'border-blue-500 bg-blue-950/40 ring-1 ring-blue-500'
+                  : 'border-gray-800 bg-xsm-black/40'
+              }`}>
+                <h4 className="font-semibold text-blue-300 mb-2 text-sm flex items-center justify-between">
+                  <span>🔁 Repeat Buyer Discount</span>
+                  <span className="text-[10px] text-blue-400 font-normal">Min 3 completed deals</span>
+                  {buyerTier === 'repeat' && <span className="text-[10px] bg-blue-700 text-white px-2 py-0.5 rounded-full ml-1">YOUR TIER</span>}
+                </h4>
+                <table className="w-full text-left text-xs text-xsm-light-gray">
+                  <thead><tr className="border-b border-gray-800"><th className="py-1 text-white font-medium">Deal Amount</th><th className="py-1 text-white font-medium">Fee</th></tr></thead>
+                  <tbody>
+                    <tr className="border-b border-gray-800/40"><td className="py-1">$1 – $50</td><td className="py-1 text-white">Min $2</td></tr>
+                    <tr className="border-b border-gray-800/40"><td className="py-1">$50 – $100</td><td className="py-1 text-white">4.5%</td></tr>
+                    <tr><td className="py-1">Above $100</td><td className="py-1 text-white">3.5%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* VIP Member */}
+              <div className={`border rounded-lg p-4 transition-all ${
+                buyerTier === 'vip'
+                  ? 'border-yellow-500 bg-yellow-950/40 ring-1 ring-yellow-500'
+                  : 'border-gray-800 bg-xsm-black/40'
+              }`}>
+                <h4 className="font-semibold text-yellow-400 mb-2 text-sm flex items-center justify-between">
+                  <span>👑 VIP Member Discount</span>
+                  {buyerTier === 'vip' && <span className="text-[10px] bg-yellow-600 text-black px-2 py-0.5 rounded-full">YOUR TIER</span>}
+                </h4>
+                <table className="w-full text-left text-xs text-xsm-light-gray">
+                  <thead><tr className="border-b border-gray-800"><th className="py-1 text-white font-medium">Deal Amount</th><th className="py-1 text-white font-medium">Fee</th></tr></thead>
+                  <tbody>
+                    <tr className="border-b border-gray-800/40"><td className="py-1">$1 – $50</td><td className="py-1 text-white">Min $2</td></tr>
+                    <tr className="border-b border-gray-800/40"><td className="py-1">$50 – $100</td><td className="py-1 text-white">4%</td></tr>
+                    <tr><td className="py-1">Above $100</td><td className="py-1 text-white">3%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* VIP + Repeat Buyer */}
+              <div className={`border rounded-lg p-4 transition-all ${
+                buyerTier === 'vip_repeat'
+                  ? 'border-emerald-500 bg-emerald-950/40 ring-1 ring-emerald-500'
+                  : 'border-gray-800 bg-xsm-black/40'
+              }`}>
+                <h4 className="font-semibold text-emerald-400 mb-2 text-sm flex items-center justify-between">
+                  <span>⭐ VIP + Repeat Buyer</span>
+                  <span className="text-[10px] text-emerald-400 font-normal">Best Rate!</span>
+                  {buyerTier === 'vip_repeat' && <span className="text-[10px] bg-emerald-700 text-white px-2 py-0.5 rounded-full ml-1">YOUR TIER</span>}
+                </h4>
+                <table className="w-full text-left text-xs text-xsm-light-gray">
+                  <thead><tr className="border-b border-gray-800"><th className="py-1 text-white font-medium">Deal Amount</th><th className="py-1 text-white font-medium">Fee</th></tr></thead>
+                  <tbody>
+                    <tr className="border-b border-gray-800/40"><td className="py-1">$1 – $50</td><td className="py-1 text-white">Min $2</td></tr>
+                    <tr className="border-b border-gray-800/40"><td className="py-1">$50 – $100</td><td className="py-1 text-white">3.5%</td></tr>
+                    <tr><td className="py-1">Above $100</td><td className="py-1 text-white">2.5%</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowInfo(false)}
+              className="mt-6 w-full py-3 bg-xsm-yellow text-black font-bold rounded-lg hover:bg-yellow-500 transition-colors"
+            >
+              Back to Checkout
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

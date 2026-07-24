@@ -95,11 +95,21 @@ function createDeal($data) {
         
         $buyer_id = $currentUser['userId'];
         
-        // Generate transaction ID
-        $transaction_id = 'TXN' . time() . rand(1000, 9999);
-        
-        // Start transaction
+        // Start database transaction
         $pdo->beginTransaction();
+        
+        // Generate a sequential, unique transaction ID immediately when deal starts
+        $max_stmt = $pdo->query("
+            SELECT COALESCE(MAX(
+                CAST(
+                    REPLACE(REPLACE(transaction_id, 'TXN-', ''), 'XSM', '') AS UNSIGNED
+                )
+            ), COALESCE(MAX(id), 0)) as max_seq 
+            FROM deals FOR UPDATE
+        ");
+        $max_row  = $max_stmt->fetch(PDO::FETCH_ASSOC);
+        $next_seq = ((int)($max_row['max_seq'] ?? 0)) + 1;
+        $transaction_id = 'TXN-' . str_pad($next_seq, 6, '0', STR_PAD_LEFT);
         
         // Insert deal
         $stmt = $pdo->prepare("
@@ -147,6 +157,65 @@ function createDeal($data) {
             VALUES (?, 'created', ?, 'Deal created by buyer')
         ");
         $stmt->execute([$deal_id, $buyer_id]);
+        
+        // Find or create chat between buyer and seller
+        $chat_id = null;
+        $stmt = $pdo->prepare("
+            SELECT c.id
+            FROM chats c
+            INNER JOIN chat_participants cp1 ON c.id = cp1.chatId
+            INNER JOIN chat_participants cp2 ON c.id = cp2.chatId
+            WHERE c.type IN ('direct', 'ad_inquiry')
+            AND cp1.userId = ? AND cp1.isActive = 1
+            AND cp2.userId = ? AND cp2.isActive = 1
+            AND cp1.chatId = cp2.chatId
+            ORDER BY c.updatedAt DESC, c.createdAt DESC
+            LIMIT 1
+        ");
+        $stmt->execute([$buyer_id, $data['seller_id']]);
+        $existingChat = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($existingChat) {
+            $chat_id = $existingChat['id'];
+        } else {
+            // Create a new direct chat
+            $stmt = $pdo->prepare("
+                INSERT INTO chats (type, name, createdAt, updatedAt)
+                VALUES ('direct', NULL, NOW(), NOW())
+            ");
+            $stmt->execute();
+            $chat_id = $pdo->lastInsertId();
+            
+            // Add participants
+            $stmt = $pdo->prepare("
+                INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                VALUES (?, ?, 'admin', NOW(), 1)
+            ");
+            $stmt->execute([$chat_id, $buyer_id]);
+            
+            $stmt = $pdo->prepare("
+                INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                VALUES (?, ?, 'member', NOW(), 1)
+            ");
+            $stmt->execute([$chat_id, $data['seller_id']]);
+        }
+        
+        // Insert a chat message linking the deal with Transaction ID
+        $chat_message = "🤝 Deal Initiated! I want to purchase your listing '" . $data['channel_title'] . "' for $" . number_format($data['channel_price'], 2) . ". Transaction ID: " . $transaction_id;
+        
+        $stmt = $pdo->prepare("
+            INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
+            VALUES (?, ?, ?, 'text', 0, NOW(), NOW())
+        ");
+        $stmt->execute([$chat_id, $buyer_id, $chat_message]);
+        
+        // Update chat updatedAt and lastMessageTime
+        $stmt = $pdo->prepare("
+            UPDATE chats 
+            SET updatedAt = NOW(), lastMessageTime = NOW()
+            WHERE id = ?
+        ");
+        $stmt->execute([$chat_id]);
         
         // Commit transaction
         $pdo->commit();

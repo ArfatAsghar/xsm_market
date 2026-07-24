@@ -81,12 +81,11 @@ require_once __DIR__ . '/controllers/ChatUploadController.php';
 require_once __DIR__ . '/controllers/AdUploadController.php';
 require_once __DIR__ . '/controllers/AdminController.php';
 
-// Error reporting for debugging (disable in production)
-if (getenv('PHP_ENV') !== 'production') {
-    error_reporting(E_ALL);
-    ini_set('display_errors', 0);
-    ini_set('log_errors', 1);
-}
+// Error reporting for debugging
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+ini_set('log_errors', 1);
+
 
 // Parse the request
 $request_uri = $_SERVER['REQUEST_URI'];
@@ -290,6 +289,13 @@ function handleUserRoutes($controller, $path, $method) {
         case $path === '/user/password/cooldown-status' && $method === 'GET':
             $controller->getPasswordChangeCooldown();
             break;
+        // VIP routes
+        case $path === '/user/buy-vip' && $method === 'POST':
+            $controller->buyVip();
+            break;
+        case $path === '/user/buyer-stats' && $method === 'GET':
+            $controller->getBuyerStats();
+            break;
         case preg_match('/^\/user\/u\/([^\/]+)$/', $path, $matches) && $method === 'GET':
     $controller->getUserByUsername(urldecode($matches[1]));
     break;
@@ -460,11 +466,17 @@ case preg_match('/^\/ads\/user\/(\d+)$/', $path, $matches) && $method === 'GET':
             $ad['monthlyIncome'] = isset($ad['monthlyIncome']) ? (float)$ad['monthlyIncome'] : 0;
             $ad['isMonetized'] = isset($ad['isMonetized']) ? (bool)$ad['isMonetized'] : false;
 
-            if (!empty($ad['screenshots'])) {
-                $decodedScreenshots = json_decode($ad['screenshots'], true);
+            $screenshotRaw = $ad['screenshots'] ?? null;
+            if ($screenshotRaw && $screenshotRaw !== '0' && $screenshotRaw !== 'null' && $screenshotRaw !== 'NULL') {
+                $decodedScreenshots = json_decode($screenshotRaw, true);
                 $ad['screenshots'] = is_array($decodedScreenshots) ? $decodedScreenshots : [];
             } else {
                 $ad['screenshots'] = [];
+            }
+            
+            // Sanitize thumbnail: don't allow '0', empty or 'null' string
+            if (isset($ad['thumbnail']) && ($ad['thumbnail'] === '0' || $ad['thumbnail'] === 'null' || $ad['thumbnail'] === 'NULL' || trim($ad['thumbnail']) === '')) {
+                $ad['thumbnail'] = null;
             }
         }
 
@@ -544,6 +556,18 @@ function handleChatRoutes($controller, $path, $method) {
         case preg_match('/^\/chat\/chats\/(\d+)\/read$/', $path, $matches) && $method === 'PUT':
             $controller->markMessagesAsRead($matches[1]);
             break;
+         case preg_match('/^\/chat\/(\d+)\/request-agent$/', $path, $matches) && $method === 'POST':
+             $controller->requestAgentForChat($matches[1]);
+             break;
+         case preg_match('/^\/chat\/chats\/(\d+)\/request-agent$/', $path, $matches) && $method === 'POST':
+             $controller->requestAgentForChat($matches[1]);
+             break;
+         case preg_match('/^\/chat\/(\d+)\/resolve-support$/', $path, $matches) && $method === 'POST':
+             $controller->resolveSupportForChat($matches[1]);
+             break;
+         case preg_match('/^\/chat\/chats\/(\d+)\/resolve-support$/', $path, $matches) && $method === 'POST':
+             $controller->resolveSupportForChat($matches[1]);
+             break;
         case preg_match('/^\/chat\/(\d+)\/upload$/', $path, $matches) && $method === 'POST':
             $_GET['chatId'] = $matches[1];
             $uploadController = new ChatUploadController();
@@ -569,6 +593,12 @@ function handleChatRoutes($controller, $path, $method) {
             break;
         case preg_match('/^\/chat\/admin\/chats\/(\d+)\/messages$/', $path, $matches) && $method === 'POST':
             $controller->adminSendMessage($matches[1]);
+            break;
+        case preg_match('/^\/chat\/admin\/chats\/(\d+)$/', $path, $matches) && $method === 'DELETE':
+            $controller->adminDeleteChat($matches[1]);
+            break;
+        case preg_match('/^\/chat\/admin\/messages\/(\d+)$/', $path, $matches) && $method === 'DELETE':
+            $controller->adminDeleteMessage($matches[1]);
             break;
         default:
             Response::error('Chat route not found', 404);
@@ -598,13 +628,31 @@ function handleAdminRoutes($controller, $path, $method) {
         case $path === '/admin/deals' && $method === 'GET':
             $controller->getDeals();
             break;
+        case preg_match('/^\/admin\/deals\/(\d+)\/status$/', $path, $matches) && $method === 'PUT':
+            $controller->updateDealStatus($matches[1]);
+            break;
+        case $path === '/admin/support-requests' && $method === 'GET':
+            $controller->getSupportRequests();
+            break;
         case preg_match('/^\/admin\/users\/(\d+)\/ban$/', $path, $matches) && $method === 'PUT':
             $controller->banUser($matches[1]);
             break;
         case preg_match('/^\/admin\/users\/(\d+)\/unban$/', $path, $matches) && $method === 'PUT':
             $controller->unbanUser($matches[1]);
             break;
+        case preg_match('/^\/admin\/users\/(\d+)\/role$/', $path, $matches) && $method === 'PUT':
+            $controller->updateUserRole($matches[1]);
+            break;
+        case preg_match('/^\/admin\/users\/(\d+)\/vip$/', $path, $matches) && $method === 'PUT':
+            $controller->toggleVip($matches[1]);
+            break;
+        case preg_match('/^\/admin\/users\/(\d+)$/', $path, $matches) && $method === 'DELETE':
+            $controller->deleteUser($matches[1]);
+            break;
         case preg_match('/^\/admin\/ads\/(\d+)\/delete$/', $path, $matches) && $method === 'DELETE':
+            $controller->deleteAd($matches[1]);
+            break;
+        case preg_match('/^\/admin\/ads\/(\d+)$/', $path, $matches) && $method === 'DELETE':
             $controller->deleteAd($matches[1]);
             break;
         case preg_match('/^\/admin\/ads\/(\d+)\/status$/', $path, $matches) && $method === 'PUT':
@@ -615,6 +663,12 @@ function handleAdminRoutes($controller, $path, $method) {
             break;
         case preg_match('/^\/admin\/ads\/(\d+)\/reject$/', $path, $matches) && $method === 'PUT':
             $controller->rejectAd($matches[1]);
+            break;
+        case preg_match('/^\/admin\/ads\/(\d+)\/ban$/', $path, $matches) && $method === 'PUT':
+            $controller->banListing($matches[1]);
+            break;
+        case preg_match('/^\/admin\/ads\/(\d+)\/unban$/', $path, $matches) && $method === 'PUT':
+            $controller->unbanListing($matches[1]);
             break;
         default:
             Response::error('Admin route not found', 404);

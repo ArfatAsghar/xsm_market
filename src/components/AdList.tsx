@@ -1,9 +1,11 @@
 import { getImageUrl } from '../config/api';
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { getAllAds } from '../services/ads';
-import { Star, Users, DollarSign, Shield, X, CreditCard, MessageCircle } from 'lucide-react';
+import { Star, Users, DollarSign, Shield, X, CreditCard, MessageCircle, Crown } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import DealCreationModal from './DealCreationModal';
+import { generateAdSlug } from '@/utils/idEncoder';
 
 interface Ad {
   id: number;
@@ -27,6 +29,7 @@ interface Ad {
     id: number;
     username: string;
     profilePicture: string;
+    isVip?: boolean;
   };
   createdAt: string;
 }
@@ -64,6 +67,13 @@ const AdList: React.FC<AdListProps> = ({
   const [showDealModal, setShowDealModal] = useState(false);
   const [selectedAd, setSelectedAd] = useState<Ad | null>(null);
   const { user, isLoggedIn } = useAuth();
+  const navigate = useNavigate();
+
+  const navigateToDetail = (ad: Ad, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const slug = generateAdSlug(ad.id, ad.title);
+    navigate(`/ad/${slug}`);
+  };
 
   // Fetch all ads once on component mount
   useEffect(() => {
@@ -323,7 +333,10 @@ const AdList: React.FC<AdListProps> = ({
             onClick={() => onShowMore(ad)}
           >
             {/* Thumbnail */}
-            <div className="relative h-48 bg-gradient-to-br from-xsm-medium-gray to-xsm-dark-gray rounded-lg mb-4 overflow-hidden group/image">
+            <div 
+              className="relative h-48 bg-gradient-to-br from-xsm-medium-gray to-xsm-dark-gray rounded-lg mb-4 overflow-hidden group/image cursor-pointer"
+              onClick={(e) => navigateToDetail(ad, e)}
+            >
               <div className="w-full h-full overflow-hidden">
                 <img 
   src={getListingImage(ad)}
@@ -346,8 +359,13 @@ const AdList: React.FC<AdListProps> = ({
                 {getPlatformIcon(ad.platform)}
               </div>
 
-              {/* Premium/Verified Badges */}
+              {/* Premium/Verified/VIP Badges */}
               <div className="absolute top-2 right-2 flex space-x-1">
+                {Boolean(ad.seller?.isVip || (ad as any).seller_isVip || (ad as any).sellerIsVip || (ad as any).isVip) && (
+                  <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black px-2 py-0.5 rounded text-[10px] font-black shadow-lg shadow-yellow-900/40">
+                    <Crown className="w-2.5 h-2.5" /> VIP
+                  </span>
+                )}
                 {ad.verified && (
                   <span className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-bold">
                     ✓ VERIFIED
@@ -363,7 +381,11 @@ const AdList: React.FC<AdListProps> = ({
             {/* Content */}
             <div className="space-y-3 flex flex-col flex-1">
               <div className="flex items-start justify-between gap-4 min-h-[56px]">
-                <h3 className="text-white font-semibold text-lg line-clamp-2 group-hover:text-xsm-yellow transition-colors flex-1">
+                {/* Clickable title */}
+                <h3
+                  className="text-white font-semibold text-lg line-clamp-2 group-hover:text-xsm-yellow transition-colors flex-1 cursor-pointer hover:underline"
+                  onClick={(e) => navigateToDetail(ad, e)}
+                >
                   {ad.title}
                 </h3>
                 <div className="text-green-400 font-bold whitespace-nowrap text-lg">
@@ -396,15 +418,43 @@ const AdList: React.FC<AdListProps> = ({
                 )}
               </div>
 
-              
+              {/* Seller info — Profile Picture + Username → Seller Profile */}
+              <div
+                className="flex items-center gap-2 pt-2 border-t border-xsm-medium-gray/30 cursor-pointer hover:opacity-90 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/u/${ad.seller.username}`);
+                }}
+                title={`View ${ad.seller.username}'s profile`}
+              >
+                {/* Seller Profile Picture → Seller Profile */}
+                <div className="w-7 h-7 rounded-full overflow-hidden border border-xsm-medium-gray/40 flex-shrink-0 hover:ring-2 hover:ring-xsm-yellow/60 transition-all duration-200">
+                  {ad.seller.profilePicture ? (
+                    <img
+                      src={getImageUrl(ad.seller.profilePicture) || ad.seller.profilePicture}
+                      alt={ad.seller.username}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/images/logo.png'; }}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-xsm-medium-gray flex items-center justify-center text-xsm-light-gray text-xs font-bold">
+                      {ad.seller.username.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                {/* Seller Username → Seller Profile */}
+                <span className="text-xsm-light-gray text-xs hover:text-xsm-yellow hover:underline transition-colors truncate flex items-center gap-1">
+                  {ad.seller.username}
+                  {Boolean(ad.seller?.isVip || (ad as any).seller_isVip || (ad as any).sellerIsVip || (ad as any).isVip) && <Crown className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
+                </span>
+              </div>
 
               {/* Action Buttons */}
-              <div className="mt-auto w-full pt-4">
-  {/* Purchase Button */}
-  <button
-    onClick={(e) => handlePurchase(ad, e)}
-    className="w-full bg-xsm-yellow text-black py-3 rounded-lg hover:bg-yellow-500 transition-colors font-medium"
-  >
+              <div className="mt-auto w-full pt-2">
+                <button
+                  onClick={(e) => navigateToDetail(ad, e)}
+                  className="w-full bg-xsm-yellow text-black py-3 rounded-lg hover:bg-yellow-500 transition-colors font-medium"
+                >
                   Make Purchase
                 </button>
               </div>

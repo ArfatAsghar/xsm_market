@@ -27,7 +27,7 @@ class UserController {
             $user = AuthMiddleware::authenticate();
             
             $stmt = Database::getConnection()->prepare("
-                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, createdAt 
+                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, createdAt, vipUntil
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
@@ -37,6 +37,9 @@ class UserController {
                 Response::error('User not found', 404);
                 return;
             }
+
+            $vipUntil = $userData['vipUntil'];
+            $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
             
             Response::json([
                 'user' => [
@@ -47,7 +50,10 @@ class UserController {
                     'description' => $userData['description'],
                     'isEmailVerified' => (bool)$userData['isEmailVerified'],
                     'authProvider' => $userData['authProvider'],
-                    'createdAt' => $userData['createdAt']
+                    'role' => $userData['role'] ?? 'user',
+                    'createdAt' => $userData['createdAt'],
+                    'vipUntil' => $vipUntil,
+                    'isVip' => $isVip
                 ]
             ]);
         } catch (Exception $e) {
@@ -93,11 +99,13 @@ class UserController {
             
             // Get updated user data
             $stmt = $pdo->prepare("
-                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider 
+                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil 
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
             $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+            $vipUntil = $userData['vipUntil'] ?? null;
+            $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
             
             error_log("Username updated for user {$user['id']}: -> $username");
             
@@ -110,7 +118,10 @@ class UserController {
                     'profilePicture' => $userData['profilePicture'],
                     'description' => $userData['description'],
                     'isEmailVerified' => (bool)$userData['isEmailVerified'],
-                    'authProvider' => $userData['authProvider']
+                    'authProvider' => $userData['authProvider'],
+                    'role' => $userData['role'] ?? 'user',
+                    'vipUntil' => $vipUntil,
+                    'isVip' => $isVip
                 ]
             ]);
         } catch (Exception $e) {
@@ -136,11 +147,13 @@ class UserController {
             
             // Get updated user data
             $stmt = $pdo->prepare("
-                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider 
+                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil 
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
             $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+            $vipUntil = $userData['vipUntil'] ?? null;
+            $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
             
             error_log("Profile picture updated for user {$user['id']}");
             
@@ -153,7 +166,10 @@ class UserController {
                     'profilePicture' => $userData['profilePicture'],
                     'description' => $userData['description'],
                     'isEmailVerified' => (bool)$userData['isEmailVerified'],
-                    'authProvider' => $userData['authProvider']
+                    'authProvider' => $userData['authProvider'],
+                    'role' => $userData['role'] ?? 'user',
+                    'vipUntil' => $vipUntil,
+                    'isVip' => $isVip
                 ]
             ]);
         } catch (Exception $e) {
@@ -233,11 +249,13 @@ class UserController {
             
             // Get updated user data
             $stmt = $pdo->prepare("
-                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider 
+                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil 
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
             $userData = $stmt->fetch(PDO::FETCH_ASSOC);
+            $vipUntil = $userData['vipUntil'] ?? null;
+            $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
             
             Response::success([
                 'message' => 'Profile updated successfully',
@@ -248,7 +266,10 @@ class UserController {
                     'profilePicture' => $userData['profilePicture'],
                     'description' => $userData['description'],
                     'isEmailVerified' => (bool)$userData['isEmailVerified'],
-                    'authProvider' => $userData['authProvider']
+                    'authProvider' => $userData['authProvider'],
+                    'role' => $userData['role'] ?? 'user',
+                    'vipUntil' => $vipUntil,
+                    'isVip' => $isVip
                 ]
             ]);
         } catch (Exception $e) {
@@ -955,7 +976,7 @@ public function getUserByUsername($username) {
         // Find user by username.
         // Do not block seller profile only because local/test account is not email verified.
         $stmt = $pdo->prepare("
-            SELECT id, username, fullName, profilePicture, description, isEmailVerified, createdAt
+            SELECT id, username, fullName, profilePicture, description, isEmailVerified, createdAt, vipUntil
             FROM users
             WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
             LIMIT 1
@@ -967,6 +988,10 @@ public function getUserByUsername($username) {
             Response::error('User not found', 404);
             return;
         }
+
+        // Compute VIP status
+        $vipUntil = $userData['vipUntil'] ?? null;
+        $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
 
         // Get active listing count for this user
         $adCount = 0;
@@ -998,7 +1023,9 @@ public function getUserByUsername($username) {
             'description' => $userData['description'] ?? null,
             'createdAt' => $userData['createdAt'],
             'isEmailVerified' => (bool)$userData['isEmailVerified'],
-            'adCount' => $adCount
+            'adCount' => $adCount,
+            'vipUntil' => $vipUntil,
+            'isVip' => $isVip
         ];
 
         Response::json([
@@ -1009,4 +1036,105 @@ public function getUserByUsername($username) {
         error_log('Error getting user by username: ' . $e->getMessage());
         Response::error('Server error', 500);
     }
-}}
+    }
+
+    // ── VIP: Buy VIP Subscription ─────────────────────────────────────────────
+    public function buyVip() {
+        try {
+            $user = AuthMiddleware::authenticate();
+            $input = json_decode(file_get_contents('php://input'), true);
+            $months = (int)($input['months'] ?? 1);
+
+            // Validate months
+            if (!in_array($months, [1, 2, 3])) {
+                Response::error('Invalid subscription duration. Choose 1, 2, or 3 months.', 400);
+                return;
+            }
+
+            // Pricing
+            $prices = [1 => 10.00, 2 => 18.00, 3 => 25.00];
+            $price = $prices[$months];
+
+            $pdo = Database::getConnection();
+
+            // Fetch current vipUntil
+            $stmt = $pdo->prepare("SELECT vipUntil FROM users WHERE id = ?");
+            $stmt->execute([$user['id']]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // Calculate new vipUntil (extend if still active, else start from now)
+            $currentVipUntil = $row['vipUntil'] ?? null;
+            if (!empty($currentVipUntil) && strtotime($currentVipUntil) > time()) {
+                $base = new DateTime($currentVipUntil);
+            } else {
+                $base = new DateTime();
+            }
+            $base->modify("+{$months} months");
+            $newVipUntil = $base->format('Y-m-d H:i:s');
+
+            // Update user
+            $update = $pdo->prepare("UPDATE users SET vipUntil = ? WHERE id = ?");
+            $update->execute([$newVipUntil, $user['id']]);
+
+            Response::json([
+                'success' => true,
+                'message' => "VIP activated for {$months} month(s)!",
+                'vipUntil' => $newVipUntil,
+                'isVip' => true,
+                'price' => $price,
+                'months' => $months
+            ]);
+        } catch (Exception $e) {
+            error_log('Buy VIP error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    // ── VIP: Get Buyer Stats (VIP status + repeat buyer) ─────────────────────
+    public function getBuyerStats() {
+        try {
+            $user = AuthMiddleware::authenticate();
+            $pdo = Database::getConnection();
+
+            // Get vipUntil
+            $stmt = $pdo->prepare("SELECT vipUntil FROM users WHERE id = ?");
+            $stmt->execute([$user['id']]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            $vipUntil = $row['vipUntil'] ?? null;
+            $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
+
+            // Count completed deals where this user is buyer
+            $dealStmt = $pdo->prepare("
+                SELECT COUNT(*) as cnt FROM deals
+                WHERE buyer_id = ? AND deal_status IN ('completed', 'payment_confirmed')
+            ");
+            $dealStmt->execute([$user['id']]);
+            $dealRow = $dealStmt->fetch(PDO::FETCH_ASSOC);
+            $completedDeals = (int)($dealRow['cnt'] ?? 0);
+            $isRepeatBuyer = $completedDeals >= 3;
+
+            // Determine discount tier label
+            if ($isVip && $isRepeatBuyer) {
+                $tier = 'vip_repeat';
+            } elseif ($isVip) {
+                $tier = 'vip';
+            } elseif ($isRepeatBuyer) {
+                $tier = 'repeat';
+            } else {
+                $tier = 'standard';
+            }
+
+            Response::json([
+                'success' => true,
+                'isVip' => $isVip,
+                'vipUntil' => $vipUntil,
+                'completedDeals' => $completedDeals,
+                'isRepeatBuyer' => $isRepeatBuyer,
+                'tier' => $tier
+            ]);
+        } catch (Exception $e) {
+            error_log('Get buyer stats error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+}

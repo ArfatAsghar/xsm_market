@@ -21,69 +21,75 @@ const getAuthToken = () => {
   return localStorage.getItem('token') || sessionStorage.getItem('token');
 };
 
-export const uploadScreenshots = async (files: File[]): Promise<UploadResponse> => {
-  const formData = new FormData();
-
-  files.forEach((file) => {
-    formData.append('screenshots[]', file);
-  });
-
-  const token = getAuthToken();
-  const headers: Record<string, string> = {};
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+export const uploadScreenshots = async (
+  files: File[],
+  onProgress?: (current: number, total: number) => void
+): Promise<UploadResponse> => {
+  const batchSize = 5;
+  const allScreenshots: any[] = [];
+  
+  console.log(`Starting batched upload of ${files.length} screenshots (batch size: ${batchSize})...`);
+  
+  if (onProgress) {
+    onProgress(0, files.length);
   }
 
-  console.log('Uploading screenshots...', {
-    fileCount: files.length,
-    hasToken: !!token,
-    files: files.map((file) => ({
-      name: file.name,
-      size: file.size,
-      type: file.type,
-    })),
-  });
+  for (let i = 0; i < files.length; i += batchSize) {
+    const chunk = files.slice(i, i + batchSize);
+    const formData = new FormData();
+    chunk.forEach((file) => {
+      formData.append('screenshots[]', file);
+    });
 
-  let response = await fetch('/api/ads/upload/screenshots', {
-    method: 'POST',
-    headers,
-    body: formData,
-  });
+    const token = getAuthToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
 
-  if (!response.ok && response.status === 404) {
-    response = await fetch(`${API_URL}/ads/upload/screenshots`, {
+    console.log(`Uploading chunk ${Math.floor(i / batchSize) + 1} with ${chunk.length} files...`);
+
+    let response = await fetch('/api/ads/upload/screenshots', {
       method: 'POST',
       headers,
       body: formData,
     });
+
+    if (!response.ok && response.status === 404) {
+      response = await fetch(`${API_URL}/ads/upload/screenshots`, {
+        method: 'POST',
+        headers,
+        body: formData,
+      });
+    }
+
+    const responseText = await response.text();
+    if (!response.ok) {
+      console.error('Screenshot chunk upload failed:', response.status, responseText);
+      throw new Error(`Screenshot upload failed at chunk ${Math.floor(i / batchSize) + 1}: ${response.status} ${response.statusText}`);
+    }
+
+    let result: any = {};
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      throw new Error('Upload endpoint did not return valid JSON');
+    }
+
+    const payload = result.data || result;
+    const screenshots = payload.screenshots || [];
+    allScreenshots.push(...screenshots);
+
+    if (onProgress) {
+      onProgress(Math.min(i + batchSize, files.length), files.length);
+    }
   }
 
-  const responseText = await response.text();
-console.log("===== UPLOAD RESPONSE =====");
-console.log(responseText);
-console.log("===========================");
-  if (!response.ok) {
-    console.error('Screenshot upload failed:', response.status, responseText);
-    throw new Error(`Screenshot upload failed: ${response.status} ${response.statusText}`);
-  }
-
-  let result: any = {};
-  try {
-    result = JSON.parse(responseText);
-  } catch {
-    throw new Error('Upload endpoint did not return valid JSON');
-  }
-
-  const payload = result.data || result;
-  const screenshots = payload.screenshots || [];
-
-  console.log('Screenshot upload successful:', screenshots);
+  console.log('Total screenshots uploaded successfully:', allScreenshots.length);
 
   return {
-    ...payload,
-    screenshots,
-    count: payload.count || screenshots.length,
+    screenshots: allScreenshots,
+    count: allScreenshots.length,
   };
 };
 

@@ -10,6 +10,7 @@ import { GoogleOAuthProvider } from '@react-oauth/google';
 import { useTokenManager } from '@/hooks/useTokenManager';
 import { useAuth } from '@/context/useAuth';
 import ErrorBoundary from './components/ErrorBoundary';
+import BannedScreen from './components/BannedScreen';
 import Navbar from './components/Navbar';
 import Home from './pages/Home';
 import SellChannel from './pages/SellChannel';
@@ -32,12 +33,49 @@ import Contact from './pages/Contact';
 import SellerDeals from './components/SellerDeals';
 import BuyerDeals from './components/BuyerDeals';
 import AdDetails from './pages/AdDetails';
+import { getBanData, handleBanResponse, BanData, clearBanData } from '@/services/auth';
 
 // Inner component that has access to AuthContext
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isLoggedIn, user } = useAuth();
+  const { isLoggedIn, user, setIsLoggedIn, setUser } = useAuth();
+
+  // ── Ban management ──────────────────────────────────────────────────────────
+  const [banData, setBanDataState] = useState<BanData | null>(() => getBanData());
+
+  useEffect(() => {
+    // Listen for ban events fired from handleBanResponse / setBanData
+    const onBanned = (e: Event) => {
+      const detail = (e as CustomEvent<BanData>).detail;
+      setBanDataState(detail);
+      setIsLoggedIn(false);
+      setUser(null);
+    };
+    window.addEventListener('xsm:banned', onBanned);
+
+    // Patch window.fetch globally so EVERY API call gets checked for a ban response
+    const origFetch = window.fetch.bind(window);
+    (window as any)._origFetch = origFetch;
+    window.fetch = async (...args) => {
+      const response = await origFetch(...args);
+      // Only check our own API calls (avoid false positives on CDN/3rd-party)
+      const url = typeof args[0] === 'string' ? args[0] : (args[0] as Request).url;
+      if (url.includes('/api/')) {
+        await handleBanResponse(response);
+      }
+      return response;
+    };
+
+    return () => {
+      window.removeEventListener('xsm:banned', onBanned);
+      // Restore original fetch
+      if ((window as any)._origFetch) {
+        window.fetch = (window as any)._origFetch;
+      }
+    };
+  }, [setIsLoggedIn, setUser]);
+  // ────────────────────────────────────────────────────────────────────────────
   
   // Type assertion for user to include isAdmin property
   type AdminUser = typeof user & { isAdmin?: boolean };
@@ -51,6 +89,19 @@ const AppContent: React.FC = () => {
     navigate(page);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
+
+  // Show banned screen if user is banned (overrides everything)
+  if (banData?.banned) {
+    return (
+      <BannedScreen
+        banData={banData}
+        onDismiss={() => {
+          clearBanData();
+          setBanDataState(null);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-xsm-black">
@@ -84,7 +135,12 @@ const AppContent: React.FC = () => {
             <Route 
               path="/admin-dashboard" 
               element={
-                isLoggedIn ? (
+                isLoggedIn && (
+                  (adminUser as any)?.role === 'admin' ||
+                  (adminUser as any)?.role === 'manager' ||
+                  (adminUser as any)?.role === 'viewer' ||
+                  adminUser?.isAdmin === true
+                ) ? (
                   <AdminDashboard />
                 ) : (
                   <Login />

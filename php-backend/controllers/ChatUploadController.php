@@ -122,8 +122,9 @@ class ChatUploadController {
             $messageId = $this->db->lastInsertId();
             
             // Get the complete message with sender info
+            $adminEmail = getenv('ADMIN_EMAIL');
             $stmt = $this->db->prepare("
-                SELECT m.*, u.username, u.fullName, u.email 
+                SELECT m.*, u.username, u.fullName, u.email, u.isAdmin 
                 FROM messages m 
                 JOIN users u ON m.senderId = u.id 
                 WHERE m.id = ?
@@ -136,11 +137,12 @@ class ChatUploadController {
                     'id' => $message['senderId'],
                     'username' => $message['username'],
                     'fullName' => $message['fullName'],
-                    'email' => $message['email']
+                    'email' => $message['email'],
+                    'isAdmin' => (!empty($message['isAdmin']) || ($adminEmail && strtolower($message['email'] ?? '') === strtolower($adminEmail)))
                 ];
                 
                 // Remove duplicate fields
-                unset($message['username'], $message['fullName'], $message['email']);
+                unset($message['username'], $message['fullName'], $message['email'], $message['isAdmin']);
                 
                 // Convert to proper types
                 $message['id'] = intval($message['id']);

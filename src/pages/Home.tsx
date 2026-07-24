@@ -45,12 +45,8 @@ interface HomeProps {
 const Home: React.FC<HomeProps> = () => {
   const navigate = useNavigate();
   const [showAuthWidget, setShowAuthWidget] = useState(false);
-  const [channels, setChannels] = useState<ChannelData[]>([]);
-  const [filteredChannels, setFilteredChannels] = useState<ChannelData[]>([]);
-  const [loading, setLoading] = useState(true);
   const { isLoggedIn } = useAuth();
   const { toast } = useToast();
-  const [sortBy, setSortBy] = useState('newest');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPlatform, setSelectedPlatform] = useState<string>('All Platforms');
   const [monetizationEnabled, setMonetizationEnabled] = useState(false);
@@ -102,84 +98,6 @@ const Home: React.FC<HomeProps> = () => {
   
   const channelTypes = ['Non Monitied', 'Premium', 'Monetized', 'New'];
 
-  // Fetch real ads from API
-  useEffect(() => {
-    const fetchAds = async () => {
-      try {
-        setLoading(true);
-        console.log('🔄 Fetching ads...');
-        const response = await getAllAds();
-        console.log('📡 Ads response:', response);
-        
-        if (response && response.ads) {
-          // Transform API data to match ChannelData interface
-          const transformedAds = response.ads.map((ad: any) => {
-            // Parse screenshots if it's a JSON string
-            let screenshots = [];
-            if (ad.screenshots) {
-              try {
-                screenshots = JSON.parse(ad.screenshots);
-                if (!Array.isArray(screenshots)) {
-                  screenshots = [];
-                }
-              } catch (e) {
-                screenshots = [];
-              }
-            }
-
-            return {
-              id: ad.id.toString(),
-              name: ad.title,
-              category: ad.category || 'General',
-              subscribers: ad.subscribers || 0,
-              price: ad.price || 0,
-              monthlyIncome: ad.monthlyIncome || 0,
-              description: ad.description || '',
-              verified: ad.seller?.isVerified || false,
-              premium: ad.isMonetized || false,
-              rating: 4.5, // Default rating
-              views: ad.views || Math.floor(Math.random() * 1000000) + 100000,
-              // Use first screenshot as thumbnail if available
-              thumbnail: screenshots.length > 0 ? screenshots[0] : (ad.primary_image || ad.thumbnail || `https://placehold.co/600x400/333/yellow?text=${ad.platform || 'Channel'}`),
-              primary_image: ad.primary_image || null,
-              additional_images: ad.additional_images || [],
-              screenshots: screenshots,
-              seller: {
-                id: ad.seller?.id || 0,
-                name: ad.seller?.username || 'Anonymous',
-                rating: 4.5,
-                sales: Math.floor(Math.random() * 20) + 1
-              }
-            };
-          });
-          console.log('✅ Transformed ads:', transformedAds.length);
-          setChannels(transformedAds);
-          setFilteredChannels(transformedAds);
-        } else {
-          // Fallback to mock data if API fails
-          console.warn('⚠️ No ads found, using empty arrays');
-          setChannels([]);
-          setFilteredChannels([]);
-        }
-      } catch (error) {
-        console.error('❌ Failed to fetch ads:', error);
-        // Show a toast notification
-        toast({
-          title: "Error",
-          description: "Failed to load channels. Please try again later.",
-          variant: "destructive",
-        });
-        // Set empty arrays instead of crashing
-        setChannels([]);
-        setFilteredChannels([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchAds();
-  }, [toast]);
-
   interface FilterOptions {
     categories: string[];
     subscriberRange: { min: string; max: string };
@@ -222,31 +140,6 @@ const Home: React.FC<HomeProps> = () => {
     setShowAdvancedFilters(false);
   };
 
-  const handleSortChange = (newSortBy: string) => {
-    setSortBy(newSortBy);
-    const sorted = [...filteredChannels];
-
-    switch (newSortBy) {
-      case 'price-low':
-        sorted.sort((a, b) => a.price - b.price);
-        break;
-      case 'price-high':
-        sorted.sort((a, b) => b.price - a.price);
-        break;
-      case 'subscribers':
-        sorted.sort((a, b) => b.subscribers - a.subscribers);
-        break;
-      case 'income':
-        sorted.sort((a, b) => (b.monthlyIncome || 0) - (a.monthlyIncome || 0));
-        break;
-      default:
-        // newest - keep original order
-        break;
-    }
-
-    setFilteredChannels(sorted);
-  };
-
   const handleShowMore = (item: any) => {
     if (!isLoggedIn) {
       toast({
@@ -272,90 +165,7 @@ const Home: React.FC<HomeProps> = () => {
   };
 
   // Apply filters when any filter criteria changes
-  useEffect(() => {
-    let filtered = [...channels];
-
-    // Apply search query filter
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(channel => 
-        channel.name.toLowerCase().includes(query) ||
-        channel.category.toLowerCase().includes(query) ||
-        channel.description.toLowerCase().includes(query)
-      );
-    }
-
-    // Apply platform filter (in a real app)
-    if (selectedPlatform && selectedPlatform !== 'All Platforms') {
-      // This would filter by platform in a real application
-      // For now, we're not filtering since all our mock data is YouTube
-    }
-
-    // Apply category filters
-    if (selectedCategories.length > 0) {
-      filtered = filtered.filter(channel => 
-        selectedCategories.includes(channel.category)
-      );
-    }
-
-    // Apply type filters
-    if (selectedTypes.length > 0) {
-      filtered = filtered.filter(channel => {
-        return selectedTypes.some(type => {
-          if (type === 'Non Monitied') return channel.verified;
-          if (type === 'Premium') return channel.premium;
-          if (type === 'Monetized') return channel.monthlyIncome && channel.monthlyIncome > 0;
-          if (type === 'New') return true; // Would filter for new channels in a real app
-          return false;
-        });
-      });
-    }
-
-    // Apply monetization filter
-    if (monetizationEnabled) {
-      filtered = filtered.filter(channel => channel.monthlyIncome && channel.monthlyIncome > 0);
-    }
-
-    // Subscriber range filter
-    if (subscriberRange.min || subscriberRange.max) {
-      filtered = filtered.filter(channel => {
-        const min = subscriberRange.min ? parseInt(subscriberRange.min) : 0;
-        const max = subscriberRange.max ? parseInt(subscriberRange.max) : Infinity;
-        return channel.subscribers >= min && channel.subscribers <= max;
-      });
-    }
-
-    // Price range filter
-    if (priceRange.min || priceRange.max) {
-      filtered = filtered.filter(channel => {
-        const min = priceRange.min ? parseInt(priceRange.min) : 0;
-        const max = priceRange.max ? parseInt(priceRange.max) : Infinity;
-        return channel.price >= min && channel.price <= max;
-      });
-    }
-
-    // Income range filter
-    if (incomeRange.min || incomeRange.max) {
-      filtered = filtered.filter(channel => {
-        if (!channel.monthlyIncome) return false;
-        const min = incomeRange.min ? parseInt(incomeRange.min) : 0;
-        const max = incomeRange.max ? parseInt(incomeRange.max) : Infinity;
-        return channel.monthlyIncome >= min && channel.monthlyIncome <= max;
-      });
-    }
-
-    setFilteredChannels(filtered);
-  }, [
-    searchQuery, 
-    selectedPlatform, 
-    monetizationEnabled, 
-    subscriberRange, 
-    priceRange, 
-    incomeRange,
-    selectedCategories,
-    selectedTypes,
-    channels
-  ]);
+  // Filter logic has been delegated directly to AdList component
   
   // Platform data with SVG logos
   const platforms = [
@@ -420,17 +230,7 @@ const Home: React.FC<HomeProps> = () => {
     }
   ];
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-xsm-black to-xsm-dark-gray flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-xsm-yellow mx-auto mb-4"></div>
-          <p className="text-xsm-light-gray text-lg">Loading channels...</p>
-          <p className="text-xsm-medium-gray text-sm mt-2">Finding the best social media channels for you</p>
-        </div>
-      </div>
-    );
-  }
+
 
   return (
     <>

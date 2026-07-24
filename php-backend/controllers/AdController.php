@@ -343,32 +343,34 @@ class AdController {
             return;
         }
 
-        $stmt = $this->db->prepare("
+        $stmt = Database::getConnection()->prepare("
             SELECT 
-                id,
-                title,
-                platform,
-                category,
-                price,
-                subscribers,
-                monthlyIncome,
-                isMonetized,
-                createdAt,
-                thumbnail,
-                screenshots,
-                description
-            FROM ads
-            WHERE userId = ?
+                a.id,
+                a.title,
+                a.platform,
+                a.category,
+                a.price,
+                a.subscribers,
+                a.monthlyIncome,
+                a.isMonetized,
+                a.createdAt,
+                a.thumbnail,
+                a.screenshots,
+                a.description,
+                u.vipUntil as seller_vipUntil
+            FROM ads a
+            INNER JOIN users u ON a.userId = u.id
+            WHERE a.userId = ?
             AND (
-                status = 1
-                OR status = '1'
-                OR status = 'active'
-                OR status IS NULL
+                a.status = 1
+                OR a.status = '1'
+                OR a.status = 'active'
+                OR a.status IS NULL
             )
             ORDER BY 
-                pinned DESC,
-                pinnedAt DESC,
-                createdAt DESC
+                a.pinned DESC,
+                a.pinnedAt DESC,
+                a.createdAt DESC
         ");
 
         $stmt->execute([(int)$userId]);
@@ -380,6 +382,17 @@ class AdController {
             $ad['subscribers'] = (int)$ad['subscribers'];
             $ad['monthlyIncome'] = isset($ad['monthlyIncome']) ? (float)$ad['monthlyIncome'] : 0;
             $ad['isMonetized'] = (bool)$ad['isMonetized'];
+
+            $sellerVipUntil = $ad['seller_vipUntil'] ?? null;
+            $sellerIsVip = !empty($sellerVipUntil) && strtotime($sellerVipUntil) > time();
+            $ad['isVip'] = $sellerIsVip;
+            $ad['seller_isVip'] = $sellerIsVip;
+            $ad['seller'] = [
+                'id' => (int)$userId,
+                'isVip' => $sellerIsVip,
+                'vipUntil' => $sellerVipUntil
+            ];
+            unset($ad['seller_vipUntil']);
 
             if (!empty($ad['screenshots'])) {
                 $decodedScreenshots = json_decode($ad['screenshots'], true);

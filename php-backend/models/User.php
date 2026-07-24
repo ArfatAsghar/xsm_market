@@ -12,7 +12,7 @@ class User {
             $data['password'] = password_hash($data['password'], PASSWORD_BCRYPT);
         }
         
-        $fields = ['username', 'email', 'password', 'profilePicture', 'googleId', 'authProvider', 'isEmailVerified', 'emailOTP', 'otpExpires', 'passwordResetToken', 'passwordResetExpires', 'fullName', 'phone', 'location', 'bio', 'isAdmin', 'isBanned'];
+        $fields = ['username', 'email', 'password', 'profilePicture', 'googleId', 'authProvider', 'isEmailVerified', 'emailOTP', 'otpExpires', 'passwordResetToken', 'passwordResetExpires', 'fullName', 'phone', 'location', 'bio', 'isAdmin', 'isBanned', 'banExpires', 'banReason', 'bannedAt', 'bannedBy', 'unbannedAt', 'unbannedBy', 'role'];
         
         $insertFields = [];
         $insertValues = [];

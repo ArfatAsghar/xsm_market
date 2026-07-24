@@ -20,6 +20,7 @@ interface User {
   authProvider?: string;
   isEmailVerified?: boolean;
   isAdmin?: boolean;
+  role?: 'admin' | 'manager' | 'viewer' | 'user';
 }
 
 // Token management interface
@@ -44,6 +45,7 @@ export interface AuthResponse {
     authProvider?: string;
     isEmailVerified?: boolean;
     isAdmin?: boolean;
+    role?: 'admin' | 'manager' | 'viewer' | 'user';
   };
   message?: string;
   requiresVerification?: boolean;
@@ -84,6 +86,55 @@ const clearTokenData = () => {
   localStorage.removeItem(REFRESH_TOKEN_KEY);
   localStorage.removeItem(TOKEN_EXPIRY_KEY);
   localStorage.removeItem(USER_KEY);
+};
+
+// ─── Ban state helpers ───────────────────────────────────────────────────────
+const BAN_DATA_KEY = 'xsm_ban_data';
+
+export interface BanData {
+  banned: boolean;
+  banReason?: string | null;
+  banExpires?: string | null;  // ISO string or null for permanent
+}
+
+export const setBanData = (data: BanData): void => {
+  localStorage.setItem(BAN_DATA_KEY, JSON.stringify(data));
+  // Dispatch a custom event so any listening component reacts immediately
+  window.dispatchEvent(new CustomEvent('xsm:banned', { detail: data }));
+};
+
+export const getBanData = (): BanData | null => {
+  const raw = localStorage.getItem(BAN_DATA_KEY);
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+};
+
+export const clearBanData = (): void => {
+  localStorage.removeItem(BAN_DATA_KEY);
+};
+
+/**
+ * Call this whenever you get a response back from the API.
+ * If the response is a 403 with banned:true, it logs the user out,
+ * stores ban info, and fires the 'xsm:banned' event.
+ * Returns true if the user was banned (caller should stop processing).
+ */
+export const handleBanResponse = async (response: Response): Promise<boolean> => {
+  if (response.status !== 403) return false;
+  try {
+    const clone = response.clone();
+    const json = await clone.json().catch(() => ({}));
+    if (json?.banned) {
+      clearTokenData();
+      setBanData({
+        banned: true,
+        banReason: json.banReason ?? null,
+        banExpires: json.banExpires ?? null,
+      });
+      return true;
+    }
+  } catch { /* ignore parse errors */ }
+  return false;
 };
 
 // Refresh token function
@@ -239,6 +290,20 @@ export const login = async (email: string, password: string, recaptchaToken?: st
     });
 
     if (!response.ok) {
+      // ── Banned account ───────────────────────────────────────────────────
+      if (response.status === 403 && data.banned) {
+        // Store ban info and fire the global ban event
+        setBanData({
+          banned: true,
+          banReason: data.banReason ?? null,
+          banExpires: data.banExpires ?? null,
+        });
+        // Throw a special error type the Login page can detect
+        const banErr = new Error(data.message || 'Your account has been suspended.');
+        (banErr as any).banned = true;
+        throw banErr;
+      }
+
       // Handle specific error cases that need special treatment
       if (data.requiresVerification) {
         // User needs email verification - return special response
@@ -964,3 +1029,60 @@ export const getPublicProfile = async (username: string) => {
     }
   }
 };
+
+// ── VIP: Purchase VIP Subscription ──────────────────────────────────────────
+export const buyVip = async (months: 1 | 2 | 3): Promise<{
+  success: boolean;
+  message: string;
+  vipUntil: string;
+  isVip: boolean;
+  price: number;
+  months: number;
+}> => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_URL}/user/buy-vip`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ months })
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to activate VIP');
+  }
+
+  return response.json();
+};
+
+// ── VIP: Get Buyer Stats (VIP + Repeat Buyer tier) ───────────────────────────
+export const getBuyerStats = async (): Promise<{
+  success: boolean;
+  isVip: boolean;
+  vipUntil: string | null;
+  completedDeals: number;
+  isRepeatBuyer: boolean;
+  tier: 'standard' | 'repeat' | 'vip' | 'vip_repeat';
+}> => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_URL}/user/buyer-stats`, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    // Return default tier gracefully for non-blocking error
+    return { success: false, isVip: false, vipUntil: null, completedDeals: 0, isRepeatBuyer: false, tier: 'standard' };
+  }
+
+  return response.json();
+};
+

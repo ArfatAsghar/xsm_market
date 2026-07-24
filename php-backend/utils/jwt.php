@@ -23,7 +23,7 @@ class JWT {
             'userId' => (int)$userId,
             'type' => 'access',
             'iat' => time(),
-            'exp' => time() + 3600 // 1 hour expiry
+            'exp' => time() + (7 * 24 * 60 * 60) // 7 days expiry
         ]);
         
         $headerEncoded = self::base64UrlEncode($header);

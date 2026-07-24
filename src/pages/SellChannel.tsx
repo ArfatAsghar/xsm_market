@@ -7,6 +7,7 @@ import { uploadScreenshots } from '../services/uploadService';
 import { useAuth } from '@/context/useAuth';
 import { useToast } from "@/components/ui/use-toast";
 import { getImageUrl } from '@/config/api';
+import { compressImage } from '../utils/imageCompressor';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
@@ -72,6 +73,13 @@ const SellChannel: React.FC<SellChannelProps> = () => {
   const [isLoadingAd, setIsLoadingAd] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
+
+  const isFormValid = 
+    formData.title.trim().length > 0 &&
+    formData.channelUrl.trim().length > 0 &&
+    formData.category.trim().length > 0 &&
+    formData.price.trim().length > 0 && parseFloat(formData.price) >= 5 &&
+    formData.subscribers.trim().length > 0 && parseInt(formData.subscribers) >= 100;
   const contentTypeDropdownRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -345,7 +353,46 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     }));
   };
 
-  // Auto-extract profile data from URL
+  // Auto-extract when a valid URL is detected (debounced 1.5s after typing stops)
+  useEffect(() => {
+    const url = formData.channelUrl.trim();
+    if (!url) return;
+    const isSocialUrl = /youtube\.com|youtu\.be|instagram\.com|tiktok\.com|twitter\.com|x\.com|facebook\.com/.test(url);
+    if (!isSocialUrl) return;
+
+    const timer = setTimeout(async () => {
+      if (isExtracting) return;
+      setIsExtracting(true);
+      try {
+        const result = await extractProfileData(url);
+        const profileData = result.data;
+        setExtractedData(profileData);
+        const subCount = profileData.followers || profileData.subscribers || 0;
+        setFormData(prev => ({
+          ...prev,
+          title: profileData.title || prev.title,
+          platform: profileData.platform || detectPlatform(url) || prev.platform,
+          subscribers: subCount ? String(subCount) : prev.subscribers,
+          profilePicture: profileData.profilePicture || prev.profilePicture
+        }));
+        if (profileData.title) {
+          toast({
+            title: '✅ Channel Info Fetched',
+            description: `${profileData.title}${(profileData.followers || profileData.subscribers) ? ' • ' + formatFollowerCount(profileData.followers || profileData.subscribers) + ' subscribers' : ''}`,
+          });
+        }
+      } catch (err) {
+        // Silently fail on auto-extract — user can still click manually
+        console.warn('Auto-extract failed:', err);
+      } finally {
+        setIsExtracting(false);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [formData.channelUrl]);
+
+  // Manual extract button handler
   const handleExtractProfile = async () => {
     if (!formData.channelUrl.trim()) {
       toast({
@@ -364,11 +411,12 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       setExtractedData(profileData);
       
       // Auto-fill the form with extracted data
+      const subCount = profileData.followers || profileData.subscribers || 0;
       setFormData(prev => ({
         ...prev,
         title: profileData.title || prev.title,
         platform: profileData.platform || detectPlatform(formData.channelUrl) || prev.platform,
-        subscribers: profileData.followers || profileData.subscribers || prev.subscribers,
+        subscribers: subCount ? String(subCount) : prev.subscribers,
         profilePicture: profileData.profilePicture || prev.profilePicture
       }));
 
@@ -441,8 +489,38 @@ const profileImageData: string = formData.profilePicture || '';
 
 if (files.length > 0) {
   try {
-    console.log('Attempting to upload screenshots...');
-    const uploadResult = await uploadScreenshots(files);
+    console.log('Compressing screenshots client-side...');
+    const compressedFiles: File[] = [];
+    const compressionToast = toast({
+      title: "Compressing images... ⚙️",
+      description: `Preparing ${files.length} screenshots for upload...`,
+    });
+
+    for (const file of files) {
+      try {
+        const compressed = await compressImage(file, 1200, 1200, 0.75);
+        compressedFiles.push(compressed);
+      } catch (e) {
+        console.warn('Failed to compress file, using original:', file.name, e);
+        compressedFiles.push(file);
+      }
+    }
+
+    compressionToast.dismiss();
+
+    console.log('Attempting to upload compressed screenshots...');
+    const uploadToast = toast({
+      title: "Uploading screenshots... ⬆️",
+      description: `0 of ${compressedFiles.length} uploaded...`,
+    });
+
+    const uploadResult = await uploadScreenshots(compressedFiles, (current, total) => {
+      uploadToast.update({
+        id: uploadToast.id,
+        title: "Uploading screenshots... ⬆️",
+        description: `${current} of ${total} uploaded...`,
+      });
+    });
 
     const newScreenshots = uploadResult.screenshots || [];
 
@@ -453,6 +531,7 @@ if (files.length > 0) {
     screenshotData = [...screenshotData, ...newScreenshots];
 
     console.log('Screenshots uploaded and ready to save:', screenshotData);
+    uploadToast.dismiss();
   } catch (uploadError: any) {
     console.error('Error uploading screenshots:', uploadError);
 
@@ -1031,12 +1110,12 @@ if (files.length > 0) {
               </div>
             </div>
 
-            {/* Submit Button */}
+             {/* Submit Button */}
             <div className="mt-8 text-center">
               <button
                 onClick={handleSubmit}
-                disabled={isSubmitting}
-                className={`bg-xsm-yellow text-black py-3 rounded-md font-medium hover:bg-yellow-400 transition-colors w-full ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                disabled={isSubmitting || !isFormValid}
+                className={`bg-xsm-yellow text-black py-3 rounded-md font-medium hover:bg-yellow-400 transition-colors w-full ${isSubmitting || !isFormValid ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {isSubmitting 
                   ? (isEditMode ? 'Updating Listing...' : 'Creating Listing...') 

@@ -240,6 +240,35 @@ class AdminController {
         }
     }
     
+    // Set display name for a user (admin only)
+    public function updateDisplayName($userId) {
+        $admin = AuthMiddleware::requireAdmin();
+        
+        $input = json_decode(file_get_contents('php://input'), true);
+        $displayName = isset($input['displayName']) ? trim($input['displayName']) : null;
+        
+        // Allow empty string to clear the display name
+        if ($displayName !== null && strlen($displayName) > 100) {
+            Response::error('Display name must be 100 characters or fewer', 400);
+            return;
+        }
+        
+        try {
+            $pdo = \Database::getConnection();
+            $stmt = $pdo->prepare("UPDATE users SET displayName = ? WHERE id = ?");
+            $stmt->execute([$displayName ?: null, $userId]);
+            
+            Response::json([
+                'success' => true,
+                'message' => $displayName ? "Display name set to \"$displayName\"" : 'Display name cleared',
+                'displayName' => $displayName ?: null
+            ]);
+        } catch (Exception $e) {
+            error_log('Update display name error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+    
     // Ban a listing (admin/manager)
     public function banListing($adId) {
         $admin = AuthMiddleware::requireManager();

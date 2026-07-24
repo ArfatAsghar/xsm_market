@@ -73,6 +73,20 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
   const [isSending, setIsSending] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
+  // Custom confirm modal state (replaces window.confirm/alert)
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    onConfirm: () => void;
+  }>({ open: false, title: '', message: '', onConfirm: () => {} });
+
+  const showConfirm = (title: string, message: string, onConfirm: () => void, confirmLabel = 'Delete') => {
+    setConfirmModal({ open: true, title, message, onConfirm, confirmLabel });
+  };
+  const closeConfirm = () => setConfirmModal(prev => ({ ...prev, open: false }));
+
   // Template states
   const [templates, setTemplates] = useState<Array<{ id: string; title: string; content: string }>>(() => {
     const saved = localStorage.getItem('admin_chat_templates');
@@ -186,47 +200,46 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
     }
   };
 
-  const handleDeleteMessage = async (messageId: string) => {
-    if (!selectedChat || !window.confirm('Are you sure you want to delete this message?')) return;
-
-    try {
-      await adminDeleteMessage(messageId);
-      
-      // Remove the message from the selected chat
-      setSelectedChat(prev => prev ? {
-        ...prev,
-        messages: prev.messages.filter(m => m.id !== messageId)
-      } : null);
-      
-      // Update the chat in the list
-      setChats(prev => prev.map(chat => 
-        chat.id === selectedChat.id 
-          ? { ...chat, messages: chat.messages.filter(m => m.id !== messageId) }
-          : chat
-      ));
-    } catch (err: any) {
-      alert('Failed to delete message: ' + err.message);
-    }
+  const handleDeleteMessage = (messageId: string) => {
+    if (!selectedChat) return;
+    showConfirm(
+      'Delete Message',
+      'Are you sure you want to delete this message? This cannot be undone.',
+      async () => {
+        closeConfirm();
+        try {
+          await adminDeleteMessage(messageId);
+          setSelectedChat(prev => prev ? {
+            ...prev,
+            messages: prev.messages.filter(m => m.id !== messageId)
+          } : null);
+          setChats(prev => prev.map(chat =>
+            chat.id === selectedChat!.id
+              ? { ...chat, messages: chat.messages.filter(m => m.id !== messageId) }
+              : chat
+          ));
+        } catch (err: any) {
+          showConfirm('Error', 'Failed to delete message: ' + err.message, closeConfirm, 'OK');
+        }
+      }
+    );
   };
 
-  const handleDeleteChat = async (chatId: string) => {
-    if (!window.confirm('Are you sure you want to delete this entire chat? This action cannot be undone.')) return;
-
-    try {
-      await adminDeleteChat(chatId);
-      
-      // Remove the chat from the list
-      setChats(prev => prev.filter(chat => chat.id !== chatId));
-      
-      // Close modal if this chat was selected
-      if (selectedChat?.id === chatId) {
-        setSelectedChat(null);
+  const handleDeleteChat = (chatId: string) => {
+    showConfirm(
+      'Delete Entire Chat',
+      'Are you sure you want to permanently delete this chat and all its messages? This action cannot be undone.',
+      async () => {
+        closeConfirm();
+        try {
+          await adminDeleteChat(chatId);
+          setChats(prev => prev.filter(chat => chat.id !== chatId));
+          if (selectedChat?.id === chatId) setSelectedChat(null);
+        } catch (err: any) {
+          showConfirm('Error', 'Failed to delete chat: ' + err.message, closeConfirm, 'OK');
+        }
       }
-      
-      alert('Chat deleted successfully');
-    } catch (err: any) {
-      alert('Failed to delete chat: ' + err.message);
-    }
+    );
   };
 
   const handleResolveSupport = async () => {
@@ -276,11 +289,15 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
   };
 
   const handleDeleteTemplate = (id: string) => {
-    if (!confirm('Are you sure you want to delete this template?')) return;
-    setTemplates(prev => prev.filter(t => t.id !== id));
-    if (editingTemplate?.id === id) {
-      setEditingTemplate(null);
-    }
+    showConfirm(
+      'Delete Template',
+      'Are you sure you want to delete this message template?',
+      () => {
+        closeConfirm();
+        setTemplates(prev => prev.filter(t => t.id !== id));
+        if (editingTemplate?.id === id) setEditingTemplate(null);
+      }
+    );
   };
 
   const handleUseTemplate = (content: string) => {
@@ -353,6 +370,7 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
   });
 
   return (
+    <>
     <div className="flex flex-col h-[calc(100vh-12rem)]">
       {/* Control Panel */}
       <div className="bg-xsm-dark-gray rounded-xl border border-xsm-medium-gray p-4 mb-4 flex-shrink-0">
@@ -669,6 +687,31 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
         )}
       </div>
     </div>
+
+      {/* ── Custom Confirm Modal ── */}
+      {confirmModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-xsm-dark-gray border border-xsm-medium-gray rounded-2xl shadow-2xl w-full max-w-md p-6 animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-bold text-white mb-2">{confirmModal.title}</h3>
+            <p className="text-sm text-xsm-light-gray mb-6 leading-relaxed">{confirmModal.message}</p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={closeConfirm}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-xsm-light-gray border border-xsm-medium-gray hover:bg-xsm-medium-gray/40 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmModal.onConfirm}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg"
+              >
+                {confirmModal.confirmLabel || 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 };
 

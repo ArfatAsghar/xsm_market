@@ -1123,28 +1123,43 @@ const AdDetails: React.FC = () => {
       {/* Screenshot Lightbox */}
       {activeScreenshot && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/92 backdrop-blur-md p-4"
           onClick={() => setActiveScreenshot(null)}
         >
           <div
             className="relative max-w-5xl w-full max-h-[90vh] flex items-center justify-center"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Close Button */}
+            {/* Close Button — glass-morphism style */}
             <button
               onClick={() => setActiveScreenshot(null)}
-              className="absolute -top-4 -right-4 z-10 w-10 h-10 bg-xsm-yellow text-black rounded-full flex items-center justify-center font-bold text-lg hover:bg-yellow-400 transition-colors shadow-lg hover:scale-110 active:scale-95 transition-transform"
-              aria-label="Close"
+              aria-label="Close screenshot preview"
+              className="
+                absolute top-3 right-3 z-20
+                w-10 h-10
+                flex items-center justify-center
+                rounded-full
+                bg-white/10 backdrop-blur-lg
+                border border-white/20
+                text-white
+                shadow-[0_4px_24px_rgba(0,0,0,0.5)]
+                hover:bg-white/20 hover:border-white/40
+                hover:shadow-[0_0_0_3px_rgba(255,255,255,0.15)]
+                active:scale-90
+                transition-all duration-200
+              "
             >
-              ×
+              <X className="w-5 h-5" strokeWidth={2.5} />
             </button>
             <img
               src={activeScreenshot}
               alt="Screenshot fullscreen"
-              className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl border border-xsm-yellow/20"
+              className="max-w-full max-h-[88vh] object-contain rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.8)] border border-white/10"
             />
           </div>
-          <p className="absolute bottom-4 text-xsm-medium-gray text-xs">Click outside or × to close</p>
+          <p className="absolute bottom-5 text-white/30 text-xs tracking-wide select-none">
+            Press <kbd className="px-1.5 py-0.5 rounded bg-white/10 border border-white/20 text-white/50 font-mono text-[10px]">Esc</kbd> or click outside to close
+          </p>
         </div>
       )}
     </div>

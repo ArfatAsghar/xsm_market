@@ -240,7 +240,7 @@ class ChatController {
 
             $stmt = $this->db->prepare("
                 SELECT m.*,
-                       sender.id as sender_id, sender.username as sender_username, sender.isAdmin as sender_isAdmin, sender.email as sender_email,
+                       sender.id as sender_id, sender.username as sender_username, sender.displayName as sender_displayName, sender.isAdmin as sender_isAdmin, sender.email as sender_email,
                        reply.id as reply_id, reply.content as reply_content,
                        reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username
                 FROM messages m
@@ -277,6 +277,7 @@ class ChatController {
                     'sender' => [
                         'id' => (int)$msg['sender_id'],
                         'username' => $msg['sender_username'],
+                        'displayName' => $msg['sender_displayName'] ?? null,
                         'isAdmin' => (!empty($msg['sender_isAdmin']) || ($adminEmail && strtolower($msg['sender_email'] ?? '') === strtolower($adminEmail)))
                     ]
                 ];
@@ -416,7 +417,7 @@ class ChatController {
             $adminEmail = getenv('ADMIN_EMAIL');
             $stmt = $this->db->prepare("
                 SELECT m.*,
-                       sender.id as sender_id, sender.username as sender_username, sender.isAdmin as sender_isAdmin, sender.email as sender_email,
+                       sender.id as sender_id, sender.username as sender_username, sender.displayName as sender_displayName, sender.isAdmin as sender_isAdmin, sender.email as sender_email,
                        reply.id as reply_id, reply.content as reply_content,
                        reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username
                 FROM messages m
@@ -441,6 +442,7 @@ class ChatController {
                 'sender' => [
                     'id' => (int)$messageData['sender_id'],
                     'username' => $messageData['sender_username'],
+                    'displayName' => $messageData['sender_displayName'] ?? null,
                     'isAdmin' => (!empty($messageData['sender_isAdmin']) || ($adminEmail && strtolower($messageData['sender_email'] ?? '') === strtolower($adminEmail)))
                 ]
             ];

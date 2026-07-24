@@ -975,24 +975,24 @@ const Chat: React.FC = () => {
                             <div
                               className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
                                 isSenderAdmin
-                                  ? 'bg-gradient-to-br from-red-950/95 to-red-900/95 text-white border border-red-500/50 shadow-[0_0_12px_rgba(239,68,68,0.25)]'
+                                  ? 'bg-gradient-to-br from-slate-800 to-slate-700 text-white border border-indigo-400/40 shadow-[0_0_10px_rgba(99,102,241,0.2)]'
                                   : isMyMessage
                                     ? 'bg-xsm-yellow text-xsm-black'
                                     : 'bg-xsm-medium-gray text-white'
                               }`}
                             >
                               {isSenderAdmin ? (
-                                <p className="flex items-center gap-1 text-[11px] font-bold mb-1.5 text-red-400 select-none">
-                                  <Shield className="w-3 h-3 text-red-500 fill-red-500/10" />
-                                  <span>{message.sender?.username}</span>
-                                  <span className="bg-red-500/20 border border-red-500/40 text-red-400 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider ml-1">
+                                <p className="flex items-center gap-1 text-[11px] font-bold mb-1.5 text-indigo-300 select-none">
+                                  <Shield className="w-3 h-3 text-indigo-400 fill-indigo-400/10" />
+                                  <span>{(message.sender as any)?.displayName || message.sender?.username}</span>
+                                  <span className="bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider ml-1">
                                     Admin
                                   </span>
                                 </p>
                               ) : (
                                 !isMyMessage && (
                                   <p className="text-xs font-medium mb-1 opacity-75">
-                                    {message.sender?.username}
+                                    {(message.sender as any)?.displayName || message.sender?.username}
                                   </p>
                                 )
                               )}
@@ -1001,7 +1001,7 @@ const Chat: React.FC = () => {
                                   <img
                                     src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content}
                                     alt="Sent image"
-                                    className={`rounded-lg max-w-[200px] max-h-[200px] mb-2 border cursor-pointer ${isSenderAdmin ? 'border-red-500/60' : 'border-xsm-yellow'}`}
+                                    className={`rounded-lg max-w-[200px] max-h-[200px] mb-2 border cursor-pointer ${isSenderAdmin ? 'border-indigo-400/60' : 'border-xsm-yellow'}`}
                                     style={{ objectFit: 'cover' }}
                                     onClick={() => window.open(getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content, '_blank')}
                                     onError={(e) => {
@@ -1030,7 +1030,7 @@ const Chat: React.FC = () => {
                                           const url = getImageUrl(message.content) || message.content;
                                           window.open(url, '_blank');
                                         }}
-                                        className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isSenderAdmin ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}
+                                        className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isSenderAdmin ? 'bg-indigo-500 text-white hover:bg-indigo-600' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}
                                       >
                                         Try Opening
                                       </button>
@@ -1038,7 +1038,7 @@ const Chat: React.FC = () => {
                                   </div>
                                 </div>
                               ) : message.messageType === 'video' && (message.mediaUrl || message.content) ? (
-                                <div className={`relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border bg-black ${isSenderAdmin ? 'border-red-500/60' : 'border-xsm-yellow'}`}>
+                                <div className={`relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border bg-black ${isSenderAdmin ? 'border-indigo-400/60' : 'border-xsm-yellow'}`}>
                                   <video
                                     className="w-full h-full object-cover"
                                     controls
@@ -1100,7 +1100,7 @@ const Chat: React.FC = () => {
                                           console.log('Attempting to open video:', url);
                                           window.open(url, '_blank');
                                         }}
-                                        className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isSenderAdmin ? 'bg-red-500 text-white hover:bg-red-600' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}
+                                        className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isSenderAdmin ? 'bg-indigo-500 text-white hover:bg-indigo-600' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}
                                       >
                                         Open Video
                                       </button>
@@ -1113,7 +1113,7 @@ const Chat: React.FC = () => {
                               <p
                                 className={`text-xs mt-1 ${
                                   isSenderAdmin
-                                    ? 'text-red-300/70 text-right'
+                                    ? 'text-slate-400/70 text-right'
                                     : isMyMessage
                                       ? 'text-xsm-dark-gray'
                                       : 'text-gray-400'

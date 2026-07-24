@@ -116,6 +116,12 @@ class Database {
                 error_log("Added 'vipUntil' column to users table");
             }
 
+            // Check & add displayName column to users table (for admin display name system)
+            if (!in_array('displayName', $usersColumns)) {
+                $pdo->exec("ALTER TABLE users ADD COLUMN displayName VARCHAR(100) NULL DEFAULT NULL");
+                error_log("Added 'displayName' column to users table");
+            }
+
             // Check & add listing ban columns to ads table
             $adsColumns = $pdo->query("SHOW COLUMNS FROM ads")->fetchAll(PDO::FETCH_COLUMN);
             if (!in_array('isBanned', $adsColumns)) {

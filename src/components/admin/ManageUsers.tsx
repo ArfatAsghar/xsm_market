@@ -27,6 +27,7 @@ interface UserData {
   isVip?: boolean;
   banReason?: string;
   banExpires?: string;
+  displayName?: string | null;
   // Online presence fields (from backend)
   createdAt?: string;
   lastSeenAt?: string;
@@ -40,6 +41,11 @@ const ManageUsers: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
+  // Display Name modal state
+  const [displayNameModal, setDisplayNameModal] = useState<{ open: boolean; user: UserData | null; value: string; saving: boolean }>({
+    open: false, user: null, value: '', saving: false
+  });
+  const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'https://xsmmarket.com/api');
 
   const currentUserRole = (currentUser as any)?.role || 'user';
   const isCurrentUserAdmin = currentUserRole === 'admin' || (currentUser as any)?.isAdmin === true;
@@ -236,6 +242,32 @@ const ManageUsers: React.FC = () => {
     }
   };
 
+  const handleSetDisplayName = (user: UserData) => {
+    setDisplayNameModal({ open: true, user, value: user.displayName || '', saving: false });
+  };
+
+  const handleSaveDisplayName = async () => {
+    if (!displayNameModal.user) return;
+    setDisplayNameModal(prev => ({ ...prev, saving: true }));
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/admin/users/${displayNameModal.user.id}/display-name`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ displayName: displayNameModal.value.trim() || null })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || 'Failed to save');
+      const newName = displayNameModal.value.trim() || null;
+      setUsers(prev => prev.map(u => u.id === displayNameModal.user!.id ? { ...u, displayName: newName } : u));
+      toast({ title: '✅ Display Name Updated', description: data.message });
+      setDisplayNameModal({ open: false, user: null, value: '', saving: false });
+    } catch (err) {
+      toast({ variant: 'destructive', title: '❌ Failed', description: err instanceof Error ? err.message : 'Could not save display name' });
+      setDisplayNameModal(prev => ({ ...prev, saving: false }));
+    }
+  };
+
   const getRelativeTime = (dateStr?: string): string => {
     if (!dateStr) return 'Never';
     const date = new Date(dateStr);
@@ -331,6 +363,11 @@ const ManageUsers: React.FC = () => {
                         <div className="ml-4">
                           <div className="text-sm font-medium text-white flex items-center gap-2">
                             <span>{user.username}</span>
+                            {user.displayName && (
+                              <span className="text-xs text-indigo-300 bg-indigo-500/10 border border-indigo-400/30 px-1.5 py-0.5 rounded font-normal" title="Display name shown in chat">
+                                "{user.displayName}"
+                              </span>
+                            )}
                             {(user.isVip || (user.vipUntil && new Date(user.vipUntil) > new Date())) && (
                               <span className="flex items-center gap-0.5 bg-yellow-950 text-yellow-400 border border-yellow-700/60 px-1.5 py-0.5 rounded text-[10px] font-bold" title={`VIP Until: ${user.vipUntil}`}>
                                 <Crown className="w-2.5 h-2.5 fill-current" /> VIP
@@ -415,43 +452,56 @@ const ManageUsers: React.FC = () => {
 
                             {/* ── Change Role submenu (Admin only) ── */}
                             {isCurrentUserAdmin && (
-                              <DropdownMenuSub>
-                                <DropdownMenuSubTrigger className="text-white hover:text-xsm-yellow cursor-pointer flex items-center px-2 py-1.5 text-sm rounded-sm hover:bg-xsm-medium-gray/40 focus:bg-xsm-medium-gray/40 data-[state=open]:bg-xsm-medium-gray/40">
-                                  <Shield className="w-4 h-4 mr-2 text-blue-400" />
-                                  <span>Change Role</span>
-                                </DropdownMenuSubTrigger>
-                                <DropdownMenuSubContent className="bg-xsm-dark-gray border-xsm-medium-gray min-w-[180px]">
+                              <>
+                                <DropdownMenuSub>
+                                  <DropdownMenuSubTrigger className="text-white hover:text-xsm-yellow cursor-pointer flex items-center px-2 py-1.5 text-sm rounded-sm hover:bg-xsm-medium-gray/40 focus:bg-xsm-medium-gray/40 data-[state=open]:bg-xsm-medium-gray/40">
+                                    <Shield className="w-4 h-4 mr-2 text-blue-400" />
+                                    <span>Change Role</span>
+                                  </DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent className="bg-xsm-dark-gray border-xsm-medium-gray min-w-[180px]">
+                                    <DropdownMenuItem
+                                      className="text-red-400 hover:text-red-300 cursor-pointer"
+                                      onClick={() => handleChangeRole(user, 'admin')}
+                                    >
+                                      <Shield className="w-4 h-4 mr-2" />
+                                      Make Admin
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-blue-400 hover:text-blue-300 cursor-pointer"
+                                      onClick={() => handleChangeRole(user, 'manager')}
+                                    >
+                                      <Shield className="w-4 h-4 mr-2" />
+                                      Make Manager
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem
+                                      className="text-purple-400 hover:text-purple-300 cursor-pointer"
+                                      onClick={() => handleChangeRole(user, 'viewer')}
+                                    >
+                                      <Shield className="w-4 h-4 mr-2" />
+                                      Make Viewer
+                                    </DropdownMenuItem>
+                                    <DropdownMenuSeparator className="bg-xsm-medium-gray" />
+                                    <DropdownMenuItem
+                                      className="text-white hover:text-xsm-yellow cursor-pointer"
+                                      onClick={() => handleChangeRole(user, 'user')}
+                                    >
+                                      <User className="w-4 h-4 mr-2" />
+                                      Remove Special Role
+                                    </DropdownMenuItem>
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+
+                                {/* Set Display Name — admin only, for staff accounts */}
+                                {user.role !== 'user' && (
                                   <DropdownMenuItem
-                                    className="text-red-400 hover:text-red-300 cursor-pointer"
-                                    onClick={() => handleChangeRole(user, 'admin')}
+                                    className="text-indigo-400 hover:text-indigo-300 cursor-pointer"
+                                    onClick={() => handleSetDisplayName(user)}
                                   >
-                                    <Shield className="w-4 h-4 mr-2" />
-                                    Make Admin
+                                    <Shield className="w-4 h-4 mr-2 text-indigo-400" />
+                                    <span>{user.displayName ? 'Edit Display Name' : 'Set Display Name'}</span>
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-blue-400 hover:text-blue-300 cursor-pointer"
-                                    onClick={() => handleChangeRole(user, 'manager')}
-                                  >
-                                    <Shield className="w-4 h-4 mr-2" />
-                                    Make Manager
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-purple-400 hover:text-purple-300 cursor-pointer"
-                                    onClick={() => handleChangeRole(user, 'viewer')}
-                                  >
-                                    <Shield className="w-4 h-4 mr-2" />
-                                    Make Viewer
-                                  </DropdownMenuItem>
-                                  <DropdownMenuSeparator className="bg-xsm-medium-gray" />
-                                  <DropdownMenuItem
-                                    className="text-white hover:text-xsm-yellow cursor-pointer"
-                                    onClick={() => handleChangeRole(user, 'user')}
-                                  >
-                                    <User className="w-4 h-4 mr-2" />
-                                    Remove Special Role
-                                  </DropdownMenuItem>
-                                </DropdownMenuSubContent>
-                              </DropdownMenuSub>
+                                )}
+                              </>
                             )}
 
                             <DropdownMenuSeparator className="bg-xsm-medium-gray" />
@@ -535,6 +585,45 @@ const ManageUsers: React.FC = () => {
         </div>
         )}
       </div>
+
+      {/* Display Name Modal */}
+      {displayNameModal.open && displayNameModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="bg-xsm-dark-gray border border-xsm-medium-gray rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-white mb-1">Set Display Name</h3>
+            <p className="text-sm text-xsm-light-gray mb-4">
+              Set a display name for <span className="text-white font-semibold">{displayNameModal.user.username}</span>.
+              This name will appear in chats instead of their username.
+            </p>
+            <input
+              type="text"
+              value={displayNameModal.value}
+              onChange={e => setDisplayNameModal(prev => ({ ...prev, value: e.target.value }))}
+              onKeyDown={e => e.key === 'Enter' && handleSaveDisplayName()}
+              placeholder="e.g. Support Agent, Alex, Agent Mike..."
+              maxLength={100}
+              className="w-full bg-xsm-black border border-xsm-medium-gray rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-indigo-400 mb-1"
+              autoFocus
+            />
+            <p className="text-xs text-xsm-light-gray mb-5">Leave blank to remove the display name and show username instead.</p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                onClick={() => setDisplayNameModal({ open: false, user: null, value: '', saving: false })}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-xsm-light-gray border border-xsm-medium-gray hover:bg-xsm-medium-gray/40 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveDisplayName}
+                disabled={displayNameModal.saving}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-lg disabled:opacity-50"
+              >
+                {displayNameModal.saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

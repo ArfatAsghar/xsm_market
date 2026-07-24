@@ -646,6 +646,9 @@ function handleAdminRoutes($controller, $path, $method) {
         case preg_match('/^\/admin\/users\/(\d+)\/vip$/', $path, $matches) && $method === 'PUT':
             $controller->toggleVip($matches[1]);
             break;
+        case preg_match('/^\/admin\/users\/(\d+)\/display-name$/', $path, $matches) && $method === 'PUT':
+            $controller->updateDisplayName($matches[1]);
+            break;
         case preg_match('/^\/admin\/users\/(\d+)$/', $path, $matches) && $method === 'DELETE':
             $controller->deleteUser($matches[1]);
             break;

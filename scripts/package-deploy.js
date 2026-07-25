@@ -7,6 +7,31 @@ const DEPLOY_DIR = path.join(ROOT_DIR, 'deploy-temp');
 const DIST_DIR = path.join(ROOT_DIR, 'dist');
 const BACKEND_DIR = path.join(ROOT_DIR, 'php-backend');
 
+function zipDirectory(sourceDir, outPath) {
+  const pyCode = `
+import zipfile, os, sys
+
+source_dir = sys.argv[1]
+out_path = sys.argv[2]
+
+with zipfile.ZipFile(out_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+    for root, dirs, files in os.walk(source_dir):
+        for file in files:
+            full_path = os.path.join(root, file)
+            rel_path = os.path.relpath(full_path, source_dir).replace('\\\\', '/')
+            zipf.write(full_path, rel_path)
+`;
+  const tempScript = path.join(ROOT_DIR, 'scripts', 'zip-posix-helper.py');
+  fs.writeFileSync(tempScript, pyCode);
+  try {
+    execSync(`python "${tempScript}" "${sourceDir}" "${outPath}"`, { stdio: 'inherit' });
+  } finally {
+    if (fs.existsSync(tempScript)) {
+      fs.removeSync(tempScript);
+    }
+  }
+}
+
 function shouldCleanFile(filename) {
   const lowerName = filename.toLowerCase();
   
@@ -131,12 +156,9 @@ async function main() {
       await fs.remove(nestedApiDir);
     }
 
-    console.log('🤐 Zipping deployment package using standard PKZip format for Hostinger compatibility...');
-    if (process.platform === 'win32') {
-      execSync('powershell -Command "Remove-Item -Force xsm-market-deploy.zip -ErrorAction SilentlyContinue; Compress-Archive -Path \'deploy-temp\\*\' -DestinationPath \'xsm-market-deploy.zip\' -Force"', { stdio: 'inherit' });
-    } else {
-      execSync('cd deploy-temp && zip -r ../xsm-market-deploy.zip .', { stdio: 'inherit' });
-    }
+    console.log('🤐 Zipping deployment package with POSIX paths for Hostinger compatibility...');
+    const targetZipPath = path.join(ROOT_DIR, 'xsm-market-deploy.zip');
+    await zipDirectory(DEPLOY_DIR, targetZipPath);
 
     console.log('✅ Deployment structure successfully packaged and zipped in xsm-market-deploy.zip');
   } catch (error) {

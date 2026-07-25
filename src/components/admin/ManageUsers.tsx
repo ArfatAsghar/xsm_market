@@ -146,41 +146,58 @@ const ManageUsers: React.FC = () => {
     }
   };
 
-  const handleBanUser = async (user: UserData, duration: '7d' | '30d' | 'permanent') => {
-    const durationText = duration === '7d' ? '7-Day' : duration === '30d' ? '30-Day' : 'Permanent';
-    const reason = window.prompt(`Enter ban reason for user "${user.username}" (${durationText} ban):`);
-    
-    if (reason === null) return; // Cancelled
-    
+  // Custom Ban & Unban Modal States
+  const [banModal, setBanModal] = useState<{ open: boolean; user: UserData | null; duration: '7d' | '30d' | 'permanent'; reason: string; submitting: boolean }>({
+    open: false, user: null, duration: '7d', reason: '', submitting: false
+  });
+  const [unbanModal, setUnbanModal] = useState<{ open: boolean; user: UserData | null; submitting: boolean }>({
+    open: false, user: null, submitting: false
+  });
+
+  const openBanModal = (user: UserData, duration: '7d' | '30d' | 'permanent') => {
+    setBanModal({ open: true, user, duration, reason: user.banReason || '', submitting: false });
+  };
+
+  const submitBanUser = async () => {
+    if (!banModal.user) return;
+    if (!banModal.reason.trim()) {
+      toast({
+        variant: "destructive",
+        title: "⚠️ Reason Required",
+        description: "Please enter a ban reason or administrative note.",
+      });
+      return;
+    }
+    setBanModal(prev => ({ ...prev, submitting: true }));
     try {
-      await banUser(user.id, reason, duration);
-      
-      // Calculate approximate local expiration string to update state immediately
+      await banUser(banModal.user.id, banModal.reason.trim(), banModal.duration);
       let banExpires: string | undefined = undefined;
       const now = new Date();
-      if (duration === '7d') {
+      if (banModal.duration === '7d') {
         now.setDate(now.getDate() + 7);
         banExpires = now.toISOString();
-      } else if (duration === '30d') {
+      } else if (banModal.duration === '30d') {
         now.setDate(now.getDate() + 30);
         banExpires = now.toISOString();
       }
 
-      setUsers(prevUsers => 
-        prevUsers.map(u => 
-          u.id === user.id ? { 
-            ...u, 
-            isBanned: 1, 
-            banReason: reason, 
-            banExpires 
+      setUsers(prevUsers =>
+        prevUsers.map(u =>
+          u.id === banModal.user!.id ? {
+            ...u,
+            isBanned: 1,
+            banReason: banModal.reason.trim(),
+            banExpires
           } : u
         )
       );
-      
+
+      const durationText = banModal.duration === '7d' ? '7-Day' : banModal.duration === '30d' ? '30-Day' : 'Permanent';
       toast({
         title: "✅ User Banned",
-        description: `User "${user.username}" has been banned (${durationText}).`,
+        description: `User "${banModal.user.username}" has been banned (${durationText}).`,
       });
+      setBanModal({ open: false, user: null, duration: '7d', reason: '', submitting: false });
     } catch (error) {
       console.error('Error banning user:', error);
       toast({
@@ -188,31 +205,34 @@ const ManageUsers: React.FC = () => {
         title: "❌ Ban Failed",
         description: error instanceof Error ? error.message : "Failed to ban user",
       });
+      setBanModal(prev => ({ ...prev, submitting: false }));
     }
   };
 
-  const handleUnbanUser = async (user: UserData) => {
-    const confirmed = window.confirm(`Are you sure you want to unban user "${user.username}"?`);
-    if (!confirmed) return;
-    
+  const openUnbanModal = (user: UserData) => {
+    setUnbanModal({ open: true, user, submitting: false });
+  };
+
+  const submitUnbanUser = async () => {
+    if (!unbanModal.user) return;
+    setUnbanModal(prev => ({ ...prev, submitting: true }));
     try {
-      await unbanUser(user.id);
-      
-      setUsers(prevUsers => 
-        prevUsers.map(u => 
-          u.id === user.id ? { 
-            ...u, 
-            isBanned: 0, 
-            banReason: undefined, 
-            banExpires: undefined 
+      await unbanUser(unbanModal.user.id);
+      setUsers(prevUsers =>
+        prevUsers.map(u =>
+          u.id === unbanModal.user!.id ? {
+            ...u,
+            isBanned: 0,
+            banReason: undefined,
+            banExpires: undefined
           } : u
         )
       );
-      
       toast({
         title: "✅ User Unbanned",
-        description: `User "${user.username}" has been unbanned.`,
+        description: `User "${unbanModal.user.username}" has been unbanned.`,
       });
+      setUnbanModal({ open: false, user: null, submitting: false });
     } catch (error) {
       console.error('Error unbanning user:', error);
       toast({
@@ -220,6 +240,7 @@ const ManageUsers: React.FC = () => {
         title: "❌ Unban Failed",
         description: error instanceof Error ? error.message : "Failed to unban user",
       });
+      setUnbanModal(prev => ({ ...prev, submitting: false }));
     }
   };
 
@@ -528,7 +549,7 @@ const ManageUsers: React.FC = () => {
                                   <>
                                     <DropdownMenuItem
                                       className="text-green-400 hover:text-green-300 cursor-pointer"
-                                      onClick={() => handleUnbanUser(user)}
+                                      onClick={() => openUnbanModal(user)}
                                     >
                                       <Unlock className="w-4 h-4 mr-2" />
                                       Unban User
@@ -538,21 +559,21 @@ const ManageUsers: React.FC = () => {
                                 )}
                                 <DropdownMenuItem
                                   className="text-orange-400 hover:text-orange-300 cursor-pointer"
-                                  onClick={() => handleBanUser(user, '7d')}
+                                  onClick={() => openBanModal(user, '7d')}
                                 >
                                   <Ban className="w-4 h-4 mr-2" />
                                   Ban - 7 Days{user.isBanned ? ' (Change)' : ''}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-red-400 hover:text-red-300 cursor-pointer"
-                                  onClick={() => handleBanUser(user, '30d')}
+                                  onClick={() => openBanModal(user, '30d')}
                                 >
                                   <Ban className="w-4 h-4 mr-2" />
                                   Ban - 30 Days{user.isBanned ? ' (Change)' : ''}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
                                   className="text-red-500 hover:text-red-400 cursor-pointer font-semibold"
-                                  onClick={() => handleBanUser(user, 'permanent')}
+                                  onClick={() => openBanModal(user, 'permanent')}
                                 >
                                   <Ban className="w-4 h-4 mr-2" />
                                   Permanent Ban{user.isBanned ? ' (Change)' : ''}
@@ -619,6 +640,121 @@ const ManageUsers: React.FC = () => {
                 className="px-4 py-2 rounded-lg text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors shadow-lg disabled:opacity-50"
               >
                 {displayNameModal.saving ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Ban User Modal */}
+      {banModal.open && banModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-xsm-dark-gray border border-red-500/40 rounded-2xl shadow-2xl w-full max-w-lg p-6 text-white">
+            <div className="flex items-center gap-3 mb-4 border-b border-xsm-medium-gray/40 pb-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 flex-shrink-0">
+                <Ban className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Restrict / Ban User Account</h3>
+                <p className="text-xs text-red-300">Target User: <span className="font-semibold text-white">{banModal.user.username}</span> ({banModal.user.email})</p>
+              </div>
+            </div>
+
+            {/* Ban Duration Selection */}
+            <div className="mb-4">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-xsm-light-gray mb-2">Select Ban Duration</label>
+              <div className="grid grid-cols-3 gap-2">
+                {(['7d', '30d', 'permanent'] as const).map(d => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => setBanModal(prev => ({ ...prev, duration: d }))}
+                    className={`py-2 px-3 rounded-lg text-xs font-bold border transition-all ${
+                      banModal.duration === d
+                        ? 'bg-red-600/30 border-red-500 text-red-300 shadow-md shadow-red-900/30'
+                        : 'bg-xsm-black border-xsm-medium-gray/60 text-xsm-light-gray hover:border-red-400/50 hover:text-white'
+                    }`}
+                  >
+                    {d === '7d' ? '7 Days' : d === '30d' ? '30 Days' : 'Permanent'}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Ban Reason / Administrative Note */}
+            <div className="mb-5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-xsm-light-gray mb-2">Ban Reason & Administrative Note <span className="text-red-400">*</span></label>
+              <textarea
+                value={banModal.reason}
+                onChange={e => setBanModal(prev => ({ ...prev, reason: e.target.value }))}
+                placeholder="Enter detailed reason or note for restricting this account..."
+                rows={3}
+                className="w-full bg-xsm-black border border-xsm-medium-gray/80 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+                autoFocus
+              />
+              <p className="text-[11px] text-xsm-light-gray mt-1.5 leading-relaxed">
+                ℹ️ <strong className="text-white">Note:</strong> Restricted users can still post listings and contact Support/Admin, but cannot message buyers/sellers directly.
+              </p>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-xsm-medium-gray/40">
+              <button
+                type="button"
+                onClick={() => setBanModal({ open: false, user: null, duration: '7d', reason: '', submitting: false })}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-xsm-light-gray border border-xsm-medium-gray hover:bg-xsm-medium-gray/40 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitBanUser}
+                disabled={banModal.submitting}
+                className="px-5 py-2 rounded-lg text-sm font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Ban className="w-4 h-4" />
+                {banModal.submitting ? 'Banning...' : 'Confirm Ban'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Unban User Modal */}
+      {unbanModal.open && unbanModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-xsm-dark-gray border border-green-500/40 rounded-2xl shadow-2xl w-full max-w-md p-6 text-white">
+            <div className="flex items-center gap-3 mb-4 border-b border-xsm-medium-gray/40 pb-3">
+              <div className="w-10 h-10 rounded-full bg-green-500/20 border border-green-500/40 flex items-center justify-center text-green-400 flex-shrink-0">
+                <Unlock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Unban User Account</h3>
+                <p className="text-xs text-green-300">Target User: <span className="font-semibold text-white">{unbanModal.user.username}</span></p>
+              </div>
+            </div>
+
+            <p className="text-sm text-xsm-light-gray mb-6 leading-relaxed">
+              Are you sure you want to lift the restrictions on <span className="text-white font-semibold">{unbanModal.user.username}</span>?
+              This will restore full messaging and direct communication capabilities for their account.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-xsm-medium-gray/40">
+              <button
+                type="button"
+                onClick={() => setUnbanModal({ open: false, user: null, submitting: false })}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-xsm-light-gray border border-xsm-medium-gray hover:bg-xsm-medium-gray/40 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitUnbanUser}
+                disabled={unbanModal.submitting}
+                className="px-5 py-2 rounded-lg text-sm font-bold bg-green-600 hover:bg-green-500 text-white transition-colors shadow-lg disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Unlock className="w-4 h-4" />
+                {unbanModal.submitting ? 'Unbanning...' : 'Confirm Unban'}
               </button>
             </div>
           </div>

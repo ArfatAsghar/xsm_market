@@ -795,6 +795,29 @@ const Chat: React.FC = () => {
           </p>
         </div>
 
+        {/* Restricted Account Alert Banner for Banned Users */}
+        {Boolean((user as any)?.isBanned) && (
+          <div className="mb-6 bg-gradient-to-r from-red-950/90 to-slate-900 border border-red-500/50 rounded-xl p-4 text-white shadow-xl flex items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 flex-shrink-0">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-red-300 text-sm">Account Restricted</h4>
+                <p className="text-xs text-gray-300">
+                  Direct buyer/seller messaging is disabled for this account. All communications must go through <strong>Official Support & Admins</strong>.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleOpenWebsiteAgent}
+              className="px-4 py-2 bg-xsm-yellow text-black text-xs font-bold rounded-lg hover:bg-yellow-400 transition-colors flex-shrink-0"
+            >
+              Contact Support
+            </button>
+          </div>
+        )}
+
         <div className="bg-xsm-dark-gray rounded-lg overflow-hidden" style={{ height: '600px' }}>
           <div className="flex h-full">
             {/* Chat List */}
@@ -885,7 +908,7 @@ const Chat: React.FC = () => {
             {/* Chat Area */}
             <div className="flex-1 flex flex-col">
               {selectedChat ? (
-                <>
+                <React.Fragment>
                   {/* Chat Header */}
                   <div className="p-4 border-b border-xsm-medium-gray bg-xsm-black flex items-center justify-between">
                     <div className="flex items-center space-x-3">
@@ -1135,84 +1158,98 @@ const Chat: React.FC = () => {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  {/* Message Input */}
-                  <div className="p-4 border-t border-xsm-medium-gray bg-xsm-black">
-                    <div className="flex space-x-2">
-                      {/* Image Button */}
-                      <button
-                        type="button"
-                        onClick={() => imageInputRef.current?.click()}
-                        className={`p-2 text-gray-400 hover:text-xsm-yellow rounded-lg border border-xsm-yellow bg-xsm-dark-gray ${
-                          imageUploading ? 'opacity-50 cursor-not-allowed' : ''
-                        }`}
-                        title="Attach Image"
-                        disabled={imageUploading || videoUploading}
-                      >
-                        {imageUploading ? (
-                          <div className="w-5 h-5 border-2 border-xsm-yellow border-t-transparent rounded-full animate-spin"></div>
-                        ) : (
-                          <ImageIcon className="w-5 h-5" />
-                        )}
-                      </button>
-                      <input
-                        ref={imageInputRef}
-                        type="file"
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        onChange={e => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleSendImage(e.target.files[0]);
-                            e.target.value = '';
-                          }
-                        }}
-                      />
-                      {/* Video Button */}
-                      <button
-                        type="button"
-                        onClick={() => videoInputRef.current?.click()}
-                        className={`p-2 text-gray-400 hover:text-xsm-yellow rounded-lg border border-xsm-yellow bg-xsm-dark-gray ${
-                          videoUploading ? 'opacity-50 cursor-not-allowed' : ''
-                        }`}
-                        title="Attach Video"
-                        disabled={videoUploading || imageUploading}
-                      >
-                        {videoUploading ? (
-                          <div className="w-5 h-5 border-2 border-xsm-yellow border-t-transparent rounded-full animate-spin"></div>
-                        ) : (
-                          <Video className="w-5 h-5" />
-                        )}
-                      </button>
-                      <input
-                        ref={videoInputRef}
-                        type="file"
-                        accept="video/*"
-                        style={{ display: 'none' }}
-                        onChange={e => {
-                          if (e.target.files && e.target.files[0]) {
-                            handleSendVideo(e.target.files[0]);
-                            e.target.value = '';
-                          }
-                        }}
-                      />
-                      <input
-                        type="text"
-                        value={newMessage}
-                        onChange={(e) => setNewMessage(e.target.value)}
-                        onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                        placeholder="Type your message..."
-                        className="flex-1 px-4 py-2 bg-xsm-dark-gray text-white rounded-lg border border-xsm-medium-gray focus:outline-none focus:border-xsm-yellow"
-                      />
-                      <button
-                        onClick={handleSendMessage}
-                        disabled={!newMessage.trim()}
-                        className="px-4 py-2 bg-xsm-yellow text-xsm-black rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Send className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
+                  {/* Message Input or Restriction Notice */}
+                  {Boolean((user as any)?.isBanned) && !(
+                    selectedChat?.type === 'support' ||
+                    selectedChat?.participants?.some(p => (p.user as any)?.isAdmin || ['admin', 'manager', 'agent'].includes((p.user as any)?.role || ''))
+                  ) ? (
+                      <div className="p-4 bg-red-950/50 border-t border-red-500/40 text-center text-xs text-red-300 flex items-center justify-center gap-2">
+                        <Shield className="w-4 h-4 text-red-400 flex-shrink-0" />
+                        <span>Direct messaging with users is restricted on this account.</span>
+                        <button
+                          onClick={handleOpenWebsiteAgent}
+                          className="underline font-bold text-xsm-yellow hover:text-yellow-400 ml-1"
+                        >
+                          Contact Official Support
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="p-4 border-t border-xsm-medium-gray flex items-center space-x-2">
+                        {/* Image Button */}
+                        <button
+                          type="button"
+                          onClick={() => imageInputRef.current?.click()}
+                          className={`p-2 text-gray-400 hover:text-xsm-yellow rounded-lg border border-xsm-yellow bg-xsm-dark-gray ${
+                            imageUploading ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                          title="Attach Image"
+                          disabled={imageUploading || videoUploading}
+                        >
+                          {imageUploading ? (
+                            <div className="w-5 h-5 border-2 border-xsm-yellow border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <ImageIcon className="w-5 h-5" />
+                          )}
+                        </button>
+                        <input
+                          ref={imageInputRef}
+                          type="file"
+                          accept="image/*"
+                          style={{ display: 'none' }}
+                          onChange={e => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleSendImage(e.target.files[0]);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                        {/* Video Button */}
+                        <button
+                          type="button"
+                          onClick={() => videoInputRef.current?.click()}
+                          className={`p-2 text-gray-400 hover:text-xsm-yellow rounded-lg border border-xsm-yellow bg-xsm-dark-gray ${
+                            videoUploading ? 'opacity-50 cursor-not-allowed' : ''
+                          }`}
+                          title="Attach Video"
+                          disabled={videoUploading || imageUploading}
+                        >
+                          {videoUploading ? (
+                            <div className="w-5 h-5 border-2 border-xsm-yellow border-t-transparent rounded-full animate-spin"></div>
+                          ) : (
+                            <Video className="w-5 h-5" />
+                          )}
+                        </button>
+                        <input
+                          ref={videoInputRef}
+                          type="file"
+                          accept="video/*"
+                          style={{ display: 'none' }}
+                          onChange={e => {
+                            if (e.target.files && e.target.files[0]) {
+                              handleSendVideo(e.target.files[0]);
+                              e.target.value = '';
+                            }
+                          }}
+                        />
+                        <input
+                          type="text"
+                          value={newMessage}
+                          onChange={(e) => setNewMessage(e.target.value)}
+                          onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+                          placeholder="Type your message..."
+                          className="flex-1 px-4 py-2 bg-xsm-dark-gray text-white rounded-lg border border-xsm-medium-gray focus:outline-none focus:border-xsm-yellow"
+                        />
+                        <button
+                          onClick={handleSendMessage}
+                          disabled={!newMessage.trim()}
+                          className="px-4 py-2 bg-xsm-yellow text-xsm-black rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <Send className="w-5 h-5" />
+                        </button>
+                      </div>
+                    )}
+                  </React.Fragment>
+                ) : (
                 <div className="flex-1 flex items-center justify-center text-gray-400">
                   <div className="text-center">
                     <MessageCircle className="w-16 h-16 mx-auto mb-4 opacity-50" />

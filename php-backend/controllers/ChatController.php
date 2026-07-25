@@ -173,6 +173,31 @@ class ChatController {
                 return;
             }
 
+            // Ban check: Banned users can ONLY start chats with Admin/Support/Manager
+            if (!empty($user['isBanned'])) {
+                $targetStmt = $this->db->prepare("SELECT id, email, isAdmin, role FROM users WHERE id = ?");
+                $targetStmt->execute([$participantId]);
+                $targetUser = $targetStmt->fetch(PDO::FETCH_ASSOC);
+
+                $adminEmail = getenv('ADMIN_EMAIL');
+                $isTargetStaff = false;
+                if ($targetUser) {
+                    $isTargetStaff = (!empty($adminEmail) && strtolower($targetUser['email']) === strtolower($adminEmail))
+                                  || !empty($targetUser['isAdmin'])
+                                  || in_array($targetUser['role'] ?? '', ['admin', 'manager', 'agent']);
+                }
+
+                if (!$isTargetStaff) {
+                    http_response_code(403);
+                    echo json_encode([
+                        'message' => 'Your account is restricted. Banned users can only contact Support/Admin.',
+                        'banned' => true,
+                        'restricted' => true
+                    ]);
+                    return;
+                }
+            }
+
             // Requirement 17: reuse any existing active direct/ad-inquiry chat between the same two users.
             if ($type === 'direct') {
                 $stmt = $this->db->prepare("
@@ -422,6 +447,40 @@ class ChatController {
                 if (!$stmt->fetch()) {
                     http_response_code(403);
                     echo json_encode(['message' => 'Access denied']);
+                    return;
+                }
+            }
+
+            // Ban check: Banned users can ONLY send messages to Support/Admin
+            if (!empty($user['isBanned'])) {
+                $staffStmt = $this->db->prepare("
+                    SELECT u.id, u.email, u.isAdmin, u.role
+                    FROM chat_participants cp
+                    INNER JOIN users u ON cp.userId = u.id
+                    WHERE cp.chatId = ? AND cp.isActive = 1
+                ");
+                $staffStmt->execute([$chatId]);
+                $allParticipants = $staffStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $hasStaffParticipant = false;
+                foreach ($allParticipants as $p) {
+                    if ((int)$p['id'] === (int)$senderId) continue;
+                    $isStaffP = (!empty($adminEmail) && strtolower($p['email']) === strtolower($adminEmail))
+                             || !empty($p['isAdmin'])
+                             || in_array($p['role'] ?? '', ['admin', 'manager', 'agent']);
+                    if ($isStaffP) {
+                        $hasStaffParticipant = true;
+                        break;
+                    }
+                }
+
+                if (!$hasStaffParticipant) {
+                    http_response_code(403);
+                    echo json_encode([
+                        'message' => 'Your account is restricted. Banned users can only message Support/Admin.',
+                        'banned' => true,
+                        'restricted' => true
+                    ]);
                     return;
                 }
             }

@@ -38,20 +38,9 @@ class AuthMiddleware {
             }
         }
 
-        // Still banned
-        if ($hard) {
-            $reason = $user['banReason'] ? ' Reason: ' . $user['banReason'] : '';
-            $until  = !empty($user['banExpires'])
-                ? ' Your ban expires on ' . date('Y-m-d H:i', strtotime($user['banExpires'])) . ' UTC.'
-                : ' This ban is permanent.';
-            Response::error('Your account has been suspended.' . $reason . $until, 403, [
-                'banned'     => true,
-                'banReason'  => $user['banReason'],
-                'banExpires' => $user['banExpires']
-            ]);
-        }
-
-        return null;
+        // Banned user remains authenticated so they can create listings and access support chat.
+        // Specific endpoints (e.g. direct messaging) enforce ban restrictions individually.
+        return $user;
     }
 
     public static function protect() {

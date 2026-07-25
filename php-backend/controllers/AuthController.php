@@ -368,10 +368,8 @@ class AuthController {
                 return;
             }
             
-            // Check ban status before issuing tokens
+            // Check ban status (auto-unban if expired)
             if ($user['isBanned']) {
-                // Check if ban has expired for time-limited bans
-                $stillBanned = true;
                 if (!empty($user['banExpires'])) {
                     $expires = strtotime($user['banExpires']);
                     if ($expires > 0 && $expires <= time()) {
@@ -380,21 +378,8 @@ class AuthController {
                             "UPDATE users SET isBanned=0, banReason=NULL, bannedAt=NULL, bannedBy=NULL, banExpires=NULL, unbannedAt=NOW() WHERE id=?"
                         );
                         $stmt->execute([$user['id']]);
-                        $stillBanned = false;
+                        $user['isBanned'] = 0;
                     }
-                }
-
-                if ($stillBanned) {
-                    $reason = $user['banReason'] ? ' Reason: ' . $user['banReason'] : '';
-                    $until  = !empty($user['banExpires'])
-                        ? ' Your ban expires on ' . date('Y-m-d H:i', strtotime($user['banExpires'])) . ' UTC.'
-                        : ' This ban is permanent.';
-                    Response::error('Your account has been suspended.' . $reason . $until, 403, [
-                        'banned'     => true,
-                        'banReason'  => $user['banReason'],
-                        'banExpires' => $user['banExpires']
-                    ]);
-                    return;
                 }
             }
 

@@ -342,57 +342,74 @@ const AdList: React.FC<AdListProps> = ({
     <div className="space-y-6">
       {/* Ad Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {displayAds.map((ad) => (
-          <div 
-            key={ad.id} 
-            className="xsm-card group transition-all duration-300 cursor-pointer h-full flex flex-col"
-            onClick={() => onShowMore(ad)}
-          >
-            {/* Thumbnail */}
+        {displayAds.map((ad) => {
+          const isVipListing = Boolean(
+            ad.seller?.isVip ||
+            (ad as any).seller_isVip ||
+            (ad as any).sellerIsVip ||
+            (ad as any).isVip ||
+            (ad.seller?.vipUntil && new Date(ad.seller.vipUntil) > new Date()) ||
+            ((ad as any).seller_vipUntil && new Date((ad as any).seller_vipUntil) > new Date())
+          );
+
+          return (
             <div 
-              className="relative h-48 bg-gradient-to-br from-xsm-medium-gray to-xsm-dark-gray rounded-lg mb-4 overflow-hidden group/image cursor-pointer"
-              onClick={(e) => navigateToDetail(ad, e)}
+              key={ad.id} 
+              className={`xsm-card group transition-all duration-300 cursor-pointer h-full flex flex-col relative overflow-hidden ${
+                isVipListing
+                  ? 'border-2 border-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_28px_rgba(245,158,11,0.45)] bg-gradient-to-b from-amber-950/20 via-xsm-dark-gray to-xsm-dark-gray'
+                  : ''
+              }`}
+              onClick={() => onShowMore(ad)}
             >
-              <div className="w-full h-full overflow-hidden">
-                <img 
-  src={getListingImage(ad)}
-  alt={ad.title}
-  className="w-full h-full object-contain bg-black transition-all duration-500 ease-in-out p-4"
-  style={{ objectPosition: 'center' }}
-  onError={(e) => {
-    const target = e.target as HTMLImageElement;
-    target.onerror = null;
-    target.src = '/images/logo.png';
-  }}
-/>
-              </div>
-              
-              {/* Overlay on hover */}
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity duration-300"></div>
-              
-              {/* Platform Badge */}
-              <div className="absolute top-2 left-2">
-                {getPlatformIcon(ad.platform)}
-              </div>
+              {/* Thumbnail */}
+              <div 
+                className="relative h-48 bg-gradient-to-br from-xsm-medium-gray to-xsm-dark-gray rounded-lg mb-4 overflow-hidden group/image cursor-pointer"
+                onClick={(e) => navigateToDetail(ad, e)}
+              >
+                <div className="w-full h-full overflow-hidden">
+                  <img 
+                    src={getListingImage(ad)}
+                    alt={ad.title}
+                    className="w-full h-full object-contain bg-black transition-all duration-500 ease-in-out p-4"
+                    style={{ objectPosition: 'center' }}
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null;
+                      target.src = '/images/logo.png';
+                    }}
+                  />
+                </div>
+                
+                {/* Overlay on hover */}
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity duration-300"></div>
+                
+                {/* Platform Badge */}
+                <div className="absolute top-2 left-2">
+                  {getPlatformIcon(ad.platform)}
+                </div>
 
-              {/* Premium/Verified/VIP Badges */}
-              <div className="absolute top-2 right-2 flex space-x-1">
-                {Boolean(ad.seller?.isVip || (ad as any).seller_isVip || (ad as any).sellerIsVip || (ad as any).isVip) && (
-                  <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black px-2 py-0.5 rounded text-[10px] font-black shadow-lg shadow-yellow-900/40">
-                    <Crown className="w-2.5 h-2.5" /> VIP
-                  </span>
-                )}
-                {ad.verified && (
-                  <span className="bg-blue-500 text-white px-2 py-1 rounded text-xs font-bold">
-                    ✓ VERIFIED
-                  </span>
-                )}
-                {ad.premium && (
-                  <span className="xsm-badge-premium">PREMIUM</span>
-                )}
-              </div>
+                {/* Premium/Verified/VIP Badges */}
+                <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+                  {isVipListing && (
+                    <span className="flex items-center gap-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black px-2.5 py-1 rounded-md text-[10px] font-black uppercase shadow-lg shadow-amber-500/40 border border-yellow-200/70 tracking-wider animate-pulse-subtle">
+                      <Crown className="w-3 h-3 fill-black text-black" />
+                      <span>VIP LISTING</span>
+                    </span>
+                  )}
+                  <div className="flex space-x-1">
+                    {ad.verified && (
+                      <span className="bg-blue-500 text-white px-2 py-0.5 rounded text-[10px] font-bold">
+                        ✓ VERIFIED
+                      </span>
+                    )}
+                    {ad.premium && (
+                      <span className="xsm-badge-premium">PREMIUM</span>
+                    )}
+                  </div>
+                </div>
 
-            </div>
+              </div>
 
             {/* Content */}
             <div className="space-y-3 flex flex-col flex-1">
@@ -476,7 +493,8 @@ const AdList: React.FC<AdListProps> = ({
               </div>
             </div>
           </div>
-        ))}
+        );
+      })}
       </div>
 
       {/* Deal Creation Modal */}

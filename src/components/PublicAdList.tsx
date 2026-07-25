@@ -190,47 +190,65 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {ads.map((ad) => (
-        <div
-          key={ad.id}
-          className="bg-xsm-black/50 rounded-lg p-3 border border-xsm-medium-gray/20 shadow-sm flex flex-col items-center hover:border-xsm-yellow/30 transition-colors w-full max-w-[240px] mx-auto"
-        >
-          {/* Profile Picture Circle with Platform Icon — clicks to Product Details */}
-          <div className="relative mb-2 flex items-center">
-            {/* Platform Icon on Left Side */}
-            <div className="absolute -left-4 -top-0">
-              {getPlatformIconSmall(ad.platform)}
+      {ads.map((ad) => {
+        const isVipListing = Boolean(
+          (ad as any).isVip ||
+          (ad as any).seller_isVip ||
+          (ad as any).sellerIsVip ||
+          (ad as any).seller?.isVip ||
+          ((ad as any).seller_vipUntil && new Date((ad as any).seller_vipUntil) > new Date())
+        );
+
+        return (
+          <div
+            key={ad.id}
+            className={`rounded-lg p-3 shadow-sm flex flex-col items-center transition-all duration-300 w-full max-w-[240px] mx-auto relative overflow-hidden ${
+              isVipListing
+                ? 'bg-gradient-to-b from-amber-950/30 via-xsm-black/70 to-xsm-black/70 border-2 border-amber-500/80 shadow-[0_0_18px_rgba(245,158,11,0.25)] hover:shadow-[0_0_25px_rgba(245,158,11,0.45)]'
+                : 'bg-xsm-black/50 border border-xsm-medium-gray/20 hover:border-xsm-yellow/30'
+            }`}
+          >
+            {/* Profile Picture Circle with Platform Icon — clicks to Product Details */}
+            <div className="relative mb-2 flex items-center">
+              {/* Platform Icon on Left Side */}
+              <div className="absolute -left-4 -top-0">
+                {getPlatformIconSmall(ad.platform)}
+              </div>
+
+              <div
+                className={`w-20 h-20 rounded-full overflow-hidden border-2 cursor-pointer transition-all ${
+                  isVipListing
+                    ? 'border-amber-400 ring-2 ring-amber-500/50'
+                    : 'border-xsm-medium-gray/30 hover:ring-2 hover:ring-xsm-yellow/60'
+                }`}
+                onClick={() => navigate(`/ad/${generateAdSlug(ad.id, ad.title)}`)}
+                title="View product details"
+              >
+                <img
+                  src={getImageUrl(ad.thumbnail && String(ad.thumbnail).trim() !== '0' ? ad.thumbnail : null) || '/default-avatar.png'}
+                  alt="Profile"
+                  className="w-full h-full object-cover"
+                />
+              </div>
             </div>
 
-            <div
-              className="w-20 h-20 rounded-full overflow-hidden border-2 border-xsm-medium-gray/30 cursor-pointer hover:ring-2 hover:ring-xsm-yellow/60 transition-all"
+            {/* Channel Name — clicks to Product Details */}
+            <h4
+              className="text-white font-semibold text-xs text-center mb-0.5 truncate w-full cursor-pointer hover:text-xsm-yellow hover:underline transition-colors"
               onClick={() => navigate(`/ad/${generateAdSlug(ad.id, ad.title)}`)}
               title="View product details"
             >
-              <img
-                src={getImageUrl(ad.thumbnail && String(ad.thumbnail).trim() !== '0' ? ad.thumbnail : null) || '/default-avatar.png'}
-                alt="Profile"
-                className="w-full h-full object-cover"
-              />
-            </div>
-          </div>
+              {ad.title}
+            </h4>
 
-          {/* Channel Name — clicks to Product Details */}
-          <h4
-            className="text-white font-semibold text-xs text-center mb-0.5 truncate w-full cursor-pointer hover:text-xsm-yellow hover:underline transition-colors"
-            onClick={() => navigate(`/ad/${generateAdSlug(ad.id, ad.title)}`)}
-            title="View product details"
-          >
-            {ad.title}
-          </h4>
-
-          {Boolean((ad as any).isVip || (ad as any).seller_isVip || (ad as any).sellerIsVip || (ad as any).seller?.isVip) && (
-            <div className="flex justify-center mb-0.5">
-              <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[9px] px-2 py-0.5 rounded-full font-black shadow shadow-yellow-900/40">
-                <Crown className="w-2.5 h-2.5" /> VIP
-              </span>
-            </div>
-          )}
+            {isVipListing && (
+              <div className="flex justify-center mb-1">
+                <span className="flex items-center gap-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black text-[9px] px-2 py-0.5 rounded-md font-black shadow shadow-amber-500/40 border border-yellow-200/60 uppercase tracking-wider">
+                  <Crown className="w-2.5 h-2.5 fill-black text-black" />
+                  <span>VIP LISTING</span>
+                </span>
+              </div>
+            )}
 
           {/* Subscribers */}
           <div className="text-center mb-0.5">
@@ -267,9 +285,10 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
               Buy
             </button>
           </div>
-        </div>
-      ))}
-    </div>
+          </div>
+        );
+      })}
+      </div>
 
       {/* Deal Creation Modal */}
       {showDealModal && selectedAd && (

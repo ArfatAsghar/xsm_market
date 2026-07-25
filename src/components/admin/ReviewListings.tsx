@@ -374,37 +374,63 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
           <div className="text-center text-red-400 py-8">{error}</div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredListings.map((listing) => (
-              <div key={listing.id} className={`bg-xsm-dark-gray rounded-xl border overflow-hidden ${listing.isBanned ? 'border-red-800/60' : 'border-xsm-medium-gray'}`}>
-                {/* Listing Image */}
-                <div className="aspect-video relative bg-xsm-medium-gray">
-                  <img
-                    src={getCardImage(listing)}
-                    alt={listing.title}
-                    className="w-full h-full object-cover"
-                    onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
-                  />
-                  {/* Banned badge overlay */}
-                  {listing.isBanned && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <span className="bg-red-600 text-white text-sm font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5">
-                        <Ban className="w-4 h-4" /> BANNED
-                      </span>
-                    </div>
-                  )}
-                  {listing.reportCount > 0 && !listing.isBanned && (
-                    <div className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
-                      {listing.reportCount} reports
-                    </div>
-                  )}
-                </div>
+            {filteredListings.map((listing) => {
+              const isVipListing = Boolean((listing as any).isVip || (listing as any).sellerIsVip || (listing as any).seller_isVip);
 
-                {/* Listing Details */}
-                <div className="p-4">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="font-medium text-white mb-1">{listing.title}</h3>
-                      <p className="text-sm text-xsm-light-gray">by {listing.seller}</p>
+              return (
+                <div 
+                  key={listing.id} 
+                  className={`bg-xsm-dark-gray rounded-xl border overflow-hidden relative transition-all duration-300 ${
+                    listing.isBanned 
+                      ? 'border-red-800/60' 
+                      : isVipListing
+                      ? 'border-2 border-amber-500/80 shadow-[0_0_18px_rgba(245,158,11,0.25)]'
+                      : 'border-xsm-medium-gray'
+                  }`}
+                >
+                  {/* Listing Image */}
+                  <div className="aspect-video relative bg-xsm-medium-gray">
+                    <img
+                      src={getCardImage(listing)}
+                      alt={listing.title}
+                      className="w-full h-full object-cover"
+                      onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
+                    />
+                    
+                    {/* VIP Badge */}
+                    {isVipListing && (
+                      <div className="absolute top-2 left-2">
+                        <span className="flex items-center gap-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase shadow-lg shadow-amber-500/40 border border-yellow-200/60 tracking-wider">
+                          <Crown className="w-3 h-3 fill-black text-black" />
+                          <span>VIP LISTING</span>
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Banned badge overlay */}
+                    {listing.isBanned && (
+                      <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                        <span className="bg-red-600 text-white text-sm font-bold px-4 py-1.5 rounded-full flex items-center gap-1.5">
+                          <Ban className="w-4 h-4" /> BANNED
+                        </span>
+                      </div>
+                    )}
+                    {listing.reportCount > 0 && !listing.isBanned && (
+                      <div className="absolute top-2 right-2 bg-red-500 text-white text-xs px-2 py-1 rounded-full">
+                        {listing.reportCount} reports
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Listing Details */}
+                  <div className="p-4">
+                    <div className="flex justify-between items-start mb-3">
+                      <div>
+                        <h3 className="font-medium text-white mb-1 flex items-center gap-1.5">
+                          {listing.title}
+                          {isVipListing && <Crown className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400 flex-shrink-0" />}
+                        </h3>
+                        <p className="text-sm text-xsm-light-gray">by {listing.seller}</p>
                       {listing.isBanned && listing.banReason && (
                         <p className="text-xs text-red-400 mt-1 italic truncate max-w-[180px]" title={listing.banReason}>
                           Ban reason: {listing.banReason}
@@ -485,7 +511,8 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                   </div>
                 </div>
               </div>
-            ))}
+            );
+          })}
           </div>
         )}
       </div>

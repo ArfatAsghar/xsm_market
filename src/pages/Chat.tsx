@@ -356,12 +356,15 @@ const Chat: React.FC = () => {
         }
       });
       const data = await response.json();
-      setMessages(data);
-      
-      // Set the last message ID for polling
-      if (data.length > 0) {
-        const latestMessage = data[data.length - 1];
-        setLastMessageId(latestMessage.id);
+      if (response.ok && Array.isArray(data)) {
+        setMessages(data);
+        if (data.length > 0) {
+          const latestMessage = data[data.length - 1];
+          setLastMessageId(latestMessage.id);
+        }
+      } else {
+        console.warn('Failed to load chat messages:', data);
+        setMessages([]);
       }
       
       // Mark messages as read
@@ -373,6 +376,7 @@ const Chat: React.FC = () => {
       });
     } catch (error) {
       console.error('Error fetching messages:', error);
+      setMessages([]);
     }
   };
 

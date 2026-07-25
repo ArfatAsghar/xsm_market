@@ -73,9 +73,9 @@ class JWT {
         // Set expiration based on type
         $payload['iat'] = time();
         if ($type === 'refresh') {
-            $payload['exp'] = time() + (7 * 24 * 60 * 60); // 7 days
+            $payload['exp'] = time() + (30 * 24 * 60 * 60); // 30 days
         } else {
-            $payload['exp'] = time() + (60 * 60); // 1 hour
+            $payload['exp'] = time() + (7 * 24 * 60 * 60); // 7 days
         }
         
         $payload = json_encode($payload);

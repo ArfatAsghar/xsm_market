@@ -158,12 +158,12 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
       });
       if (response.ok) {
         const messages = await response.json();
-        const formattedMessages = messages.map((m: any) => ({
+        const formattedMessages = Array.isArray(messages) ? messages.map((m: any) => ({
           id: String(m.id),
           content: m.content,
-          sender: m.sender?.username || 'System',
+          sender: m.sender?.displayName || m.sender?.username || 'System',
           timestamp: m.createdAt
-        }));
+        })) : [];
         setSelectedChat(prev => prev && prev.id === chat.id ? {
           ...prev,
           messages: formattedMessages

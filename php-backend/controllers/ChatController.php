@@ -242,7 +242,7 @@ class ChatController {
             $offset = ($page - 1) * $limit;
 
             $adminEmail = getenv('ADMIN_EMAIL');
-            $isAdmin = ($adminEmail && strtolower($user['email']) === strtolower($adminEmail)) || !empty($user['isAdmin']);
+            $isAdmin = ($adminEmail && strtolower($user['email']) === strtolower($adminEmail)) || !empty($user['isAdmin']) || in_array($user['role'] ?? '', ['admin', 'manager', 'viewer']);
 
             if (!$isAdmin) {
                 $stmt = $this->db->prepare("
@@ -409,16 +409,21 @@ class ChatController {
                 }
             }
 
-            $stmt = $this->db->prepare("
-                SELECT id FROM chat_participants
-                WHERE chatId = ? AND userId = ? AND isActive = 1
-            ");
-            $stmt->execute([$chatId, $senderId]);
+            $adminEmail = getenv('ADMIN_EMAIL');
+            $isStaff = ($adminEmail && strtolower($user['email']) === strtolower($adminEmail)) || !empty($user['isAdmin']) || in_array($user['role'] ?? '', ['admin', 'manager', 'viewer']);
 
-            if (!$stmt->fetch()) {
-                http_response_code(403);
-                echo json_encode(['message' => 'Access denied']);
-                return;
+            if (!$isStaff) {
+                $stmt = $this->db->prepare("
+                    SELECT id FROM chat_participants
+                    WHERE chatId = ? AND userId = ? AND isActive = 1
+                ");
+                $stmt->execute([$chatId, $senderId]);
+
+                if (!$stmt->fetch()) {
+                    http_response_code(403);
+                    echo json_encode(['message' => 'Access denied']);
+                    return;
+                }
             }
 
             $stmt = $this->db->prepare("

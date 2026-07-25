@@ -406,7 +406,7 @@ class AuthController {
             Response::success([
                 'token' => $tokens['accessToken'],
                 'refreshToken' => $tokens['refreshToken'],
-                'expiresIn' => 3600, // 1 hour in seconds
+                'expiresIn' => 604800, // 7 days in seconds
                 'user' => [
                     'id' => (int)$user['id'],
                     'username' => $user['username'],
@@ -494,7 +494,7 @@ class AuthController {
                 'message' => 'Email verified successfully! Welcome to XSM Market',
                 'token' => $tokens['accessToken'],
                 'refreshToken' => $tokens['refreshToken'],
-                'expiresIn' => 3600, // 1 hour in seconds
+                'expiresIn' => 604800, // 7 days in seconds
                 'user' => [
                     'id' => (int)$user['id'],
                     'username' => $user['username'],
@@ -662,7 +662,7 @@ class AuthController {
             Response::success([
                 'token' => $tokens['accessToken'],
                 'refreshToken' => $tokens['refreshToken'],
-                'expiresIn' => 3600,
+                'expiresIn' => 604800, // 7 days in seconds
                 'user' => [
                     'id' => (int)$user['id'],
                     'username' => $user['username'],
@@ -724,7 +724,7 @@ class AuthController {
             Response::success([
                 'token' => $tokens['accessToken'],
                 'refreshToken' => $tokens['refreshToken'],
-                'expiresIn' => 3600 // 1 hour in seconds
+                'expiresIn' => 604800 // 7 days in seconds
             ]);
             
         } catch (Exception $e) {

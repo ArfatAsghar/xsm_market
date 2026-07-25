@@ -976,6 +976,29 @@ class AdminController {
                 GROUP BY COALESCE(transaction_fee_payment_method, 'Crypto / Standard')
             ")->fetchAll(PDO::FETCH_ASSOC);
 
+            // 4. Detailed Financial Deals List (for Financial Records table)
+            $recentFinancialDeals = $pdo->query("
+                SELECT 
+                    d.id, d.transaction_id, d.channel_title, d.channel_price, d.escrow_fee,
+                    d.deal_status, d.transaction_fee_paid, d.transaction_fee_payment_method,
+                    d.created_at,
+                    b.username as buyer_name, s.username as seller_name
+                FROM deals d
+                LEFT JOIN users b ON d.buyer_id = b.id
+                LEFT JOIN users s ON d.seller_id = s.id
+                ORDER BY d.created_at DESC
+                LIMIT 50
+            ")->fetchAll(PDO::FETCH_ASSOC);
+
+            // 5. VIP Members / Purchases list
+            $vipMembersList = $pdo->query("
+                SELECT id, username, email, vipUntil, createdAt
+                FROM users
+                WHERE vipUntil IS NOT NULL
+                ORDER BY vipUntil DESC
+                LIMIT 50
+            ")->fetchAll(PDO::FETCH_ASSOC);
+
             Response::json([
                 'success' => true,
                 'financials' => [
@@ -992,7 +1015,9 @@ class AdminController {
                         'cryptoTransactionsCount' => (int)($cryptoStats['totalCryptoTransactions'] ?? 0),
                         'cryptoConfirmedVolume' => (float)($cryptoStats['cryptoConfirmedVolume'] ?? 0),
                         'paymentMethodsBreakdown' => $paymentMethodsBreakdown
-                    ]
+                    ],
+                    'financialDeals' => $recentFinancialDeals,
+                    'vipMembers' => $vipMembersList
                 ]
             ]);
 

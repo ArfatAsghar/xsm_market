@@ -5,6 +5,7 @@ import ManageUsers from '@/components/admin/ManageUsers';
 import ReviewListings from '@/components/admin/ReviewListings';
 import ReviewChats from '@/components/admin/ReviewChats';
 import ReviewDeals from '@/components/admin/ReviewDeals';
+import FinancialRecords from '@/components/admin/FinancialRecords';
 import { getDashboardStats, getFinancialStats } from '@/services/admin';
 import { useAuth } from '@/context/useAuth';
 
@@ -131,6 +132,8 @@ const AdminDashboard: React.FC = () => {
         return <ReviewChats initialChatId={selectedChatId} />;
       case 'review-deals':
         return <ReviewDeals />;
+      case 'financial-records':
+        return <FinancialRecords />;
       default:
         return (
           <>
@@ -298,20 +301,25 @@ const AdminDashboard: React.FC = () => {
               </div>
             )}
 
-            {/* Quick Actions */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Quick Actions Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               {[
                 { name: 'Manage Users', view: 'manage-users' },
                 { name: 'Review Listings', view: 'review-listings' },
                 { name: 'Review Chats', view: 'review-chats', icon: MessageSquare, badge: supportRequestCount },
-                { name: 'Review Deals', view: 'review-deals', icon: FileText }
-              ].map((action, index) => (
+                { name: 'Review Deals', view: 'review-deals', icon: FileText },
+                ...(isCurrentUserAdmin ? [{ name: 'Financial Records', view: 'financial-records', icon: DollarSign, isSpecial: true }] : [])
+              ].map((action: any, index) => (
                 <button
                   key={index}
                   onClick={() => setActiveView(action.view)}
-                  className="p-4 bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg hover:bg-xsm-medium-gray transition-colors text-left flex items-center gap-2 relative"
+                  className={`p-4 rounded-lg transition-colors text-left flex items-center gap-2 relative border ${
+                    action.isSpecial
+                      ? 'bg-gradient-to-r from-xsm-dark-gray to-xsm-medium-gray/60 border-xsm-yellow/50 hover:border-xsm-yellow text-xsm-yellow font-bold shadow-lg'
+                      : 'bg-xsm-dark-gray border-xsm-medium-gray hover:bg-xsm-medium-gray text-white'
+                  }`}
                 >
-                  {action.icon && <action.icon className="h-5 w-5 text-xsm-yellow" />}
+                  {action.icon && <action.icon className={`h-5 w-5 ${action.isSpecial ? 'text-xsm-yellow font-bold' : 'text-xsm-yellow'}`} />}
                   <span>{action.name}</span>
                   {action.badge ? (
                     <span className="ml-auto flex items-center gap-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">

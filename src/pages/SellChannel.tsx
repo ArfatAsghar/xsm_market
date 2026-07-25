@@ -353,12 +353,26 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     }));
   };
 
-  // Auto-extract when a valid URL is detected (debounced 1.5s after typing stops)
+  // Helper to verify YouTube URL
+  const isYouTubeUrl = (url: string): boolean => {
+    const clean = url.trim().toLowerCase();
+    return clean.includes('youtube.com') || clean.includes('youtu.be');
+  };
+
+  // Auto-extract when a valid YouTube URL is detected (debounced 1.5s after typing stops)
   useEffect(() => {
     const url = formData.channelUrl.trim();
     if (!url) return;
-    const isSocialUrl = /youtube\.com|youtu\.be|instagram\.com|tiktok\.com|twitter\.com|x\.com|facebook\.com/.test(url);
-    if (!isSocialUrl) return;
+    if (!isYouTubeUrl(url)) {
+      if (/tiktok\.com|instagram\.com|facebook\.com|fb\.com|twitter\.com|x\.com/.test(url.toLowerCase())) {
+        toast({
+          variant: "destructive",
+          title: "Invalid URL",
+          description: "Invalid URL. Currently, only YouTube URLs are supported.",
+        });
+      }
+      return;
+    }
 
     const timer = setTimeout(async () => {
       if (isExtracting) return;
@@ -371,18 +385,17 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         setFormData(prev => ({
           ...prev,
           title: profileData.title || prev.title,
-          platform: profileData.platform || detectPlatform(url) || prev.platform,
+          platform: 'youtube',
           subscribers: subCount ? String(subCount) : prev.subscribers,
           profilePicture: profileData.profilePicture || prev.profilePicture
         }));
         if (profileData.title) {
           toast({
-            title: '✅ Channel Info Fetched',
+            title: '✅ YouTube Channel Info Fetched',
             description: `${profileData.title}${(profileData.followers || profileData.subscribers) ? ' • ' + formatFollowerCount(profileData.followers || profileData.subscribers) + ' subscribers' : ''}`,
           });
         }
       } catch (err) {
-        // Silently fail on auto-extract — user can still click manually
         console.warn('Auto-extract failed:', err);
       } finally {
         setIsExtracting(false);
@@ -394,38 +407,47 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
   // Manual extract button handler
   const handleExtractProfile = async () => {
-    if (!formData.channelUrl.trim()) {
+    const url = formData.channelUrl.trim();
+    if (!url) {
       toast({
         variant: "destructive",
         title: "Missing URL",
-        description: "Please enter a social media URL first",
+        description: "Please enter a YouTube URL first",
+      });
+      return;
+    }
+
+    if (!isYouTubeUrl(url)) {
+      toast({
+        variant: "destructive",
+        title: "Invalid URL",
+        description: "Invalid URL. Currently, only YouTube URLs are supported.",
       });
       return;
     }
 
     setIsExtracting(true);
     try {
-      const result = await extractProfileData(formData.channelUrl);
+      const result = await extractProfileData(url);
       const profileData = result.data;
       
       setExtractedData(profileData);
       
-      // Auto-fill the form with extracted data
       const subCount = profileData.followers || profileData.subscribers || 0;
       setFormData(prev => ({
         ...prev,
         title: profileData.title || prev.title,
-        platform: profileData.platform || detectPlatform(formData.channelUrl) || prev.platform,
+        platform: 'youtube',
         subscribers: subCount ? String(subCount) : prev.subscribers,
         profilePicture: profileData.profilePicture || prev.profilePicture
       }));
 
       toast({
         title: "Profile Data Extracted Successfully! ✅",
-        description: `Title: ${profileData.title}\nPlatform: ${profileData.platform}\nFollowers: ${formatFollowerCount(profileData.followers || profileData.subscribers || 0)}`,
+        description: `Title: ${profileData.title}\nPlatform: YouTube\nSubscribers: ${formatFollowerCount(profileData.followers || profileData.subscribers || 0)}`,
       });
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Profile extraction error:', error);
       toast({
         variant: "destructive",
@@ -441,6 +463,17 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     setIsSubmitting(true);
     
     try {
+      // Validation: YouTube URL check
+      if (!isYouTubeUrl(formData.channelUrl)) {
+        toast({
+          variant: "destructive",
+          title: "Invalid URL",
+          description: "Invalid URL. Currently, only YouTube URLs are supported.",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       // Validation: Minimum price $5
       const price = parseFloat(formData.price);
       if (price < 5) {
@@ -465,17 +498,8 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         return;
       }
 
-      // Auto-detect platform from URL
-      let platform = 'youtube'; // default
-      if (formData.channelUrl.includes('facebook.com') || formData.channelUrl.includes('fb.com')) {
-        platform = 'facebook';
-      } else if (formData.channelUrl.includes('instagram.com')) {
-        platform = 'instagram';
-      } else if (formData.channelUrl.includes('twitter.com') || formData.channelUrl.includes('x.com')) {
-        platform = 'twitter';
-      } else if (formData.channelUrl.includes('tiktok.com')) {
-        platform = 'tiktok';
-      }
+      // Platform is strictly youtube
+      let platform = 'youtube';
 
       // Upload new screenshots if any files are selected
       // Upload new screenshots if any files are selected.
@@ -722,11 +746,43 @@ if (files.length > 0) {
               </div>
             )}
 
+            {/* Social Media Availability Indicator */}
+            <div className="p-4 bg-xsm-black/70 border border-xsm-medium-gray/40 rounded-xl mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="text-xs font-bold text-xsm-yellow uppercase tracking-wider">
+                  Social Media Platform Availability
+                </h4>
+                <span className="text-[11px] text-xsm-light-gray">Currently supporting YouTube</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 text-xs">
+                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2.5 py-1.5 rounded-lg font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                  <span>YouTube — Available</span>
+                </div>
+                <div className="flex items-center gap-2 bg-xsm-dark-gray text-gray-400 border border-gray-700/40 px-2.5 py-1.5 rounded-lg font-medium opacity-75">
+                  <span className="w-2 h-2 rounded-full bg-amber-500/60"></span>
+                  <span>Instagram — Coming Soon</span>
+                </div>
+                <div className="flex items-center gap-2 bg-xsm-dark-gray text-gray-400 border border-gray-700/40 px-2.5 py-1.5 rounded-lg font-medium opacity-75">
+                  <span className="w-2 h-2 rounded-full bg-amber-500/60"></span>
+                  <span>TikTok — Coming Soon</span>
+                </div>
+                <div className="flex items-center gap-2 bg-xsm-dark-gray text-gray-400 border border-gray-700/40 px-2.5 py-1.5 rounded-lg font-medium opacity-75">
+                  <span className="w-2 h-2 rounded-full bg-amber-500/60"></span>
+                  <span>Facebook — Coming Soon</span>
+                </div>
+                <div className="flex items-center gap-2 bg-xsm-dark-gray text-gray-400 border border-gray-700/40 px-2.5 py-1.5 rounded-lg font-medium opacity-75">
+                  <span className="w-2 h-2 rounded-full bg-amber-500/60"></span>
+                  <span>Twitter/X — Coming Soon</span>
+                </div>
+              </div>
+            </div>
+
             {/* URL Input with Auto-Extract */}
             <div>
               <label className="block text-white font-medium mb-2">
-                Social Media URL
-                <span className="text-sm text-xsm-light-gray ml-2">(Instagram, YouTube, TikTok, Twitter, Facebook)</span>
+                YouTube Channel URL
+                <span className="text-sm text-xsm-yellow ml-2">(Only YouTube URLs supported)</span>
               </label>
               <div className="flex gap-3">
                 <input
@@ -735,7 +791,7 @@ if (files.length > 0) {
                   value={formData.channelUrl}
                   onChange={handleInputChange}
                   className="xsm-input flex-1"
-                  placeholder="Paste your Instagram, YouTube, TikTok, Twitter, or Facebook URL here"
+                  placeholder="Paste your YouTube channel URL (e.g., https://www.youtube.com/@channel)"
                 />
                 <button
                   type="button"

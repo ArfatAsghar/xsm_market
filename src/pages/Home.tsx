@@ -257,28 +257,28 @@ const Home: React.FC<HomeProps> = () => {
                 <div className="flex items-center space-x-3">
                   {!showSearchBar ? (
                     <button 
-                      className="h-12 w-12 flex items-center justify-center bg-xsm-yellow text-black rounded-md shadow hover:bg-yellow-500 transition-colors"
+                      className="w-11 h-11 p-2.5 rounded-xl bg-gradient-to-r from-yellow-400 via-xsm-yellow to-amber-500 text-black shadow-md hover:brightness-110 border border-yellow-300/40 flex items-center justify-center transition-all shrink-0 cursor-pointer"
                       onClick={() => setShowSearchBar(true)}
                       title="Show Search"
                     >
-                      <Search className="w-6 h-6" />
+                      <Search className="w-5 h-5 stroke-[2.5]" />
                     </button>
                   ) : (
                     <>
                       <button 
-                        className="h-12 w-12 flex items-center justify-center bg-xsm-yellow text-black rounded-md shadow hover:bg-yellow-500 transition-colors"
+                        className="w-11 h-11 p-2.5 rounded-xl bg-gradient-to-r from-yellow-400 via-xsm-yellow to-amber-500 text-black shadow-md hover:brightness-110 border border-yellow-300/40 flex items-center justify-center transition-all shrink-0 cursor-pointer"
                         onClick={() => setShowSearchBar(false)}
                         title="Hide Search"
                       >
-                        <Search className="w-6 h-6" />
+                        <Search className="w-5 h-5 stroke-[2.5]" />
                       </button>
                       
                       <button 
-                        className="h-12 w-12 flex items-center justify-center bg-xsm-yellow text-black rounded-md shadow hover:bg-yellow-500 transition-colors"
+                        className="w-11 h-11 p-2.5 rounded-xl bg-gradient-to-r from-yellow-400 via-xsm-yellow to-amber-500 text-black shadow-md hover:brightness-110 border border-yellow-300/40 flex items-center justify-center transition-all shrink-0 cursor-pointer"
                         onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
                         title="Advanced Filters"
                       >
-                        <Sliders className="w-6 h-6" />
+                        <Sliders className="w-5 h-5 stroke-[2.5]" />
                       </button>
                     </>
                   )}
@@ -286,7 +286,7 @@ const Home: React.FC<HomeProps> = () => {
                 {showSearchBar && (
                   <button 
                     onClick={clearAllFilters}
-                    className="text-sm text-xsm-light-gray hover:text-xsm-yellow transition-colors"
+                    className="text-sm text-xsm-light-gray hover:text-xsm-yellow transition-colors font-medium"
                   >
                     Clear All Filters
                   </button>
@@ -298,20 +298,39 @@ const Home: React.FC<HomeProps> = () => {
                   {/* Platform quick filter buttons */}
                   <div className="flex flex-wrap items-center gap-3 mb-5 py-2">
                     <span className="text-sm text-white mr-2 font-medium">Quick Filter:</span>
-                    {platforms.filter(p => p.id !== 'all' && p.id !== 'telegram').map(platform => (
-                      <button
-                        key={platform.id}
-                        onClick={() => setSelectedPlatform(platform.name)}
-                        className={`w-12 h-12 rounded-full flex items-center justify-center transition-all border-2 shadow-lg ${
-                          selectedPlatform === platform.name 
-                            ? 'bg-xsm-yellow text-black border-xsm-yellow ring-2 ring-xsm-yellow ring-offset-2 ring-offset-xsm-dark-gray' 
-                            : 'bg-xsm-black text-xsm-yellow border-xsm-yellow/50 hover:bg-xsm-yellow/10 hover:border-xsm-yellow'
-                        }`}
-                        title={platform.name}
-                      >
-                        {platform.logo && cloneElement(platform.logo as React.ReactElement, { className: "w-6 h-6" })}
-                      </button>
-                    ))}
+                    {platforms.filter(p => p.id !== 'all' && p.id !== 'telegram').map(platform => {
+                      const isYouTube = platform.id === 'youtube';
+
+                      return (
+                        <div key={platform.id} className="relative group/platform">
+                          <button
+                            onClick={() => {
+                              if (isYouTube) {
+                                setSelectedPlatform(platform.name);
+                              } else {
+                                toast({
+                                  title: `${platform.name} — Coming Soon`,
+                                  description: "Invalid URL. Currently, only YouTube URLs are supported.",
+                                });
+                              }
+                            }}
+                            className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all border-2 shadow-lg relative ${
+                              selectedPlatform === platform.name 
+                                ? 'bg-xsm-yellow text-black border-xsm-yellow ring-2 ring-xsm-yellow ring-offset-2 ring-offset-xsm-dark-gray' 
+                                : isYouTube
+                                ? 'bg-xsm-black text-xsm-yellow border-xsm-yellow/50 hover:bg-xsm-yellow/10 hover:border-xsm-yellow'
+                                : 'bg-xsm-black/50 text-gray-500 border-gray-700/50 hover:border-gray-500 opacity-70'
+                            }`}
+                            title={isYouTube ? platform.name : `${platform.name} (Coming Soon)`}
+                          >
+                            {platform.logo && cloneElement(platform.logo as React.ReactElement, { className: "w-6 h-6" })}
+                            {!isYouTube && (
+                              <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full border border-xsm-black"></span>
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
                     <button
                       onClick={() => setSelectedPlatform('All Platforms')}
                       className={`text-xs py-2 px-4 rounded-full border-2 shadow-md transition-all ${
@@ -328,13 +347,14 @@ const Home: React.FC<HomeProps> = () => {
                     {/* Main search */}
                     <div className="w-full">
                       <label className="block text-white font-medium mb-2">Search by name or category</label>
-                      <div className="relative">
+                      <div className="relative flex items-center">
+                        <Search className="absolute left-3.5 w-5 h-5 text-xsm-yellow pointer-events-none" />
                         <input
                           type="text"
                           placeholder="Search channels..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          className="xsm-input w-full"
+                          className="xsm-input w-full pl-11 pr-4 py-3 rounded-xl border border-xsm-medium-gray/40 bg-xsm-black/70 text-white placeholder-xsm-light-gray focus:border-xsm-yellow transition-all"
                         />
                       </div>
                     </div>

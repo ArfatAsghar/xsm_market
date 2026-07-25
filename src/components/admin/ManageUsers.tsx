@@ -538,48 +538,50 @@ const ManageUsers: React.FC = () => {
 
                             <DropdownMenuSeparator className="bg-xsm-medium-gray" />
 
-                            {/* ── Moderation / Ban submenu ── */}
-                            <DropdownMenuSub>
-                              <DropdownMenuSubTrigger className="text-red-400 hover:text-red-300 cursor-pointer flex items-center px-2 py-1.5 text-sm rounded-sm hover:bg-xsm-medium-gray/40 focus:bg-xsm-medium-gray/40 data-[state=open]:bg-xsm-medium-gray/40">
-                                <Ban className="w-4 h-4 mr-2" />
-                                <span>Moderation</span>
-                              </DropdownMenuSubTrigger>
-                              <DropdownMenuSubContent className="bg-xsm-dark-gray border-xsm-medium-gray min-w-[180px]">
-                                {user.isBanned && (
-                                  <>
-                                    <DropdownMenuItem
-                                      className="text-green-400 hover:text-green-300 cursor-pointer"
-                                      onClick={() => openUnbanModal(user)}
-                                    >
-                                      <Unlock className="w-4 h-4 mr-2" />
-                                      Unban User
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator className="bg-xsm-medium-gray" />
-                                  </>
-                                )}
-                                <DropdownMenuItem
-                                  className="text-orange-400 hover:text-orange-300 cursor-pointer"
-                                  onClick={() => openBanModal(user, '7d')}
-                                >
+                            {/* ── Moderation / Ban submenu (Admin only) ── */}
+                            {isCurrentUserAdmin && (
+                              <DropdownMenuSub>
+                                <DropdownMenuSubTrigger className="text-red-400 hover:text-red-300 cursor-pointer flex items-center px-2 py-1.5 text-sm rounded-sm hover:bg-xsm-medium-gray/40 focus:bg-xsm-medium-gray/40 data-[state=open]:bg-xsm-medium-gray/40">
                                   <Ban className="w-4 h-4 mr-2" />
-                                  Ban - 7 Days{user.isBanned ? ' (Change)' : ''}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-red-400 hover:text-red-300 cursor-pointer"
-                                  onClick={() => openBanModal(user, '30d')}
-                                >
-                                  <Ban className="w-4 h-4 mr-2" />
-                                  Ban - 30 Days{user.isBanned ? ' (Change)' : ''}
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-red-500 hover:text-red-400 cursor-pointer font-semibold"
-                                  onClick={() => openBanModal(user, 'permanent')}
-                                >
-                                  <Ban className="w-4 h-4 mr-2" />
-                                  Permanent Ban{user.isBanned ? ' (Change)' : ''}
-                                </DropdownMenuItem>
-                              </DropdownMenuSubContent>
-                            </DropdownMenuSub>
+                                  <span>Moderation</span>
+                                </DropdownMenuSubTrigger>
+                                <DropdownMenuSubContent className="bg-xsm-dark-gray border-xsm-medium-gray min-w-[180px]">
+                                  {user.isBanned && (
+                                    <>
+                                      <DropdownMenuItem
+                                        className="text-green-400 hover:text-green-300 cursor-pointer"
+                                        onClick={() => openUnbanModal(user)}
+                                      >
+                                        <Unlock className="w-4 h-4 mr-2" />
+                                        Unban User
+                                      </DropdownMenuItem>
+                                      <DropdownMenuSeparator className="bg-xsm-medium-gray" />
+                                    </>
+                                  )}
+                                  <DropdownMenuItem
+                                    className="text-orange-400 hover:text-orange-300 cursor-pointer"
+                                    onClick={() => openBanModal(user, '7d')}
+                                  >
+                                    <Ban className="w-4 h-4 mr-2" />
+                                    Ban - 7 Days{user.isBanned ? ' (Change)' : ''}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-red-400 hover:text-red-300 cursor-pointer"
+                                    onClick={() => openBanModal(user, '30d')}
+                                  >
+                                    <Ban className="w-4 h-4 mr-2" />
+                                    Ban - 30 Days{user.isBanned ? ' (Change)' : ''}
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="text-red-500 hover:text-red-400 cursor-pointer font-semibold"
+                                    onClick={() => openBanModal(user, 'permanent')}
+                                  >
+                                    <Ban className="w-4 h-4 mr-2" />
+                                    Permanent Ban{user.isBanned ? ' (Change)' : ''}
+                                  </DropdownMenuItem>
+                                </DropdownMenuSubContent>
+                              </DropdownMenuSub>
+                            )}
 
                             {/* ── Delete User (Admin only) ── */}
                             {isCurrentUserAdmin && (

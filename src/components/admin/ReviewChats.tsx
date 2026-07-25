@@ -551,7 +551,7 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
                         </span>
                         <div className="flex items-center gap-2">
                           <span className="text-xs text-xsm-light-gray">{formatDate(message.timestamp)}</span>
-                          {!isCurrentUserViewer && (
+                          {isCurrentUserAdmin && (
                             <button
                               onClick={() => handleDeleteMessage(message.id)}
                               className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-500 rounded text-red-400 hover:text-white"

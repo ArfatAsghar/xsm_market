@@ -86,7 +86,7 @@ class AdminController {
     
     // Ban user
     public function banUser($userId) {
-        $admin = AuthMiddleware::requireManager();
+        $admin = AuthMiddleware::requireAdmin();
         
         $input = json_decode(file_get_contents('php://input'), true);
         $reason = trim($input['reason'] ?? '');
@@ -128,7 +128,7 @@ class AdminController {
     
     // Unban user
     public function unbanUser($userId) {
-        $admin = AuthMiddleware::requireManager();
+        $admin = AuthMiddleware::requireAdmin();
         
         try {
             $user = User::findById($userId);
@@ -340,7 +340,7 @@ class AdminController {
 
     // Delete ad (admin)
     public function deleteAd($adId) {
-        $admin = AuthMiddleware::requireManager();
+        $admin = AuthMiddleware::requireAdmin();
         try {
             $ad = Ad::findById($adId);
             
@@ -872,7 +872,7 @@ class AdminController {
 
     // Update deal status (admin only)
     public function updateDealStatus($dealId) {
-        $admin = AuthMiddleware::requireViewer();
+        $admin = AuthMiddleware::requireManager();
         $data = json_decode(file_get_contents('php://input'), true);
         $status = strtolower(trim($data['status'] ?? ''));
 

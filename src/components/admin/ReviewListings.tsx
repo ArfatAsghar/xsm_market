@@ -61,6 +61,7 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
   const { toast } = useToast();
 
   const currentUserRole = (user as any)?.role || 'user';
+  const isCurrentUserAdmin = currentUserRole === 'admin' || (user as any)?.isAdmin === true;
   const isCurrentUserViewer = currentUserRole === 'viewer';
 
   React.useEffect(() => {
@@ -465,14 +466,18 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                                 Ban Listing
                               </DropdownMenuItem>
                             )}
-                            <DropdownMenuSeparator className="bg-xsm-medium-gray" />
-                            <DropdownMenuItem
-                              className="text-red-500 hover:text-red-400 cursor-pointer"
-                              onClick={() => handleDeleteListing(listing)}
-                            >
-                              <Trash className="w-4 h-4 mr-2" />
-                              Delete Listing
-                            </DropdownMenuItem>
+                            {isCurrentUserAdmin && (
+                              <>
+                                <DropdownMenuSeparator className="bg-xsm-medium-gray" />
+                                <DropdownMenuItem
+                                  className="text-red-500 hover:text-red-400 cursor-pointer"
+                                  onClick={() => handleDeleteListing(listing)}
+                                >
+                                  <Trash className="w-4 h-4 mr-2" />
+                                  Delete Listing
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </>
                         )}
                       </DropdownMenuContent>
@@ -674,14 +679,16 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                         </button>
                       )}
 
-                      {/* Delete Listing */}
-                      <button
-                        onClick={() => handleDeleteListing(selectedListing)}
-                        className="w-full bg-red-700 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2"
-                      >
-                        <Trash className="w-5 h-5" />
-                        <span>Delete Listing</span>
-                      </button>
+                      {/* Delete Listing (Admin only) */}
+                      {isCurrentUserAdmin && (
+                        <button
+                          onClick={() => handleDeleteListing(selectedListing)}
+                          className="w-full bg-red-700 hover:bg-red-600 text-white font-semibold py-3 px-6 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                        >
+                          <Trash className="w-5 h-5" />
+                          <span>Delete Listing</span>
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

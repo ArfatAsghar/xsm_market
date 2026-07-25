@@ -220,7 +220,7 @@ export const markPrimaryOwnerMade = async (dealId: number) => {
     throw new Error('Authentication required');
   }
 
-  const response = await fetch(`${ADMIN_API_URL}/admin/deals/${dealId}/confirm-primary-owner`, {
+  const response = await fetch(`${ADMIN_API_URL}/admin/deals/${dealId}/mark-primary-owner-made`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

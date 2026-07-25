@@ -634,6 +634,10 @@ function handleAdminRoutes($controller, $path, $method) {
         case preg_match('/^\/admin\/deals\/(\d+)\/status$/', $path, $matches) && $method === 'PUT':
             $controller->updateDealStatus($matches[1]);
             break;
+        case preg_match('/^\/admin\/deals\/(\d+)\/mark-primary-owner-made$/', $path, $matches) && $method === 'POST':
+        case preg_match('/^\/admin\/deals\/(\d+)\/confirm-primary-owner$/', $path, $matches) && $method === 'POST':
+            handleDealsRoutes($path, $method);
+            break;
         case $path === '/admin/support-requests' && $method === 'GET':
             $controller->getSupportRequests();
             break;

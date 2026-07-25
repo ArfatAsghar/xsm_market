@@ -137,48 +137,34 @@ const ReviewDeals: React.FC = () => {
     }
   };
 
-  const confirmPrimaryOwnerMade = async (dealId: number) => {
+  const [primaryOwnerDealModal, setPrimaryOwnerDealModal] = useState<Deal | null>(null);
+  const [isSubmittingPrimaryOwner, setIsSubmittingPrimaryOwner] = useState(false);
+  const [primaryModalError, setPrimaryModalError] = useState<string | null>(null);
+  const [primaryModalSuccess, setPrimaryModalSuccess] = useState<string | null>(null);
+
+  const handleConfirmPrimaryOwner = async () => {
+    if (!primaryOwnerDealModal) return;
+    setIsSubmittingPrimaryOwner(true);
+    setPrimaryModalError(null);
+    setPrimaryModalSuccess(null);
+
     try {
-      setSendingMessage(dealId);
-      
-      const confirmed = window.confirm(
-        '🎯 CONFIRM PRIMARY OWNER PROMOTION\n\n' +
-        'Please confirm that you (the admin) have successfully promoted our agent to PRIMARY OWNER of the channel.\n\n' +
-        '⚠️ Only click "Yes" if:\n' +
-        '• You have logged into the seller\'s account\n' +
-        '• You have promoted the agent to Primary Owner (not just Owner)\n' +
-        '• Agent now has full administrative control\n' +
-        '• You have taken final screenshots\n' +
-        '• Ready to secure the account and notify buyer\n\n' +
-        'This action will:\n' +
-        '• Mark the deal as "Agent has Primary Owner status"\n' +
-        '• Send confirmation message to buyer and seller\n' +
-        '• Allow buyer to proceed with payment\n\n' +
-        'Continue?'
-      );
-
-      if (!confirmed) {
-        setSendingMessage(null);
-        return;
-      }
-
-      // Call the official API endpoint to mark primary owner made
-      const result = await markPrimaryOwnerMade(dealId);
-      
+      const result = await markPrimaryOwnerMade(primaryOwnerDealModal.id);
       if (result.success) {
-        alert('✅ Primary owner status confirmed successfully!\n\nActions completed:\n• Deal marked as "Primary Owner Confirmed"\n• Ownership confirmation message sent to buyer and seller\n• Buyer can now proceed with payment');
-        
-        // Refresh deals to update the UI
+        setPrimaryModalSuccess('✅ Primary owner status confirmed successfully! Deal status has been updated.');
         fetchDeals();
+        setTimeout(() => {
+          setPrimaryOwnerDealModal(null);
+          setPrimaryModalSuccess(null);
+        }, 1800);
       } else {
         throw new Error(result.message || 'Failed to confirm primary owner status');
       }
-      
-    } catch (error) {
-      console.error('Error confirming primary owner made:', error);
-      alert('❌ Failed to confirm primary owner status.\n\nError: ' + error.message + '\n\nPlease try again or check the console for details.');
+    } catch (err: any) {
+      console.error('Error confirming primary owner made:', err);
+      setPrimaryModalError(err.message || 'Failed to confirm primary owner status. Please try again.');
     } finally {
-      setSendingMessage(null);
+      setIsSubmittingPrimaryOwner(false);
     }
   };
 
@@ -431,16 +417,15 @@ const ReviewDeals: React.FC = () => {
                       {/* Admin/Manager: "I HAVE MADE THE PRIMARY OWNER" Button — hidden for viewers */}
                       {!isCurrentUserViewer && deal.seller_gave_rights && !deal.seller_made_primary_owner && (
                         <button
-                          onClick={() => confirmPrimaryOwnerMade(deal.id)}
-                          disabled={sendingMessage === deal.id}
-                          className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-50"
+                          onClick={() => {
+                            setPrimaryOwnerDealModal(deal);
+                            setPrimaryModalError(null);
+                            setPrimaryModalSuccess(null);
+                          }}
+                          className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer"
                           title="Click when you (admin) have made the agent Primary Owner of the channel"
                         >
-                          {sendingMessage === deal.id ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          ) : (
-                            'I HAVE MADE THE PRIMARY OWNER'
-                          )}
+                          I HAVE MADE THE PRIMARY OWNER
                         </button>
                       )}
                     </div>
@@ -642,6 +627,95 @@ const ReviewDeals: React.FC = () => {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Primary Owner Confirmation Modal */}
+      {primaryOwnerDealModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-xsm-dark-gray border border-amber-500/50 rounded-2xl max-w-lg w-full shadow-2xl overflow-hidden relative">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-amber-950/60 to-xsm-dark-gray p-5 border-b border-xsm-medium-gray/50 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-xsm-yellow font-bold text-lg">
+                  👑
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Confirm Primary Owner Promotion</h3>
+                  <p className="text-xs text-xsm-light-gray">
+                    Deal #{primaryOwnerDealModal.id} • {primaryOwnerDealModal.channel_title}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (!isSubmittingPrimaryOwner) setPrimaryOwnerDealModal(null);
+                }}
+                disabled={isSubmittingPrimaryOwner}
+                className="text-gray-400 hover:text-white p-2 rounded-lg hover:bg-xsm-medium-gray/50 transition-colors cursor-pointer"
+                title="Close (X)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-4">
+              {primaryModalSuccess ? (
+                <div className="p-4 bg-green-950/80 border border-green-500/60 rounded-xl text-green-300 text-sm font-medium">
+                  {primaryModalSuccess}
+                </div>
+              ) : (
+                <>
+                  <div className="bg-xsm-black/60 p-4 rounded-xl border border-xsm-medium-gray/30 space-y-2.5 text-xs text-xsm-light-gray">
+                    <p className="font-semibold text-white text-sm mb-1">Please confirm the following steps before continuing:</p>
+                    <ul className="space-y-1.5 list-disc list-inside">
+                      <li>You logged into the account and verified management permissions.</li>
+                      <li>The website agent has been promoted to <strong className="text-xsm-yellow">Primary Owner</strong>.</li>
+                      <li>Agent has full administrative ownership control over the channel.</li>
+                    </ul>
+                  </div>
+
+                  {primaryModalError && (
+                    <div className="p-3 bg-red-950/80 border border-red-500/60 rounded-xl text-red-300 text-xs font-medium">
+                      ⚠️ {primaryModalError}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Modal Footer / Actions */}
+            {!primaryModalSuccess && (
+              <div className="bg-xsm-black/50 p-4 border-t border-xsm-medium-gray/40 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPrimaryOwnerDealModal(null)}
+                  disabled={isSubmittingPrimaryOwner}
+                  className="px-4 py-2 rounded-xl text-sm font-medium text-gray-300 hover:text-white hover:bg-xsm-medium-gray/50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmPrimaryOwner}
+                  disabled={isSubmittingPrimaryOwner}
+                  className="px-5 py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-amber-500 via-xsm-yellow to-yellow-400 text-black hover:brightness-110 transition-all flex items-center gap-2 shadow-lg cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingPrimaryOwner ? (
+                    <>
+                      <span className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin"></span>
+                      <span>Confirming...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>OK</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

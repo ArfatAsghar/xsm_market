@@ -1156,7 +1156,7 @@ try {
     }
     
     // Handle POST /deals/{id}/mark-primary-owner-made - Admin confirms agent has been made primary owner
-    elseif ($method === 'POST' && preg_match('/^\/deals\/(\d+)\/mark-primary-owner-made$/', $path, $matches)) {
+    elseif ($method === 'POST' && (preg_match('/^\/deals\/(\d+)\/mark-primary-owner-made$/', $path, $matches) || preg_match('/^\/admin\/deals\/(\d+)\/mark-primary-owner-made$/', $path, $matches))) {
         $deal_id = $matches[1];
         
         error_log("=== MARK PRIMARY OWNER MADE ENDPOINT CALLED ===");

@@ -1076,6 +1076,14 @@ public function getUserByUsername($username) {
             $update = $pdo->prepare("UPDATE users SET vipUntil = ? WHERE id = ?");
             $update->execute([$newVipUntil, $user['id']]);
 
+            // Log purchase in vip_purchases
+            try {
+                $logStmt = $pdo->prepare("INSERT INTO vip_purchases (user_id, months, amount) VALUES (?, ?, ?)");
+                $logStmt->execute([$user['id'], $months, $price]);
+            } catch (Exception $logEx) {
+                error_log("Failed to log vip_purchases: " . $logEx->getMessage());
+            }
+
             Response::json([
                 'success' => true,
                 'message' => "VIP activated for {$months} month(s)!",

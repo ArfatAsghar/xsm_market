@@ -140,6 +140,17 @@ class Database {
                 $pdo->exec("ALTER TABLE ads ADD COLUMN bannedBy INT NULL DEFAULT NULL");
                 error_log("Added 'bannedBy' column to ads table");
             }
+
+            // Create vip_purchases table if missing
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS vip_purchases (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    months INT NOT NULL DEFAULT 1,
+                    amount DECIMAL(10, 2) NOT NULL DEFAULT 10.00,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
         } catch (Exception $e) {
             error_log('Schema update failed: ' . $e->getMessage());
         }

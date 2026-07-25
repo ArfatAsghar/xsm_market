@@ -146,6 +146,26 @@ async function main() {
       await fs.remove(path.join(deployApiDir, '.htaccess'));
     }
 
+    // 4.6 Include helper unzip.php in deploy root for Hostinger web extraction fallback
+    const unzipPhpContent = `<?php
+$zipFile = __DIR__ . '/xsm-market-deploy.zip';
+$extractTo = __DIR__;
+
+if (!file_exists($zipFile)) {
+    die("<h1>❌ Error: xsm-market-deploy.zip not found</h1><p>Ensure xsm-market-deploy.zip is uploaded to the same directory as unzip.php.</p>");
+}
+
+$zip = new ZipArchive();
+if ($zip->open($zipFile) === TRUE) {
+    $zip->extractTo($extractTo);
+    $zip->close();
+    echo "<h1>✅ Successfully Extracted xsm-market-deploy.zip!</h1><p>Your site has been updated. You can now delete unzip.php and xsm-market-deploy.zip.</p>";
+} else {
+    echo "<h1>❌ Failed to extract xsm-market-deploy.zip</h1><p>Check PHP ZipArchive extension status or file permissions.</p>";
+}
+?>`;
+    await fs.writeFile(path.join(DEPLOY_DIR, 'unzip.php'), unzipPhpContent);
+
     // 5. Clean up other files in the backend subfolder recursively
     await cleanDirectoryRecursive(deployApiDir);
 

@@ -613,6 +613,9 @@ function handleAdminRoutes($controller, $path, $method) {
         case $path === '/admin/dashboard-stats' && $method === 'GET':
             $controller->getDashboardStats();
             break;
+        case $path === '/admin/financial-stats' && $method === 'GET':
+            $controller->getFinancialStats();
+            break;
         case $path === '/admin/recent-activities' && $method === 'GET':
             $controller->getRecentActivities();
             break;

@@ -969,163 +969,165 @@ const Chat: React.FC = () => {
                             </div>
                           );
                         }
+
                         const isSenderAdmin = !!message.sender?.isAdmin;
-                        
+                        const senderRole = (message.sender as any)?.role ?? '';
+
+                        // --- Display name logic (never show raw username for staff) ---
+                        const getAgentLabel = () => {
+                          if (senderRole === 'agent') return 'Support Agent';
+                          if (senderRole === 'manager') return 'Manager';
+                          return 'Admin';
+                        };
+                        const agentDisplayName = (message.sender as any)?.displayName || getAgentLabel();
+
+                        // Agent/Admin messages: same teal style for both sender and receiver
+                        if (isSenderAdmin) {
+                          return (
+                            <div key={message.id} className="flex justify-start w-full my-1 px-1">
+                              {/* Agent avatar */}
+                              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-teal-600 to-emerald-700 flex items-center justify-center shadow-md mt-1 mr-2 border border-teal-400/30">
+                                <Shield className="w-3.5 h-3.5 text-white" />
+                              </div>
+                              <div className="max-w-xs lg:max-w-md">
+                                {/* Agent name badge */}
+                                <div className="flex items-center gap-1.5 mb-1">
+                                  <span className="text-[11px] font-bold text-teal-300 select-none">{agentDisplayName}</span>
+                                  <span className="bg-teal-500/20 border border-teal-400/40 text-teal-300 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider">
+                                    {getAgentLabel()}
+                                  </span>
+                                </div>
+                                {/* Agent bubble */}
+                                <div className="px-4 py-2.5 rounded-2xl rounded-tl-sm bg-gradient-to-br from-gray-900 to-gray-800 border border-teal-500/30 shadow-[0_0_12px_rgba(20,184,166,0.15)] text-white">
+                                  {message.messageType === 'image' && (message.mediaUrl || message.content) ? (
+                                    <div className="relative">
+                                      <img
+                                        src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content}
+                                        alt="Sent image"
+                                        className="rounded-lg max-w-[200px] max-h-[200px] mb-2 border border-teal-400/40 cursor-pointer"
+                                        style={{ objectFit: 'cover' }}
+                                        onClick={() => window.open(getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content, '_blank')}
+                                        onError={(e) => { const t = e.target as HTMLImageElement; t.style.display = 'none'; const f = t.nextElementSibling as HTMLElement; if (f) f.style.display = 'flex'; }}
+                                      />
+                                      <div className="absolute inset-0 bg-gray-700 rounded-lg items-center justify-center text-white text-sm" style={{ display: 'none' }}>
+                                        <div className="text-center p-4">
+                                          <div className="text-2xl mb-2">🖼️</div><div>Image unavailable</div>
+                                          <button onClick={() => window.open(getImageUrl(message.content) || message.content, '_blank')} className="mt-2 px-3 py-1 rounded text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700">Try Opening</button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : message.messageType === 'video' && (message.mediaUrl || message.content) ? (
+                                    <div className="relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border bg-black border-teal-400/40">
+                                      <video className="w-full h-full object-cover" controls preload="metadata" style={{ maxHeight: '200px' }}
+                                        onError={(e) => { const t = e.target as HTMLVideoElement; t.style.display = 'none'; const f = t.nextElementSibling as HTMLElement; if (f) f.style.display = 'flex'; }}>
+                                        <source src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} type="video/mp4" />
+                                        <source src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} type="video/quicktime" />
+                                        <source src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} type="video/webm" />
+                                        Your browser does not support the video tag.
+                                      </video>
+                                      <div className="absolute inset-0 bg-gray-700 flex items-center justify-center text-white text-sm" style={{ display: 'none' }}>
+                                        <div className="text-center p-4"><div className="text-2xl mb-2">🎥</div><div>Video file</div><div className="text-xs mt-1 break-all px-2 max-w-[200px]">{message.content.split('/').pop()}</div>
+                                          <button onClick={() => { const url = getImageUrl(message.content) || message.content; window.open(url, '_blank'); }} className="mt-2 px-3 py-1 rounded text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700">Open Video</button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm leading-relaxed">{message.content}</p>
+                                  )}
+                                  <p className="text-[10px] mt-1.5 text-teal-400/60 text-right">{formatTime(message.createdAt)}</p>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        // Regular messages: my messages (right/yellow) vs other user messages (left/dark)
                         return (
                           <div
                             key={message.id}
-                            className={`flex ${isMyMessage ? 'justify-end' : 'justify-start'}`}
+                            className={`flex items-end gap-2 my-1 ${isMyMessage ? 'justify-end' : 'justify-start'}`}
                           >
-                            <div
-                              className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                                isSenderAdmin
-                                  ? 'bg-gradient-to-br from-slate-800 to-slate-700 text-white border border-indigo-400/40 shadow-[0_0_10px_rgba(99,102,241,0.2)]'
-                                  : isMyMessage
-                                    ? 'bg-xsm-yellow text-xsm-black'
-                                    : 'bg-xsm-medium-gray text-white'
-                              }`}
-                            >
-                              {isSenderAdmin ? (
-                                <p className="flex items-center gap-1 text-[11px] font-bold mb-1.5 text-indigo-300 select-none">
-                                  <Shield className="w-3 h-3 text-indigo-400 fill-indigo-400/10" />
-                                  <span>{(message.sender as any)?.displayName || message.sender?.username}</span>
-                                  <span className="bg-indigo-500/20 border border-indigo-400/40 text-indigo-300 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider ml-1">
-                                    Admin
-                                  </span>
+                            {/* Other user avatar (left side only) */}
+                            {!isMyMessage && (
+                              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-xsm-medium-gray flex items-center justify-center text-xs font-bold text-white border border-xsm-medium-gray/60 mb-0.5">
+                                {(message.sender?.username ?? '?').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+
+                            <div className={`max-w-xs lg:max-w-md ${isMyMessage ? 'items-end' : 'items-start'} flex flex-col`}>
+                              {/* Sender name for other user */}
+                              {!isMyMessage && (
+                                <p className="text-[11px] font-semibold text-gray-400 mb-1 ml-1 select-none">
+                                  {message.sender?.username ?? 'User'}
                                 </p>
-                              ) : (
-                                !isMyMessage && (
-                                  <p className="text-xs font-medium mb-1 opacity-75">
-                                    {(message.sender as any)?.displayName || message.sender?.username}
-                                  </p>
-                                )
                               )}
-                              {message.messageType === 'image' && (message.mediaUrl || message.content) ? (
-                                <div className="relative">
-                                  <img
-                                    src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content}
-                                    alt="Sent image"
-                                    className={`rounded-lg max-w-[200px] max-h-[200px] mb-2 border cursor-pointer ${isSenderAdmin ? 'border-indigo-400/60' : 'border-xsm-yellow'}`}
-                                    style={{ objectFit: 'cover' }}
-                                    onClick={() => window.open(getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content, '_blank')}
-                                    onError={(e) => {
-                                      console.error('Image failed to load:', {
-                                        originalContent: message.content,
-                                        mediaUrl: message.mediaUrl,
-                                        resolvedUrl: getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content
-                                      });
-                                      const target = e.target as HTMLImageElement;
-                                      target.style.display = 'none';
-                                      // Show fallback
-                                      const fallback = target.nextElementSibling as HTMLElement;
-                                      if (fallback) fallback.style.display = 'flex';
-                                    }}
-                                  />
-                                  {/* Fallback for broken images */}
-                                  <div 
-                                    className="absolute inset-0 bg-gray-700 rounded-lg flex items-center justify-center text-white text-sm"
-                                    style={{ display: 'none' }}
-                                  >
-                                    <div className="text-center p-4">
-                                      <div className="text-2xl mb-2">🖼️</div>
-                                      <div>Image unavailable</div>
-                                      <button 
-                                        onClick={() => {
-                                          const url = getImageUrl(message.content) || message.content;
-                                          window.open(url, '_blank');
-                                        }}
-                                        className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isSenderAdmin ? 'bg-indigo-500 text-white hover:bg-indigo-600' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}
-                                      >
-                                        Try Opening
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : message.messageType === 'video' && (message.mediaUrl || message.content) ? (
-                                <div className={`relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border bg-black ${isSenderAdmin ? 'border-indigo-400/60' : 'border-xsm-yellow'}`}>
-                                  <video
-                                    className="w-full h-full object-cover"
-                                    controls
-                                    preload="metadata"
-                                    style={{ maxHeight: '200px' }}
-                                    onError={(e) => {
-                                      console.error('Video failed to load:', {
-                                        originalContent: message.content,
-                                        mediaUrl: message.mediaUrl,
-                                        resolvedUrl: getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content,
-                                        error: e
-                                      });
-                                      const target = e.target as HTMLVideoElement;
-                                      target.style.display = 'none';
-                                      // Show fallback
-                                      const fallback = target.nextElementSibling as HTMLElement;
-                                      if (fallback) fallback.style.display = 'flex';
-                                    }}
-                                    onLoadStart={() => {
-                                      const videoUrl = getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content;
-                                      console.log('Video load started:', videoUrl);
-                                      console.log('Video message data:', message);
-                                    }}
-                                    onCanPlay={() => {
-                                      console.log('Video can play');
-                                    }}
-                                    onLoadedData={() => {
-                                      console.log('Video data loaded');
-                                    }}
-                                  >
-                                    <source 
-                                      src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} 
-                                      type="video/mp4" 
-                                    />
-                                    <source 
-                                      src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} 
-                                      type="video/quicktime" 
-                                    />
-                                    <source 
-                                      src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} 
-                                      type="video/webm" 
-                                    />
-                                    Your browser does not support the video tag.
-                                  </video>
-                                  {/* Fallback display for broken videos */}
-                                  <div 
-                                    className="absolute inset-0 bg-gray-700 flex items-center justify-center text-white text-sm"
-                                    style={{ display: 'none' }}
-                                  >
-                                    <div className="text-center p-4">
-                                      <div className="text-2xl mb-2">🎥</div>
-                                      <div>Video file</div>
-                                      <div className="text-xs mt-1 break-all px-2 max-w-[200px]">
-                                        {message.content.split('/').pop()}
-                                      </div>
-                                      <button 
-                                        onClick={() => {
-                                          const url = getImageUrl(message.content) || message.content;
-                                          console.log('Attempting to open video:', url);
-                                          window.open(url, '_blank');
-                                        }}
-                                        className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isSenderAdmin ? 'bg-indigo-500 text-white hover:bg-indigo-600' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}
-                                      >
-                                        Open Video
-                                      </button>
-                                    </div>
-                                  </div>
-                                </div>
-                              ) : (
-                                <p className="text-sm">{message.content}</p>
-                              )}
-                              <p
-                                className={`text-xs mt-1 ${
-                                  isSenderAdmin
-                                    ? 'text-slate-400/70 text-right'
-                                    : isMyMessage
-                                      ? 'text-xsm-dark-gray'
-                                      : 'text-gray-400'
+
+                              {/* Message bubble */}
+                              <div
+                                className={`px-4 py-2.5 shadow-sm ${
+                                  isMyMessage
+                                    ? 'bg-xsm-yellow text-black rounded-2xl rounded-br-sm'
+                                    : 'bg-[#2a2a2a] text-white border border-white/8 rounded-2xl rounded-bl-sm'
                                 }`}
                               >
-                                {formatTime(message.createdAt)}
-                              </p>
+                                {message.messageType === 'image' && (message.mediaUrl || message.content) ? (
+                                  <div className="relative">
+                                    <img
+                                      src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content}
+                                      alt="Sent image"
+                                      className={`rounded-lg max-w-[200px] max-h-[200px] mb-2 border cursor-pointer ${isMyMessage ? 'border-yellow-400/60' : 'border-white/10'}`}
+                                      style={{ objectFit: 'cover' }}
+                                      onClick={() => window.open(getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content, '_blank')}
+                                      onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                        const fallback = target.nextElementSibling as HTMLElement;
+                                        if (fallback) fallback.style.display = 'flex';
+                                      }}
+                                    />
+                                    <div className="absolute inset-0 bg-gray-700 rounded-lg flex items-center justify-center text-white text-sm" style={{ display: 'none' }}>
+                                      <div className="text-center p-4">
+                                        <div className="text-2xl mb-2">🖼️</div>
+                                        <div>Image unavailable</div>
+                                        <button onClick={() => { const url = getImageUrl(message.content) || message.content; window.open(url, '_blank'); }} className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isMyMessage ? 'bg-black text-yellow-400 hover:bg-gray-900' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}>Try Opening</button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : message.messageType === 'video' && (message.mediaUrl || message.content) ? (
+                                  <div className={`relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border bg-black ${isMyMessage ? 'border-yellow-400/60' : 'border-white/10'}`}>
+                                    <video className="w-full h-full object-cover" controls preload="metadata" style={{ maxHeight: '200px' }}
+                                      onError={(e) => { const t = e.target as HTMLVideoElement; t.style.display = 'none'; const f = t.nextElementSibling as HTMLElement; if (f) f.style.display = 'flex'; }}
+                                      onLoadStart={() => { const videoUrl = getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content; console.log('Video load started:', videoUrl); }}
+                                    >
+                                      <source src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} type="video/mp4" />
+                                      <source src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} type="video/quicktime" />
+                                      <source src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} type="video/webm" />
+                                      Your browser does not support the video tag.
+                                    </video>
+                                    <div className="absolute inset-0 bg-gray-700 flex items-center justify-center text-white text-sm" style={{ display: 'none' }}>
+                                      <div className="text-center p-4">
+                                        <div className="text-2xl mb-2">🎥</div>
+                                        <div>Video file</div>
+                                        <div className="text-xs mt-1 break-all px-2 max-w-[200px]">{message.content.split('/').pop()}</div>
+                                        <button onClick={() => { const url = getImageUrl(message.content) || message.content; window.open(url, '_blank'); }} className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isMyMessage ? 'bg-black text-yellow-400 hover:bg-gray-900' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}>Open Video</button>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <p className="text-sm leading-relaxed">{message.content}</p>
+                                )}
+                                <p className={`text-[10px] mt-1 ${isMyMessage ? 'text-black/50 text-right' : 'text-gray-500 text-right'}`}>
+                                  {formatTime(message.createdAt)}
+                                </p>
+                              </div>
                             </div>
+
+                            {/* My avatar (right side only) */}
+                            {isMyMessage && (
+                              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-xsm-yellow flex items-center justify-center text-xs font-bold text-black border border-yellow-400/60 mb-0.5">
+                                {(user?.username ?? 'M').charAt(0).toUpperCase()}
+                              </div>
+                            )}
                           </div>
                         );
                       })

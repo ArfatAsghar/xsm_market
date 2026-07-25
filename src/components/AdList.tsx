@@ -468,7 +468,7 @@ const AdList: React.FC<AdListProps> = ({
               {/* Action Buttons */}
               <div className="mt-auto w-full pt-2">
                 <button
-                  onClick={(e) => navigateToDetail(ad, e)}
+                  onClick={(e) => handlePurchase(ad, e)}
                   className="w-full bg-xsm-yellow text-black py-3 rounded-lg hover:bg-yellow-500 transition-colors font-medium"
                 >
                   Make Purchase

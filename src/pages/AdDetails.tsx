@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, Zap, TrendingUp, Pin, Clock, Crown, X } from 'lucide-react';
+import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, Zap, TrendingUp, Pin, Clock, Crown, X, FileText, MoreHorizontal } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import DealCreationModal from '@/components/DealCreationModal';
@@ -38,6 +38,7 @@ interface ChannelData {
   contentType?: string;
   incomeDetails?: string;
   promotionDetails?: string;
+  preferredPaymentMethods?: string[];
   seller: {
     id: number;
     name: string;
@@ -130,6 +131,7 @@ const AdDetails: React.FC = () => {
   }>({ canPull: true });
   const [isPinned, setIsPinned] = useState(false);
   const [activeScreenshot, setActiveScreenshot] = useState<string | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // Decode the ID from the URL parameter
   console.log('AdDetails - received encodedAdId:', encodedAdId);
@@ -240,6 +242,11 @@ const AdDetails: React.FC = () => {
         contentType: data.contentType,
         incomeDetails: data.incomeDetails,
         promotionDetails: data.promotionDetails,
+        preferredPaymentMethods: Array.isArray(data.preferredPaymentMethods)
+          ? data.preferredPaymentMethods
+          : typeof data.preferredPaymentMethods === 'string'
+          ? (function() { try { return JSON.parse(data.preferredPaymentMethods); } catch { return []; } })()
+          : [],
         earningMethods: data.earningMethods || ['Ad Revenue', 'Sponsorships'],
         promotionStrategies: data.promotionStrategies || ['SEO Optimization', 'Social Media'],
         seller: {
@@ -766,6 +773,37 @@ const AdDetails: React.FC = () => {
                   <span>BUY</span>
                 </button>
 
+                {/* Preferred Payment Methods under BUY Button */}
+                {channel.preferredPaymentMethods && channel.preferredPaymentMethods.length > 0 && (
+                  <div className="mt-5 pt-4 border-t border-xsm-medium-gray/30 text-center">
+                    <div className="text-xs font-semibold text-xsm-yellow mb-2.5 uppercase tracking-wider">
+                      Preferred Payment Methods
+                    </div>
+                    <div className="flex flex-wrap items-center justify-center gap-1.5">
+                      {channel.preferredPaymentMethods.slice(0, 3).map((pm, idx) => (
+                        <span
+                          key={idx}
+                          className="bg-xsm-black/80 text-white border border-xsm-medium-gray/40 text-[11px] font-medium px-2.5 py-1 rounded-md shadow-sm"
+                        >
+                          {pm}
+                        </span>
+                      ))}
+
+                      {channel.preferredPaymentMethods.length > 3 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowPaymentModal(true)}
+                          className="bg-xsm-yellow text-xsm-black hover:bg-yellow-400 font-black text-xs px-2.5 py-1 rounded-md shadow-md transition-all flex items-center gap-1 cursor-pointer"
+                          title="View all preferred payment methods"
+                        >
+                          <MoreHorizontal className="w-4 h-4" />
+                          <span>+{channel.preferredPaymentMethods.length - 3}</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 <div className="text-center mt-4 text-sm text-xsm-light-gray">
                   Secure payment with buyer protection
                 </div>
@@ -832,38 +870,61 @@ const AdDetails: React.FC = () => {
                 </span>
               </div>
 
-              {/* Subscribers - Centered */}
-              <div className="inline-block xsm-card px-8 py-4">
-                <Users className="w-8 h-8 text-xsm-yellow mx-auto mb-2" />
-                <div className="text-2xl font-bold text-white">{formatNumber(channel.subscribers)}</div>
-                <div className="text-sm text-xsm-light-gray">Subscribers</div>
-              </div>
             </div>
 
-            {/* Channel Status - Centered */}
-            <div className="xsm-card max-w-2xl mx-auto">
-              <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Channel Status</h4>
-              <div className="space-y-3">
-                <div className="flex items-center justify-center">
-                  <span className="text-white mr-3">Monetization Status:</span>
-                  <span className={`px-4 py-2 rounded-full text-sm font-bold ${channel.monetized ? 'bg-green-500 text-white' : 'bg-gray-500 text-gray-200'}`}>
-                    {channel.monetized ? 'Monetized' : 'Not Monetized'}
-                  </span>
+            {/* Stats Cards Row: Subscribers | Channel Status | Content Type - side by side */}
+            <div className="grid grid-cols-3 gap-3 max-w-2xl mx-auto">
+              {/* Subscribers Card */}
+              <div className="xsm-card flex flex-col items-center justify-center py-4 px-3 text-center">
+                <Users className="w-6 h-6 text-xsm-yellow mx-auto mb-1.5" />
+                <div className="text-xl font-bold text-white">{formatNumber(channel.subscribers)}</div>
+                <div className="text-xs text-xsm-light-gray mt-0.5">Subscribers</div>
+              </div>
+
+              {/* Channel Status Card */}
+              <div className="xsm-card flex flex-col items-center justify-center py-4 px-3 text-center">
+                <div className={`w-3 h-3 rounded-full mx-auto mb-1.5 ${channel.monetized ? 'bg-green-500' : 'bg-gray-500'}`} />
+                <div className={`text-sm font-bold ${channel.monetized ? 'text-green-400' : 'text-gray-400'}`}>
+                  {channel.monetized ? 'Monetized' : 'Not Monetized'}
                 </div>
-                
-                {/* Content Type */}
-                {channel.contentType && channel.contentType.trim() && (
-                  <div className="flex items-center justify-center">
-                    <span className="text-white mr-3">Content Type:</span>
-                    <span className="px-4 py-2 rounded-full text-sm font-bold bg-blue-600 text-white">
-                      {channel.contentType}
-                    </span>
-                  </div>
-                )}
+                <div className="text-xs text-xsm-light-gray mt-0.5">Channel Status</div>
+              </div>
+
+              {/* Content Type Card */}
+              <div className="xsm-card flex flex-col items-center justify-center py-4 px-3 text-center">
+                <div className="text-lg mb-1">🎬</div>
+                <div className="text-sm font-bold text-blue-300 break-words leading-tight">
+                  {channel.contentType && channel.contentType.trim() ? channel.contentType : '—'}
+                </div>
+                <div className="text-xs text-xsm-light-gray mt-0.5">Content Type</div>
               </div>
             </div>
 
-            {/* Screenshots/Images Gallery - Centered */}
+            {/* Description - Centered */}
+            {channel.description && channel.description.trim() && (
+              <div className="xsm-card max-w-3xl mx-auto">
+                <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Description</h4>
+                <p className="text-white leading-relaxed text-center whitespace-pre-wrap break-words overflow-wrap-anywhere">{channel.description}</p>
+              </div>
+            )}
+
+            {/* Income Details - Centered */}
+            {channel.incomeDetails && channel.incomeDetails.trim() && (
+              <div className="xsm-card max-w-3xl mx-auto">
+                <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Income Details</h4>
+                <p className="text-white leading-relaxed text-center whitespace-pre-wrap break-words overflow-wrap-anywhere">{channel.incomeDetails}</p>
+              </div>
+            )}
+
+            {/* Promotion Details - Centered */}
+            {channel.promotionDetails && channel.promotionDetails.trim() && (
+              <div className="xsm-card max-w-3xl mx-auto">
+                <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Promotion Details</h4>
+                <p className="text-white leading-relaxed text-center whitespace-pre-wrap break-words overflow-wrap-anywhere">{channel.promotionDetails}</p>
+              </div>
+            )}
+
+            {/* Screenshots/Images Gallery - Moved to bottom */}
             {channel.screenshots && channel.screenshots.length > 0 && (
               <div className="xsm-card max-w-3xl mx-auto">
                 <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Channel Screenshots</h4>
@@ -898,30 +959,6 @@ const AdDetails: React.FC = () => {
                 <p className="text-xsm-medium-gray text-sm mt-3 text-center">
                   {channel.screenshots.length} screenshot{channel.screenshots.length > 1 ? 's' : ''} uploaded by seller
                 </p>
-              </div>
-            )}
-
-            {/* Description - Centered */}
-            {channel.description && channel.description.trim() && (
-              <div className="xsm-card max-w-3xl mx-auto">
-                <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Description</h4>
-                <p className="text-white leading-relaxed text-center whitespace-pre-wrap break-words overflow-wrap-anywhere">{channel.description}</p>
-              </div>
-            )}
-
-            {/* Income Details - Centered */}
-            {channel.incomeDetails && channel.incomeDetails.trim() && (
-              <div className="xsm-card max-w-3xl mx-auto">
-                <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Income Details</h4>
-                <p className="text-white leading-relaxed text-center whitespace-pre-wrap break-words overflow-wrap-anywhere">{channel.incomeDetails}</p>
-              </div>
-            )}
-
-            {/* Promotion Details - Centered */}
-            {channel.promotionDetails && channel.promotionDetails.trim() && (
-              <div className="xsm-card max-w-3xl mx-auto">
-                <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Promotion Details</h4>
-                <p className="text-white leading-relaxed text-center whitespace-pre-wrap break-words overflow-wrap-anywhere">{channel.promotionDetails}</p>
               </div>
             )}
           </div>
@@ -1105,6 +1142,7 @@ const AdDetails: React.FC = () => {
             contentType: channel.contentType,
             incomeDetails: channel.incomeDetails || '',
             promotionDetails: channel.promotionDetails || '',
+            preferredPaymentMethods: channel.preferredPaymentMethods || [],
             thumbnail: channel.thumbnail === '/default-thumbnail.jpg' ? '' : channel.thumbnail,
             screenshots: channel.screenshots || [],
             tags: []
@@ -1186,6 +1224,50 @@ const AdDetails: React.FC = () => {
           <p className="absolute bottom-5 text-white/30 text-xs tracking-wide select-none">
             Press <kbd className="px-1.5 py-0.5 rounded bg-white/10 border border-white/20 text-white/50 font-mono text-[10px]">Esc</kbd> or click outside to close
           </p>
+        </div>
+      )}
+
+      {/* Payment Methods Popup Modal */}
+      {showPaymentModal && channel?.preferredPaymentMethods && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={() => setShowPaymentModal(false)}
+        >
+          <div
+            className="relative bg-xsm-dark-gray border border-xsm-medium-gray/50 rounded-2xl max-w-sm w-full shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-xsm-medium-gray/30 bg-xsm-black/40">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-xsm-yellow" />
+                <h3 className="text-white font-bold text-base">All Payment Methods</h3>
+              </div>
+              <button
+                onClick={() => setShowPaymentModal(false)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-white/5 hover:bg-white/15 border border-white/10 text-white transition-all"
+                aria-label="Close payment methods modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Methods list */}
+            <div className="p-5">
+              <p className="text-xsm-light-gray text-xs mb-3">
+                This seller accepts the following payment methods:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {channel.preferredPaymentMethods.map((pm, idx) => (
+                  <span
+                    key={idx}
+                    className="bg-xsm-black/80 text-white border border-xsm-medium-gray/40 text-sm font-medium px-3 py-1.5 rounded-lg shadow-sm"
+                  >
+                    {pm}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

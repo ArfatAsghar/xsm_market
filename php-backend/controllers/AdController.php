@@ -69,6 +69,7 @@ class AdController {
         $isMonetized = isset($input['isMonetized']) ? (bool)$input['isMonetized'] : false;
         $incomeDetails = $input['incomeDetails'] ?? '';
         $promotionDetails = $input['promotionDetails'] ?? '';
+        $preferredPaymentMethods = $input['preferredPaymentMethods'] ?? [];
         $thumbnail = $input['thumbnail'] ?? null;
         $screenshots = $input['screenshots'] ?? [];
         $tags = $input['tags'] ?? [];
@@ -120,6 +121,7 @@ class AdController {
                 'isMonetized' => (bool)$isMonetized,
                 'incomeDetails' => $incomeDetails,
                 'promotionDetails' => $promotionDetails,
+                'preferredPaymentMethods' => $preferredPaymentMethods,
                 'thumbnail' => $thumbnail,
                 'screenshots' => $screenshots,
                 'tags' => $tags,
@@ -195,7 +197,7 @@ class AdController {
             $allowedFields = [
                 'title', 'description', 'channelUrl', 'platform', 'category',
                 'contentType', 'contentCategory', 'price', 'subscribers', 'monthlyIncome',
-                'isMonetized', 'incomeDetails', 'promotionDetails', 'totalViews',
+                'isMonetized', 'incomeDetails', 'promotionDetails', 'preferredPaymentMethods', 'totalViews',
                 'thumbnail', 'screenshots', 'primary_image', 'additional_images', 'tags', 'socialBladeUrl', 'location', 'sellCondition'
             ];
             

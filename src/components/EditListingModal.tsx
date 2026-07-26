@@ -76,6 +76,22 @@ const normalizeScreenshots = (screenshots: any): string[] => {
     .filter(Boolean);
 };
 
+const AVAILABLE_PAYMENT_METHODS = [
+  { id: 'bank-transfer', name: 'Bank Transfer', icon: '🏦' },
+  { id: 'paypal', name: 'PayPal', icon: '💳' },
+  { id: 'crypto-usdt', name: 'Crypto / USDT', icon: '₮' },
+  { id: 'crypto-btc', name: 'Bitcoin (BTC)', icon: '₿' },
+  { id: 'wise', name: 'Wise', icon: '🌍' },
+  { id: 'payoneer', name: 'Payoneer', icon: '💼' },
+  { id: 'cashapp', name: 'Cash App', icon: '💰' },
+  { id: 'zelle', name: 'Zelle', icon: '⚡' },
+  { id: 'venmo', name: 'Venmo', icon: '💸' },
+  { id: 'western-union', name: 'Western Union', icon: '🌐' },
+  { id: 'skrill', name: 'Skrill', icon: '💵' },
+  { id: 'perfect-money', name: 'Perfect Money', icon: '💎' },
+  { id: 'other', name: 'Other', icon: '📋' }
+];
+
 const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose, onUpdate }) => {
   const contentTypes = ["Unique content", "Rewritten", "Not unique content", "Mixed"];
 
@@ -111,6 +127,7 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
     isMonetized: false,
     subscribers: '',
     thumbnail: '',
+    preferredPaymentMethods: [] as string[],
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -146,6 +163,11 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
         isMonetized: Boolean(ad.isMonetized),
         subscribers: ad.subscribers?.toString() || '',
         thumbnail: ad.thumbnail || ad.primary_image || '',
+        preferredPaymentMethods: Array.isArray((ad as any).preferredPaymentMethods)
+          ? (ad as any).preferredPaymentMethods
+          : typeof (ad as any).preferredPaymentMethods === 'string'
+          ? (function() { try { return JSON.parse((ad as any).preferredPaymentMethods); } catch { return []; } })()
+          : []
       });
 
       setExistingScreenshots(existingPreviewUrls);
@@ -519,6 +541,7 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
         isMonetized: formData.isMonetized ? 1 : 0,
         incomeDetails: formData.incomeDetails.trim(),
         promotionDetails: formData.promotionDetails.trim(),
+        preferredPaymentMethods: formData.preferredPaymentMethods,
         thumbnail: profileImageData,
         primary_image: profileImageData,
         screenshots: screenshotData.length > 0 ? screenshotData : [],
@@ -838,6 +861,41 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
               placeholder="How do you promote your content? (social media, SEO, collaborations, etc.)"
               rows={3}
             />
+          </div>
+
+          {/* Preferred Payment Methods Selector */}
+          <div className="p-4 bg-xsm-black/50 border border-xsm-medium-gray/30 rounded-xl space-y-3">
+            <label className="block text-white font-semibold text-sm">
+              Preferred Payment Methods <span className="text-xsm-light-gray font-normal text-xs">(Select options you accept)</span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {AVAILABLE_PAYMENT_METHODS.map((pm) => {
+                const isSelected = formData.preferredPaymentMethods.includes(pm.name);
+                return (
+                  <button
+                    key={pm.id}
+                    type="button"
+                    onClick={() => {
+                      setFormData(prev => {
+                        const current = prev.preferredPaymentMethods;
+                        const next = current.includes(pm.name)
+                          ? current.filter(m => m !== pm.name)
+                          : [...current, pm.name];
+                        return { ...prev, preferredPaymentMethods: next };
+                      });
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border cursor-pointer ${
+                      isSelected
+                        ? 'bg-xsm-yellow text-xsm-black border-xsm-yellow shadow-md'
+                        : 'bg-xsm-dark-gray text-xsm-light-gray border-xsm-medium-gray/40 hover:border-xsm-yellow/50 hover:text-white'
+                    }`}
+                  >
+                    <span>{pm.icon}</span>
+                    <span>{pm.name}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <div>

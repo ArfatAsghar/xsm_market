@@ -78,6 +78,15 @@ class Database {
                 error_log("Added 'transaction_id' column to deals table");
             }
 
+            // Check & add preferredPaymentMethods to ads table
+            if (!in_array('preferredPaymentMethods', $dealsColumns)) {
+                $adsColumns = $pdo->query("SHOW COLUMNS FROM ads")->fetchAll(PDO::FETCH_COLUMN);
+                if (!in_array('preferredPaymentMethods', $adsColumns)) {
+                    $pdo->exec("ALTER TABLE ads ADD COLUMN preferredPaymentMethods TEXT NULL");
+                    error_log("Added 'preferredPaymentMethods' column to ads table");
+                }
+            }
+
             // Backfill & normalize any deals missing or using prefix in transaction_id with permanent 6-digit sequential IDs
             $pdo->exec("
                 UPDATE deals 

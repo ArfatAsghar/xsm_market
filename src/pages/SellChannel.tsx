@@ -45,6 +45,22 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     "Religious & Spiritual"
   ];
   
+  const AVAILABLE_PAYMENT_METHODS = [
+    { id: 'bank-transfer', name: 'Bank Transfer', icon: '🏦' },
+    { id: 'paypal', name: 'PayPal', icon: '💳' },
+    { id: 'crypto-usdt', name: 'Crypto / USDT', icon: '₮' },
+    { id: 'crypto-btc', name: 'Bitcoin (BTC)', icon: '₿' },
+    { id: 'wise', name: 'Wise', icon: '🌍' },
+    { id: 'payoneer', name: 'Payoneer', icon: '💼' },
+    { id: 'cashapp', name: 'Cash App', icon: '💰' },
+    { id: 'zelle', name: 'Zelle', icon: '⚡' },
+    { id: 'venmo', name: 'Venmo', icon: '💸' },
+    { id: 'western-union', name: 'Western Union', icon: '🌐' },
+    { id: 'skrill', name: 'Skrill', icon: '💵' },
+    { id: 'perfect-money', name: 'Perfect Money', icon: '💎' },
+    { id: 'other', name: 'Other', icon: '📋' }
+  ];
+
   const [formData, setFormData] = useState({
     title: '',
     channelUrl: '',
@@ -58,6 +74,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     isMonetized: false,
     subscribers: '',
     profilePicture: '', // Add profile picture field
+    preferredPaymentMethods: [] as string[],
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -290,7 +307,12 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         promotionDetails: ad.promotionDetails || '',
         isMonetized: ad.isMonetized || ad.monthlyIncome > 0 || false,
         subscribers: ad.subscribers?.toString() || '',
-        profilePicture: ad.thumbnail || ''
+        profilePicture: ad.thumbnail || '',
+        preferredPaymentMethods: Array.isArray(ad.preferredPaymentMethods)
+          ? ad.preferredPaymentMethods
+          : typeof ad.preferredPaymentMethods === 'string'
+          ? (function() { try { return JSON.parse(ad.preferredPaymentMethods); } catch { return []; } })()
+          : []
       });
       
       // Load existing screenshots - all images from screenshots field
@@ -585,6 +607,7 @@ if (files.length > 0) {
         isMonetized: formData.isMonetized ? 1 : 0, // Convert boolean to integer for MySQL
         incomeDetails: formData.incomeDetails || '',
         promotionDetails: formData.promotionDetails || '',
+        preferredPaymentMethods: formData.preferredPaymentMethods,
         // Use extracted channel/profile image for display. Never use screenshots as the listing profile image.
         thumbnail: profileImageData,
         primary_image: profileImageData,
@@ -927,6 +950,41 @@ if (files.length > 0) {
                     </div>
                   </label>
                 </div>
+              </div>
+            </div>
+
+            {/* Preferred Payment Methods Selector */}
+            <div className="p-4 bg-xsm-black/50 border border-xsm-medium-gray/30 rounded-xl space-y-3">
+              <label className="block text-white font-semibold text-sm">
+                Preferred Payment Methods <span className="text-xsm-light-gray font-normal text-xs">(Select options you accept)</span>
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {AVAILABLE_PAYMENT_METHODS.map((pm) => {
+                  const isSelected = formData.preferredPaymentMethods.includes(pm.name);
+                  return (
+                    <button
+                      key={pm.id}
+                      type="button"
+                      onClick={() => {
+                        setFormData(prev => {
+                          const current = prev.preferredPaymentMethods;
+                          const next = current.includes(pm.name)
+                            ? current.filter(m => m !== pm.name)
+                            : [...current, pm.name];
+                          return { ...prev, preferredPaymentMethods: next };
+                        });
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border cursor-pointer ${
+                        isSelected
+                          ? 'bg-xsm-yellow text-xsm-black border-xsm-yellow shadow-md'
+                          : 'bg-xsm-dark-gray text-xsm-light-gray border-xsm-medium-gray/40 hover:border-xsm-yellow/50 hover:text-white'
+                      }`}
+                    >
+                      <span>{pm.icon}</span>
+                      <span>{pm.name}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 

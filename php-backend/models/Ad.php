@@ -10,7 +10,7 @@ class Ad {
         $fields = [
             'userId', 'title', 'description', 'channelUrl', 'platform', 'category', 
             'contentType', 'contentCategory', 'price', 'subscribers', 'monthlyIncome', 
-            'isMonetized', 'incomeDetails', 'promotionDetails', 'status', 'verified', 
+            'isMonetized', 'incomeDetails', 'promotionDetails', 'preferredPaymentMethods', 'status', 'verified', 
             'premium', 'views', 'totalViews', 'rating', 'thumbnail', 'primary_image',
             'additional_images', 'screenshots', 'tags', 'socialBladeUrl', 'location', 
             'sellCondition', 'soldTo', 'soldAt'
@@ -26,7 +26,7 @@ class Ad {
                 $insertValues[] = ':' . $field;
                 
                 // Handle JSON fields
-                if (in_array($field, ['screenshots', 'tags', 'additional_images']) && is_array($data[$field])) {
+                if (in_array($field, ['screenshots', 'tags', 'additional_images', 'preferredPaymentMethods']) && is_array($data[$field])) {
                     $params[':' . $field] = json_encode($data[$field]);
                 } 
                 // Handle boolean fields - convert to integer for MySQL
@@ -472,6 +472,13 @@ class Ad {
             $ad['tags'] = is_array($decoded) ? $decoded : [];
         } else {
             $ad['tags'] = [];
+        }
+
+        if (isset($ad['preferredPaymentMethods']) && $ad['preferredPaymentMethods'] !== null && $ad['preferredPaymentMethods'] !== '' && $ad['preferredPaymentMethods'] !== '0' && $ad['preferredPaymentMethods'] !== 'NULL') {
+            $decoded = json_decode($ad['preferredPaymentMethods'], true);
+            $ad['preferredPaymentMethods'] = is_array($decoded) ? $decoded : [];
+        } else {
+            $ad['preferredPaymentMethods'] = [];
         }
     }
     

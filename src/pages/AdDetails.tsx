@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, Zap, Pin, Clock, Crown, X } from 'lucide-react';
+import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, Zap, TrendingUp, Pin, Clock, Crown, X } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import DealCreationModal from '@/components/DealCreationModal';
@@ -663,7 +663,7 @@ const AdDetails: React.FC = () => {
               onClick={handlePullListing}
               className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-3 rounded-lg transition-colors font-semibold"
             >
-              <TrendingUp className="w-5 h-5" />
+              <Zap className="w-5 h-5 fill-current text-yellow-300" />
               PULL UP
             </button>
             <button

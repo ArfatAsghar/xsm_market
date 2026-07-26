@@ -155,6 +155,10 @@ class Database {
                 $pdo->exec("ALTER TABLE ads ADD COLUMN bannedBy INT NULL DEFAULT NULL");
                 error_log("Added 'bannedBy' column to ads table");
             }
+            if (!in_array('verificationCode', $adsColumns)) {
+                $pdo->exec("ALTER TABLE ads ADD COLUMN verificationCode VARCHAR(50) NULL DEFAULT NULL");
+                error_log("Added 'verificationCode' column to ads table");
+            }
 
             // Create vip_purchases table if missing
             $pdo->exec("

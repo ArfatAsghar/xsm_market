@@ -17,6 +17,7 @@ switch (true) {
 function handleSocialMediaExtract() {
     $input = json_decode(file_get_contents('php://input'), true);
     $url = trim($input['url'] ?? '');
+    $verificationCode = trim($input['verificationCode'] ?? '');
 
     if (!$url) {
         Response::error('URL is required', 400);
@@ -54,14 +55,18 @@ function handleSocialMediaExtract() {
             'monthlyIncome' => 0,
             'category' => '',
             'contentType' => '',
-            'verified' => false
+            'verified' => false,
+            'codeVerified' => false,
+            'verificationCode' => $verificationCode
         ];
 
         if ($platform === 'youtube') {
-            $youtubeData = fetchYouTubeProfileData($url);
-            $profileData = array_merge($profileData, array_filter($youtubeData, function($value) {
-                return $value !== null && $value !== '';
-            }));
+            $youtubeData = fetchYouTubeProfileData($url, $verificationCode);
+            foreach ($youtubeData as $key => $value) {
+                if ($value !== null && $value !== '') {
+                    $profileData[$key] = $value;
+                }
+            }
         }
 
         Response::success(['data' => $profileData]);
@@ -122,14 +127,21 @@ function parseYouTubeSubscribers($text) {
     return 0;
 }
 
-function fetchYouTubeProfileData($url) {
+function fetchYouTubeProfileData($url, $verificationCode = '') {
     $result = [
-        'title'          => null,
-        'channelName'    => null,
-        'profilePicture' => null,
-        'subscribers'    => 0,
-        'followers'      => 0
+        'title'            => null,
+        'channelName'      => null,
+        'profilePicture'   => null,
+        'subscribers'      => 0,
+        'followers'        => 0,
+        'codeVerified'     => false,
+        'verificationCode' => $verificationCode
     ];
+
+    $apiDescription = '';
+    $apiKey         = getenv('YOUTUBE_API_KEY');
+    $html           = '';
+    $channelId      = '';
 
     // ── Step 1: oEmbed — reliable for channel/author name ──────────────────────
     $oembedUrl = 'https://www.youtube.com/oembed?format=json&url=' . urlencode($url);
@@ -140,19 +152,12 @@ function fetchYouTubeProfileData($url) {
             $result['title']       = $authorName;
             $result['channelName'] = $authorName;
         }
-        // NOTE: oembed thumbnail_url is a VIDEO thumbnail — do NOT use as avatar
     }
 
     // ── Step 2: YouTube Data API v3 (best quality when key is available) ───────
-    $apiKey    = getenv('YOUTUBE_API_KEY');
-    $html      = '';
-    $channelId = '';
-
     if ($apiKey) {
-        // First get channel ID from URL or by searching
         $channelId = extractYouTubeChannelId($url, '');
 
-        // If no direct channel ID, try resolving handle/@username via search
         if (!$channelId && preg_match('/\/@([^\/\?]+)/', $url, $hm)) {
             $handle    = $hm[1];
             $searchUrl = 'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&forHandle=' . urlencode('@' . $handle) . '&key=' . urlencode($apiKey);
@@ -166,9 +171,11 @@ function fetchYouTubeProfileData($url) {
             $apiUrl  = 'https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics&id=' . urlencode($channelId) . '&key=' . urlencode($apiKey);
             $apiData = fetchJsonUrl($apiUrl);
             if (!empty($apiData['items'][0])) {
-                $item      = $apiData['items'][0];
-                $snippet   = $item['snippet']    ?? [];
+                $item       = $apiData['items'][0];
+                $snippet    = $item['snippet']    ?? [];
                 $statistics = $item['statistics'] ?? [];
+
+                $apiDescription = $snippet['description'] ?? '';
 
                 $apiTitle = $snippet['title'] ?? null;
                 if ($apiTitle) {
@@ -176,7 +183,6 @@ function fetchYouTubeProfileData($url) {
                     $result['channelName'] = $apiTitle;
                 }
 
-                // Use the highest resolution available (medium 240px is good for avatar)
                 $avatarUrl = $snippet['thumbnails']['high']['url']
                           ?? $snippet['thumbnails']['medium']['url']
                           ?? $snippet['thumbnails']['default']['url']
@@ -190,17 +196,26 @@ function fetchYouTubeProfileData($url) {
                     $result['subscribers'] = $subCount;
                     $result['followers']   = $subCount;
                 }
-
-                // If we got all three key fields from the API, return immediately
-                if ($result['title'] && $result['profilePicture'] && $result['subscribers'] > 0) {
-                    return $result;
-                }
             }
         }
     }
 
-    // ── Step 3: HTML scrape — avatar from ytInitialData JSON ───────────────────
+    // ── Step 3: HTML scrape — avatar from ytInitialData JSON & Verification check ───────────────────
     $html = fetchTextUrl($url);
+    if ($html) {
+        $html = str_replace('\/', '/', $html);
+    }
+
+    // Check verification code against API description AND HTML source
+    if (!empty($verificationCode)) {
+        $code = trim($verificationCode);
+        $foundInApi  = !empty($apiDescription) && (stripos($apiDescription, $code) !== false);
+        $foundInHtml = !empty($html) && (stripos($html, $code) !== false);
+        $result['codeVerified'] = ($foundInApi || $foundInHtml);
+    } else {
+        $result['codeVerified'] = true;
+    }
+
     if (!$html) return $result;
 
     // Unescape JSON escaped slashes so our regexes can match easily

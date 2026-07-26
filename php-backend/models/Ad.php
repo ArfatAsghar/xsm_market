@@ -13,7 +13,7 @@ class Ad {
             'isMonetized', 'incomeDetails', 'promotionDetails', 'preferredPaymentMethods', 'status', 'verified', 
             'premium', 'views', 'totalViews', 'rating', 'thumbnail', 'primary_image',
             'additional_images', 'screenshots', 'tags', 'socialBladeUrl', 'location', 
-            'sellCondition', 'soldTo', 'soldAt'
+            'sellCondition', 'soldTo', 'soldAt', 'verificationCode'
         ];
         
         $insertFields = [];
@@ -370,7 +370,7 @@ class Ad {
                 $fields[] = "$key = :$key";
                 
                 // Handle JSON fields
-                if (in_array($key, ['screenshots', 'additional_images', 'tags']) && is_array($value)) {
+                if (in_array($key, ['screenshots', 'additional_images', 'tags', 'preferredPaymentMethods']) && is_array($value)) {
                     $params[":$key"] = json_encode($value);
                 }
                 // Sanitize thumbnail/primary_image — never store '0' or empty

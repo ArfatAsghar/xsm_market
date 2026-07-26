@@ -73,6 +73,7 @@ class AdController {
         $thumbnail = $input['thumbnail'] ?? null;
         $screenshots = $input['screenshots'] ?? [];
         $tags = $input['tags'] ?? [];
+        $verificationCode = $input['verificationCode'] ?? null;
         
         // Validation - exact match to Node.js
         if (!$title || !$channelUrl || !$platform || !$category || !$price) {
@@ -125,6 +126,7 @@ class AdController {
                 'thumbnail' => $thumbnail,
                 'screenshots' => $screenshots,
                 'tags' => $tags,
+                'verificationCode' => $verificationCode,
                 'status' => 'active' // All new ads start as active for immediate listing
             ];
             

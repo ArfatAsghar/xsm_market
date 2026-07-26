@@ -61,6 +61,19 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     { id: 'other', name: 'Other', icon: '📋' }
   ];
 
+  const generateUniqueVerificationCode = (): string => {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let result = 'XSM';
+    for (let i = 0; i < 7; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  };
+
+  const [verificationCode, setVerificationCode] = useState<string>(() => generateUniqueVerificationCode());
+  const [isCodeVerified, setIsCodeVerified] = useState<boolean | null>(null);
+  const [isCopied, setIsCopied] = useState<boolean>(false);
+
   const [formData, setFormData] = useState({
     title: '',
     channelUrl: '',
@@ -79,7 +92,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExtracting, setIsExtracting] = useState(false); // Add extraction loading state
-  const [extractedData, setExtractedData] = useState(null); // Store extracted data
+  const [extractedData, setExtractedData] = useState<any>(null); // Store extracted data
   const [showContentTypeDropdown, setShowContentTypeDropdown] = useState(false);
   const [showCategoryDropdown, setShowCategoryDropdown] = useState(false);
   const { toast } = useToast();
@@ -314,6 +327,11 @@ const SellChannel: React.FC<SellChannelProps> = () => {
           ? (function() { try { return JSON.parse(ad.preferredPaymentMethods); } catch { return []; } })()
           : []
       });
+
+      if (ad.verificationCode) {
+        setVerificationCode(ad.verificationCode);
+      }
+      setIsCodeVerified(true);
       
       // Load existing screenshots - all images from screenshots field
       const allImages = [];
@@ -400,10 +418,17 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       if (isExtracting) return;
       setIsExtracting(true);
       try {
-        const result = await extractProfileData(url);
+        const result = await extractProfileData(url, verificationCode);
         const profileData = result.data;
         setExtractedData(profileData);
         const subCount = profileData.followers || profileData.subscribers || 0;
+
+        if (profileData.codeVerified) {
+          setIsCodeVerified(true);
+        } else {
+          setIsCodeVerified(false);
+        }
+
         setFormData(prev => ({
           ...prev,
           title: profileData.title || prev.title,
@@ -411,11 +436,20 @@ const SellChannel: React.FC<SellChannelProps> = () => {
           subscribers: subCount ? String(subCount) : prev.subscribers,
           profilePicture: profileData.profilePicture || prev.profilePicture
         }));
+
         if (profileData.title) {
-          toast({
-            title: '✅ YouTube Channel Info Fetched',
-            description: `${profileData.title}${(profileData.followers || profileData.subscribers) ? ' • ' + formatFollowerCount(profileData.followers || profileData.subscribers) + ' subscribers' : ''}`,
-          });
+          if (profileData.codeVerified) {
+            toast({
+              title: '✅ Channel Ownership Verified!',
+              description: `Verification code ${verificationCode} found in channel bio.`,
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              title: '⚠️ Code Not Found in Channel Bio',
+              description: `Please add code ${verificationCode} to your YouTube channel description/bio to verify ownership.`,
+            });
+          }
         }
       } catch (err) {
         console.warn('Auto-extract failed:', err);
@@ -425,7 +459,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [formData.channelUrl]);
+  }, [formData.channelUrl, verificationCode]);
 
   // Manual extract button handler
   const handleExtractProfile = async () => {
@@ -450,12 +484,19 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
     setIsExtracting(true);
     try {
-      const result = await extractProfileData(url);
+      const result = await extractProfileData(url, verificationCode);
       const profileData = result.data;
       
       setExtractedData(profileData);
       
       const subCount = profileData.followers || profileData.subscribers || 0;
+
+      if (profileData.codeVerified) {
+        setIsCodeVerified(true);
+      } else {
+        setIsCodeVerified(false);
+      }
+
       setFormData(prev => ({
         ...prev,
         title: profileData.title || prev.title,
@@ -464,10 +505,18 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         profilePicture: profileData.profilePicture || prev.profilePicture
       }));
 
-      toast({
-        title: "Profile Data Extracted Successfully! ✅",
-        description: `Title: ${profileData.title}\nPlatform: YouTube\nSubscribers: ${formatFollowerCount(profileData.followers || profileData.subscribers || 0)}`,
-      });
+      if (profileData.codeVerified) {
+        toast({
+          title: "Profile Extracted & Code Verified! ✅",
+          description: `Verification code ${verificationCode} verified in channel details.`,
+        });
+      } else {
+        toast({
+          variant: "destructive",
+          title: "❌ Verification Code Missing",
+          description: `Verification code ${verificationCode} was NOT found in your YouTube channel description/bio. Please add it to your bio and try again.`,
+        });
+      }
       
     } catch (error: any) {
       console.error('Profile extraction error:', error);
@@ -485,6 +534,17 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     setIsSubmitting(true);
     
     try {
+      // Verification Guard (New listings only)
+      if (!isEditMode && !isCodeVerified) {
+        toast({
+          variant: "destructive",
+          title: "Channel Ownership Not Verified ❌",
+          description: `You must add verification code ${verificationCode} to your YouTube channel description/bio and extract channel details before publishing.`,
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       // Validation: YouTube URL check
       if (!isYouTubeUrl(formData.channelUrl)) {
         toast({
@@ -524,77 +584,70 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       let platform = 'youtube';
 
       // Upload new screenshots if any files are selected
-      // Upload new screenshots if any files are selected.
-// Existing screenshots and newly uploaded screenshots must be stored in ads.screenshots.
-// Do not use screenshots as the product profile/listing image.
-let screenshotData: any[] = existingScreenshots.map((item) =>
-  typeof item === 'string' ? { url: item } : item
-);
+      let screenshotData: any[] = existingScreenshots.map((item) =>
+        typeof item === 'string' ? { url: item } : item
+      );
 
-const profileImageData: string = formData.profilePicture || '';
+      const profileImageData: string = formData.profilePicture || '';
 
-if (files.length > 0) {
-  try {
-    console.log('Compressing screenshots client-side...');
-    const compressedFiles: File[] = [];
-    const compressionToast = toast({
-      title: "Compressing images... ⚙️",
-      description: `Preparing ${files.length} screenshots for upload...`,
-    });
+      if (files.length > 0) {
+        try {
+          console.log('Compressing screenshots client-side...');
+          const compressedFiles: File[] = [];
+          const compressionToast = toast({
+            title: "Compressing images... ⚙️",
+            description: `Preparing ${files.length} screenshots for upload...`,
+          });
 
-    for (const file of files) {
-      try {
-        const compressed = await compressImage(file, 1200, 1200, 0.75);
-        compressedFiles.push(compressed);
-      } catch (e) {
-        console.warn('Failed to compress file, using original:', file.name, e);
-        compressedFiles.push(file);
+          for (const file of files) {
+            try {
+              const compressed = await compressImage(file, 1200, 1200, 0.75);
+              compressedFiles.push(compressed);
+            } catch (e) {
+              console.warn('Failed to compress file, using original:', file.name, e);
+              compressedFiles.push(file);
+            }
+          }
+
+          compressionToast.dismiss();
+
+          console.log('Attempting to upload compressed screenshots...');
+          const uploadToast = toast({
+            title: "Uploading screenshots... ⬆️",
+            description: `0 of ${compressedFiles.length} uploaded...`,
+          });
+
+          const uploadedPaths = await uploadScreenshots(compressedFiles, (progress, currentFile, totalFiles) => {
+            uploadToast.update({
+              id: uploadToast.id,
+              title: "Uploading screenshots... ⬆️",
+              description: `Uploading screenshot ${currentFile} of ${totalFiles} (${progress}%)...`,
+            });
+          });
+
+          uploadToast.dismiss();
+
+          if (uploadedPaths && uploadedPaths.length > 0) {
+            uploadedPaths.forEach(path => {
+              screenshotData.push({ url: path });
+            });
+
+            toast({
+              title: "Screenshots Uploaded! 🖼️",
+              description: `Successfully uploaded ${uploadedPaths.length} screenshots.`,
+            });
+          }
+        } catch (uploadErr: any) {
+          console.warn('Failed to upload screenshots:', uploadErr);
+          toast({
+            variant: "destructive",
+            title: "Screenshot Upload Warning",
+            description: `Some screenshots failed to upload: ${uploadErr.message || 'Server error'}. Publishing ad without failed screenshots.`,
+          });
+        }
       }
-    }
 
-    compressionToast.dismiss();
-
-    console.log('Attempting to upload compressed screenshots...');
-    const uploadToast = toast({
-      title: "Uploading screenshots... ⬆️",
-      description: `0 of ${compressedFiles.length} uploaded...`,
-    });
-
-    const uploadResult = await uploadScreenshots(compressedFiles, (current, total) => {
-      uploadToast.update({
-        id: uploadToast.id,
-        title: "Uploading screenshots... ⬆️",
-        description: `${current} of ${total} uploaded...`,
-      });
-    });
-
-    const newScreenshots = uploadResult.screenshots || [];
-
-    if (!Array.isArray(newScreenshots) || newScreenshots.length === 0) {
-      throw new Error('Upload completed but no screenshot URLs were returned.');
-    }
-
-    screenshotData = [...screenshotData, ...newScreenshots];
-
-    console.log('Screenshots uploaded and ready to save:', screenshotData);
-    uploadToast.dismiss();
-  } catch (uploadError: any) {
-    console.error('Error uploading screenshots:', uploadError);
-
-    toast({
-      variant: "destructive",
-      title: "Screenshot Upload Failed",
-      description: uploadError.message || "Screenshots could not be uploaded. Please try again.",
-    });
-
-    setIsSubmitting(false);
-    return;
-  }
-}
-
-      // Screenshots are supporting listing images only; the product profile image comes from the extracted channel/profile picture.
-
-      // Prepare ad data with explicit null handling for ENUM fields
+      // Prepare ad data
       const adData = {
         title: formData.title || `${platform.charAt(0).toUpperCase() + platform.slice(1)} Channel`,
         channelUrl: formData.channelUrl,
@@ -604,16 +657,15 @@ if (files.length > 0) {
         description: formData.description || '',
         price: parseFloat(formData.price) || 0,
         subscribers: formData.subscribers ? parseInt(formData.subscribers) : 0,
-        isMonetized: formData.isMonetized ? 1 : 0, // Convert boolean to integer for MySQL
+        isMonetized: formData.isMonetized ? 1 : 0,
         incomeDetails: formData.incomeDetails || '',
         promotionDetails: formData.promotionDetails || '',
         preferredPaymentMethods: formData.preferredPaymentMethods,
-        // Use extracted channel/profile image for display. Never use screenshots as the listing profile image.
         thumbnail: profileImageData,
         primary_image: profileImageData,
-        // Store screenshots separately from the listing profile image
         screenshots: screenshotData,
-        tags: []
+        tags: [],
+        verificationCode
       };
 
       console.log(isEditMode ? 'Updating ad data:' : 'Creating ad data:', adData);
@@ -680,6 +732,8 @@ if (files.length > 0) {
         setFiles([]);
         setImagePreviews([]);
         setExistingScreenshots([]);
+        setVerificationCode(generateUniqueVerificationCode());
+        setIsCodeVerified(null);
       }
 
       // Small delay before redirect to let user see the success message
@@ -800,6 +854,67 @@ if (files.length > 0) {
                 </div>
               </div>
             </div>
+
+            {/* Channel Ownership Verification Banner */}
+            {!isEditMode && (
+              <div className="p-5 bg-gradient-to-r from-amber-950/60 via-xsm-black to-xsm-dark-gray border border-amber-500/40 rounded-xl shadow-lg mb-6">
+                <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xl">🔐</span>
+                      <h3 className="text-white font-bold text-base">Channel Ownership Verification</h3>
+                    </div>
+                    <p className="text-xsm-light-gray text-xs leading-relaxed mb-3">
+                      To verify channel ownership, add this unique 10-character code into your <strong className="text-white">YouTube channel description / bio</strong> or <strong className="text-white">About section</strong> before creating the listing.
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div className="bg-xsm-black border border-amber-500/50 rounded-lg px-4 py-2 font-mono text-amber-400 font-bold tracking-widest text-lg select-all shadow-inner">
+                        {verificationCode}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(verificationCode);
+                          setIsCopied(true);
+                          toast({ title: "Code Copied! 📋", description: `${verificationCode} copied to clipboard.` });
+                          setTimeout(() => setIsCopied(false), 2000);
+                        }}
+                        className="px-3.5 py-2 bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        {isCopied ? 'Copied! ✅' : '📋 Copy Code'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Status indicator */}
+                  <div className="self-stretch sm:self-center flex flex-col items-center sm:items-end justify-center min-w-[150px] pt-2 sm:pt-0 border-t sm:border-t-0 border-amber-500/20">
+                    {isCodeVerified === true && (
+                      <div className="bg-green-950/80 border border-green-500/60 text-green-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                        <span className="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
+                        <span>Code Verified ✅</span>
+                      </div>
+                    )}
+                    {isCodeVerified === false && (
+                      <div className="bg-red-950/80 border border-red-500/60 text-red-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                        <span>Code Missing ❌</span>
+                      </div>
+                    )}
+                    {isCodeVerified === null && (
+                      <div className="bg-amber-950/80 border border-amber-500/60 text-amber-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                        <span>Pending Extract ⏳</span>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-xsm-medium-gray mt-1 text-center sm:text-right">
+                      {isCodeVerified === true
+                        ? 'Found in channel bio'
+                        : isCodeVerified === false
+                        ? 'Not found in channel bio'
+                        : 'Add code to bio & extract'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* URL Input with Auto-Extract */}
             <div>

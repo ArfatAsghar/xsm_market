@@ -1,14 +1,14 @@
 import { API_URL } from './auth';
 
 // Extract social media profile data from URL
-export const extractProfileData = async (url: string) => {
+export const extractProfileData = async (url: string, verificationCode?: string) => {
   try {
     const response = await fetch(`${API_URL}/social-media/extract-profile`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ url })
+      body: JSON.stringify({ url, verificationCode })
     });
 
     if (!response.ok) {

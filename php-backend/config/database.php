@@ -78,10 +78,16 @@ class Database {
                 error_log("Added 'transaction_id' column to deals table");
             }
 
-            // Backfill any deals missing transaction_id with permanent sequential IDs
+            // Backfill & normalize any deals missing or using prefix in transaction_id with permanent 6-digit sequential IDs
             $pdo->exec("
                 UPDATE deals 
-                SET transaction_id = CONCAT('TXN-', LPAD(id, 6, '0')) 
+                SET transaction_id = LPAD(REPLACE(REPLACE(transaction_id, 'TXN-', ''), 'XSM', ''), 6, '0')
+                WHERE transaction_id LIKE 'TXN-%' OR transaction_id LIKE 'XSM%'
+            ");
+
+            $pdo->exec("
+                UPDATE deals 
+                SET transaction_id = LPAD(id, 6, '0') 
                 WHERE transaction_id IS NULL OR transaction_id = '' OR transaction_id = '0'
             ");
 

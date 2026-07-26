@@ -77,23 +77,41 @@ const ReviewDeals: React.FC = () => {
   const [selectedStatusTab, setSelectedStatusTab] = useState('All');
 
   // Auto-open deal modal when exact transaction ID is typed/found
+  // Auto-open deal modal when exact transaction ID is typed/found
   useEffect(() => {
-    const q = searchTxnId.trim().toUpperCase();
-    if (!q) return;
-    const match = deals.find(d => (d.transaction_id || '').toUpperCase() === q);
+    const rawQ = searchTxnId.trim().toUpperCase();
+    if (!rawQ) return;
+    const cleanQ = rawQ.replace(/^TXN-/, '').replace(/^#/, '');
+    const match = deals.find(d => {
+      const tid = (d.transaction_id || '').toUpperCase();
+      const cleanTid = tid.replace(/^TXN-/, '');
+      return tid === rawQ || cleanTid === cleanQ || String(d.id) === cleanQ;
+    });
     if (match) setSelectedDeal(match);
   }, [searchTxnId, deals]);
 
   // Find exact transaction match if any
   const exactMatch = searchTxnId.trim()
-    ? deals.find(d => (d.transaction_id || '').toUpperCase() === searchTxnId.trim().toUpperCase())
+    ? deals.find(d => {
+        const rawQ = searchTxnId.trim().toUpperCase();
+        const cleanQ = rawQ.replace(/^TXN-/, '').replace(/^#/, '');
+        const tid = (d.transaction_id || '').toUpperCase();
+        const cleanTid = tid.replace(/^TXN-/, '');
+        return tid === rawQ || cleanTid === cleanQ || String(d.id) === cleanQ;
+      })
     : null;
 
   // Filtered deals list used by the table
   const filteredDeals = (exactMatch
     ? [exactMatch]
     : searchTxnId.trim()
-      ? deals.filter(d => (d.transaction_id || '').toUpperCase().includes(searchTxnId.trim().toUpperCase()))
+      ? deals.filter(d => {
+          const rawQ = searchTxnId.trim().toUpperCase();
+          const cleanQ = rawQ.replace(/^TXN-/, '').replace(/^#/, '');
+          const tid = (d.transaction_id || '').toUpperCase();
+          const cleanTid = tid.replace(/^TXN-/, '');
+          return tid.includes(rawQ) || cleanTid.includes(cleanQ) || String(d.id).includes(cleanQ);
+        })
       : deals
   ).filter(d => {
     if (selectedStatusTab === 'All') return true;
@@ -311,7 +329,7 @@ const ReviewDeals: React.FC = () => {
           id="txn-search"
           value={searchTxnId}
           onChange={e => setSearchTxnId(e.target.value)}
-          placeholder="Search by Transaction ID (e.g. TXN-000001)"
+          placeholder="Search by Transaction ID (e.g. 000001)"
           className="w-full bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg pl-10 pr-10 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-xsm-yellow transition-colors text-sm"
         />
         {searchTxnId && (

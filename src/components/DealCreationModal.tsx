@@ -181,7 +181,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
       const result = await response.json();
       
       if (response.ok) {
-        const officialTxnId = result.transaction_id || (result.deal_id ? `TXN-${String(result.deal_id).padStart(6, '0')}` : 'TXN-000001');
+        const officialTxnId = result.transaction_id || (result.deal_id ? String(result.deal_id).padStart(6, '0') : '000001');
         // Success! Show deal created message
         const feeDisplay = `$${escrowFee.toFixed(2)}`;
         alert(`✅ Deal Created Successfully!

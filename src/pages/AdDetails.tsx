@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, TrendingUp, Pin, Clock, Crown, X } from 'lucide-react';
+import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, Zap, Pin, Clock, Crown, X } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import DealCreationModal from '@/components/DealCreationModal';
@@ -268,16 +268,21 @@ const AdDetails: React.FC = () => {
         setIsPinned(Boolean(data.pinned));
       }
       
-      // Calculate pull cooldown from lastPulledAt
+      // Calculate pull/bump cooldown from lastPulledAt
       if (data.lastPulledAt) {
+        const isUserVip = Boolean(
+          (user as any)?.isVip ||
+          ((user as any)?.vipUntil && new Date((user as any).vipUntil) > new Date())
+        );
+        const cooldownDays = isUserVip ? 3 : 4;
         const lastPulled = new Date(data.lastPulledAt);
         const now = new Date();
         const diffMs = now.getTime() - lastPulled.getTime();
-        const fourDaysMs = 4 * 24 * 60 * 60 * 1000; // 4 days in milliseconds
+        const cooldownMs = cooldownDays * 24 * 60 * 60 * 1000;
         
-        if (diffMs < fourDaysMs) {
+        if (diffMs < cooldownMs) {
           // Still on cooldown
-          const remainingMs = fourDaysMs - diffMs;
+          const remainingMs = cooldownMs - diffMs;
           const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
           const hours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
           const minutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
@@ -293,15 +298,15 @@ const AdDetails: React.FC = () => {
             const now = new Date();
             const diffMs = now.getTime() - lastPulled.getTime();
             
-            if (diffMs >= fourDaysMs) {
+            if (diffMs >= cooldownMs) {
               // Cooldown expired
               setPullCooldown({ canPull: true });
               clearInterval(interval);
             } else {
-              const remainingMs = fourDaysMs - diffMs;
+              const remainingMs = cooldownMs - diffMs;
               const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
               const hours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-              const minutes = Math.floor((remainingMs % (60 * 1000)) / (60 * 1000));
+              const minutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
               const seconds = Math.floor((remainingMs % (60 * 1000)) / 1000);
               
               setPullCooldown({
@@ -935,83 +940,104 @@ const AdDetails: React.FC = () => {
         />
       )}
 
-      {/* Pull Up Modal */}
+      {/* Pull Up / Bump Modal */}
       {showPullModal && channel && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg p-6 max-w-md w-full mx-4 border border-gray-700">
-            <div className="text-center">
-              <div className="mb-4">
-                <TrendingUp className="w-16 h-16 text-xsm-yellow mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Pull Up Listing
-                </h3>
-                <p className="text-sm text-gray-300 mb-4">
-                  "{channel.name}"
-                </p>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-xsm-dark-gray border border-xsm-medium-gray/50 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-950/50 to-xsm-dark-gray p-5 border-b border-xsm-medium-gray/40 flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                Boolean((user as any)?.isVip || ((user as any)?.vipUntil && new Date((user as any).vipUntil) > new Date()))
+                  ? 'bg-gradient-to-br from-amber-500/30 to-yellow-400/20 border border-amber-500/40'
+                  : 'bg-blue-500/20 border border-blue-500/30'
+              }`}>
+                <Zap className={`w-5 h-5 ${
+                  Boolean((user as any)?.isVip || ((user as any)?.vipUntil && new Date((user as any).vipUntil) > new Date()))
+                    ? 'text-amber-400'
+                    : 'text-blue-400'
+                }`} />
               </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Pull Up Listing 🚀</h3>
+                <p className="text-xs text-xsm-light-gray truncate max-w-[260px]">"{channel.name}"</p>
+              </div>
+            </div>
+
+            <div className="p-5">
+              {/* VIP benefit callout */}
+              {Boolean((user as any)?.isVip || ((user as any)?.vipUntil && new Date((user as any).vipUntil) > new Date())) && (
+                <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-amber-950/60 to-xsm-dark-gray border border-amber-500/40 flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <p className="text-amber-300 text-xs font-medium">
+                    <span className="font-bold">VIP Benefit:</span> Your bump cooldown is <span className="text-amber-400 font-black">3 days</span> instead of 4
+                  </p>
+                </div>
+              )}
 
               {/* Check if ad can be pulled or is on cooldown */}
               {!pullCooldown.canPull ? (
                 /* Show countdown if on cooldown */
-                <div className="mb-6">
-                  <div className="flex items-center justify-center space-x-2 text-sm text-gray-300 mb-3">
-                    <Clock className="w-5 h-5 text-red-400" />
+                <div>
+                  <div className="flex items-center gap-2 text-sm text-gray-300 mb-3">
+                    <Clock className="w-4 h-4 text-red-400" />
                     <span className="font-medium">Pull-up available in:</span>
                   </div>
-                  <div className="flex items-center justify-center space-x-4 text-sm font-mono bg-gray-800 rounded-lg p-4 border border-gray-600">
+                  <div className="flex items-center justify-center gap-3 font-mono bg-xsm-black/60 rounded-xl p-4 border border-xsm-medium-gray/30 mb-3">
                     <div className="text-center">
                       <div className="text-2xl font-bold text-red-400">
                         {pullCooldown.remainingTime?.days || 0}
                       </div>
-                      <div className="text-gray-400 text-xs">days</div>
+                      <div className="text-gray-500 text-xs">days</div>
                     </div>
-                    <div className="text-gray-500 text-xl">:</div>
+                    <div className="text-gray-600 text-xl">:</div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-orange-400">
                         {String(pullCooldown.remainingTime?.hours || 0).padStart(2, '0')}
                       </div>
-                      <div className="text-gray-400 text-xs">hrs</div>
+                      <div className="text-gray-500 text-xs">hrs</div>
                     </div>
-                    <div className="text-gray-500 text-xl">:</div>
+                    <div className="text-gray-600 text-xl">:</div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-yellow-400">
                         {String(pullCooldown.remainingTime?.minutes || 0).padStart(2, '0')}
                       </div>
-                      <div className="text-gray-400 text-xs">min</div>
+                      <div className="text-gray-500 text-xs">min</div>
                     </div>
-                    <div className="text-gray-500 text-xl">:</div>
+                    <div className="text-gray-600 text-xl">:</div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-green-400">
                         {String(pullCooldown.remainingTime?.seconds || 0).padStart(2, '0')}
                       </div>
-                      <div className="text-gray-400 text-xs">sec</div>
+                      <div className="text-gray-500 text-xs">sec</div>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400 mt-3">
-                    Listings can only be pulled up every 4 days
+                  <p className="text-xs text-gray-500 text-center">
+                    You can bump this listing again after {
+                      Boolean((user as any)?.isVip || ((user as any)?.vipUntil && new Date((user as any).vipUntil) > new Date())) ? 3 : 4
+                    } days.
                   </p>
                 </div>
               ) : (
                 /* Show confirmation if can be pulled */
-                <div className="mb-6">
-                  <p className="text-gray-300">
+                <div>
+                  <p className="text-gray-300 text-sm mb-2">
                     Are you sure you want to pull up this listing? It will appear at the top of the marketplace.
                   </p>
                 </div>
               )}
 
               {/* Action Buttons */}
-              <div className="flex space-x-3">
+              <div className="flex space-x-3 mt-5">
                 <button
                   onClick={() => setShowPullModal(false)}
-                  className="flex-1 px-4 py-2 bg-gray-700 text-gray-300 rounded-lg hover:bg-gray-600 transition-colors border border-gray-600"
+                  className="flex-1 px-4 py-2 bg-xsm-black text-gray-300 rounded-xl hover:bg-xsm-medium-gray transition-colors border border-xsm-medium-gray/50 cursor-pointer"
                 >
                   Close
                 </button>
                 {pullCooldown.canPull && (
                   <button
                     onClick={confirmPullUp}
-                    className="flex-1 px-4 py-2 bg-xsm-yellow text-xsm-black font-semibold rounded-lg hover:bg-yellow-400 transition-colors"
+                    className="flex-1 px-4 py-2 bg-gradient-to-r from-amber-500 via-xsm-yellow to-yellow-400 text-xsm-black font-bold rounded-xl hover:brightness-110 transition-all cursor-pointer shadow-lg"
                   >
                     Pull Up
                   </button>

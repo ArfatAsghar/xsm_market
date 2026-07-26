@@ -334,6 +334,11 @@ function handleAdRoutes($controller, $path, $method) {
             error_log("Matched pin route for ad ID: " . $matches[1]);
             $controller->togglePin($matches[1]);
             break;
+        case preg_match('/^\/ads\/(\d+)\/pull-up$/', $path, $matches) && $method === 'PUT':
+        case preg_match('/^\/ads\/(\d+)\/bump$/', $path, $matches) && $method === 'PUT':
+            error_log("Matched pull-up/bump route for ad ID: " . $matches[1]);
+            $controller->pullUpAd($matches[1]);
+            break;
         case $path === '/ads/my-ads' && $method === 'GET':
             error_log("Matched /ads/my-ads route");
             $controller->getMyAds();

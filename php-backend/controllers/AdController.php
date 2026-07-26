@@ -482,7 +482,7 @@ class AdController {
         }
     }
     
-    // Pull up ad functionality with 4-day cooldown
+    // Bump (Pull up) ad functionality with VIP-aware cooldown
     public function pullUpAd($adId) {
         $user = AuthMiddleware::protect();
         
@@ -502,32 +502,31 @@ class AdController {
             
             // Check if ad is active
             if ($ad['status'] !== 'active') {
-                Response::error('Only active ads can be pulled up', 400);
+                Response::error('Only active ads can be bumped', 400);
                 return;
             }
+
+            // Determine cooldown based on VIP status
+            $vipUntil = $user['vipUntil'] ?? null;
+            $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
+            $cooldownDays = $isVip ? 3 : 4;
             
-            // Check 4-day cooldown
+            // Check cooldown
             if ($ad['lastPulledAt']) {
                 $lastPulledTime = new DateTime($ad['lastPulledAt']);
                 $currentTime = new DateTime();
-                $timeDiff = $currentTime->diff($lastPulledTime);
-                $daysSinceLastPull = $timeDiff->days;
                 
-                if ($daysSinceLastPull < 4) {
-                    $remainingDays = 4 - $daysSinceLastPull;
-                    $remainingHours = 24 - $timeDiff->h;
-                    $remainingMinutes = 60 - $timeDiff->i;
-                    $remainingSeconds = 60 - $timeDiff->s;
-                    
-                    // Calculate exact remaining time until next pull is allowed
-                    $nextPullTime = clone $lastPulledTime;
-                    $nextPullTime->add(new DateInterval('P4D'));
+                // Calculate exact next allowed time
+                $nextPullTime = clone $lastPulledTime;
+                $nextPullTime->add(new DateInterval('P' . $cooldownDays . 'D'));
+                
+                if ($currentTime < $nextPullTime) {
                     $timeUntilNextPull = $currentTime->diff($nextPullTime);
                     
-                    Response::error('Pull up cooldown active', 400, [
+                    Response::error('Bump cooldown active', 400, [
                         'cooldownActive' => true,
-                        'daysSinceLastPull' => $daysSinceLastPull,
-                        'remainingDays' => $remainingDays,
+                        'isVip' => $isVip,
+                        'cooldownDays' => $cooldownDays,
                         'lastPulledAt' => $ad['lastPulledAt'],
                         'nextPullAllowedAt' => $nextPullTime->format('Y-m-d H:i:s'),
                         'timeRemaining' => [
@@ -548,16 +547,18 @@ class AdController {
             if ($result) {
                 Response::json([
                     'success' => true,
-                    'message' => 'Ad pulled up successfully',
+                    'message' => 'Listing bumped successfully',
                     'lastPulledAt' => $currentDateTime,
-                    'nextPullAllowedAt' => date('Y-m-d H:i:s', strtotime('+4 days'))
+                    'isVip' => $isVip,
+                    'cooldownDays' => $cooldownDays,
+                    'nextPullAllowedAt' => date('Y-m-d H:i:s', strtotime('+' . $cooldownDays . ' days'))
                 ]);
             } else {
-                Response::error('Failed to pull up ad', 500);
+                Response::error('Failed to bump listing', 500);
             }
             
         } catch (Exception $e) {
-            error_log('Pull up ad error: ' . $e->getMessage());
+            error_log('Bump ad error: ' . $e->getMessage());
             Response::error('Server error: ' . $e->getMessage(), 500);
         }
     }

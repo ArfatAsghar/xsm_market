@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getUserAds, getUserAdsAlternative, deleteAd, togglePinAd, pullUpAd } from '../services/ads';
 import { useAuth } from '../context/useAuth';
 import { useNotifications } from '../context/NotificationContext';
-import { Star, Eye, Trash2, Edit, AlertCircle, TrendingUp, Pin, DollarSign, CheckCircle, XCircle, Clock, Crown } from 'lucide-react';
+import { Star, Eye, Trash2, Edit, AlertCircle, Zap, Pin, DollarSign, CheckCircle, XCircle, Clock, Crown } from 'lucide-react';
 import EditListingModal from './EditListingModal';
 import { encodeId } from '@/utils/idEncoder';
 import { getImageUrl } from '@/config/api';
@@ -115,7 +115,14 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
     fetchUserAds();
   }, [user]);
 
-  // Calculate pull cooldowns for all ads
+  // Detect if user is VIP
+  const isUserVip = Boolean(
+    (user as any)?.isVip ||
+    ((user as any)?.vipUntil && new Date((user as any).vipUntil) > new Date())
+  );
+  const bumpCooldownDays = isUserVip ? 3 : 4;
+
+  // Calculate bump cooldowns for all ads
   useEffect(() => {
     const calculateCooldowns = () => {
       const cooldowns: Record<number, {
@@ -128,18 +135,19 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
         };
       }> = {};
 
-      ads.forEach(ad => {
-        // Only check cooldown for ads that have been pulled before
-        if (ad.lastPulledAt) {
-          const lastPulledAt = new Date(ad.lastPulledAt);
-          const now = new Date();
-          const timeDiff = now.getTime() - lastPulledAt.getTime();
-          const fourDaysInMs = 4 * 24 * 60 * 60 * 1000;
+      const cooldownMs = bumpCooldownDays * 24 * 60 * 60 * 1000;
 
-          if (timeDiff >= fourDaysInMs) {
+      ads.forEach(ad => {
+        // Only check cooldown for ads that have been bumped before
+        if (ad.lastPulledAt) {
+          const lastBumpedAt = new Date(ad.lastPulledAt);
+          const now = new Date();
+          const timeDiff = now.getTime() - lastBumpedAt.getTime();
+
+          if (timeDiff >= cooldownMs) {
             cooldowns[ad.id] = { canPull: true };
           } else {
-            const remainingMs = fourDaysInMs - timeDiff;
+            const remainingMs = cooldownMs - timeDiff;
             const days = Math.floor(remainingMs / (24 * 60 * 60 * 1000));
             const hours = Math.floor((remainingMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
             const minutes = Math.floor((remainingMs % (60 * 60 * 1000)) / (60 * 1000));
@@ -151,7 +159,7 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
             };
           }
         } else {
-          // Ads that have never been pulled can always be pulled
+          // Ads that have never been bumped can always be bumped
           cooldowns[ad.id] = { canPull: true };
         }
       });
@@ -165,7 +173,7 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
       const interval = setInterval(calculateCooldowns, 1000);
       return () => clearInterval(interval);
     }
-  }, [ads]);
+  }, [ads, bumpCooldownDays]);
 
   const fetchUserAds = async () => {
     try {
@@ -267,24 +275,24 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
     const ad = ads.find(a => a.id === id);
     if (!ad) return;
     
-    // Check if the ad can be pulled up
+    // Check if the ad can be bumped
     const cooldown = pullCooldowns[id];
     
     if (cooldown && cooldown.canPull) {
-      // Can pull up - do it directly
+      // Can bump - do it directly
       try {
         const result = await pullUpAd(id);
         if (result.success) {
           // Show success notification
-          showSuccess('Listing Pulled Up!', 'Your listing has been pulled up successfully!');
+          showSuccess('Listing Bumped! 🚀', 'Your listing has been moved to the top of the marketplace!');
           // Refresh the ads list to show the updated position
           await fetchUserAds();
         }
       } catch (err: any) {
-        showError('Error', err.message || 'Failed to pull up listing');
+        showError('Bump Failed', err.message || 'Failed to bump listing');
       }
     } else {
-      // Cannot pull up - show modal with countdown
+      // Cannot bump yet - show modal with countdown
       setSelectedAdForPull(ad);
       setShowPullModal(true);
     }
@@ -628,13 +636,23 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                         >
                           <Trash2 className="w-3 h-3 text-white" />
                         </button>
-                        <button
-                          onClick={() => handlePullUp(ad.id)}
-                          className="w-6 h-6 bg-green-500 hover:bg-green-600 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
-                          title="Pull Up"
-                        >
-                          <TrendingUp className="w-3 h-3 text-white" />
-                        </button>
+                        <div className="relative group flex-shrink-0">
+                          <button
+                            onClick={() => handlePullUp(ad.id)}
+                            className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
+                              isUserVip
+                                ? 'bg-gradient-to-br from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300'
+                                : 'bg-blue-500 hover:bg-blue-600'
+                            }`}
+                            title={isUserVip ? `Bump (VIP: ${bumpCooldownDays}-day cooldown)` : `Bump (${bumpCooldownDays}-day cooldown)`}
+                          >
+                            <Zap className="w-3 h-3 text-white" />
+                          </button>
+                          {/* VIP Bump badge */}
+                          {isUserVip && (
+                            <span className="absolute -top-1.5 -right-1.5 bg-amber-400 text-black text-[7px] font-black rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none">3</span>
+                          )}
+                        </div>
                         <button
                           onClick={() => handlePin(ad.id)}
                           className={`w-6 h-6 ${ad.pinned ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-orange-500 hover:bg-orange-600'} rounded-full flex items-center justify-center transition-colors flex-shrink-0`}
@@ -662,71 +680,86 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
         />
       )}
 
-      {/* Pull Up Modal */}
+      {/* Bump Modal */}
       {showPullModal && selectedAdForPull && (
-        <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-          <div className="bg-gray-900 rounded-lg p-6 max-w-md w-full mx-4 border border-gray-700">
-            <div className="text-center">
-              <div className="mb-4">
-                <TrendingUp className="w-16 h-16 text-xsm-yellow mx-auto mb-4" />
-                <h3 className="text-lg font-semibold text-white mb-2">
-                  Pull Up Listing
-                </h3>
-                <p className="text-sm text-gray-300 mb-4">
-                  "{selectedAdForPull.title}"
-                </p>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-xsm-dark-gray border border-xsm-medium-gray/50 rounded-2xl max-w-md w-full shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-950/50 to-xsm-dark-gray p-5 border-b border-xsm-medium-gray/40 flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                isUserVip
+                  ? 'bg-gradient-to-br from-amber-500/30 to-yellow-400/20 border border-amber-500/40'
+                  : 'bg-blue-500/20 border border-blue-500/30'
+              }`}>
+                <Zap className={`w-5 h-5 ${isUserVip ? 'text-amber-400' : 'text-blue-400'}`} />
               </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Bump Listing 🚀</h3>
+                <p className="text-xs text-xsm-light-gray truncate max-w-[260px]">{selectedAdForPull.title}</p>
+              </div>
+            </div>
 
-              {/* Check if ad can be pulled or is on cooldown */}
+            <div className="p-5">
+              {/* VIP benefit callout */}
+              {isUserVip && (
+                <div className="mb-4 p-3 rounded-xl bg-gradient-to-r from-amber-950/60 to-xsm-dark-gray border border-amber-500/40 flex items-center gap-2">
+                  <Crown className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                  <p className="text-amber-300 text-xs font-medium">
+                    <span className="font-bold">VIP Benefit:</span> Your bump cooldown is <span className="text-amber-400 font-black">3 days</span> instead of 4
+                  </p>
+                </div>
+              )}
+
+              {/* Check if ad can be bumped or is on cooldown */}
               {pullCooldowns[selectedAdForPull.id] && !pullCooldowns[selectedAdForPull.id].canPull ? (
                 /* Show countdown if on cooldown */
-                <div className="mb-6">
-                  <div className="flex items-center justify-center space-x-2 text-sm text-gray-300 mb-3">
-                    <Clock className="w-5 h-5 text-red-400" />
-                    <span className="font-medium">Pull-up available in:</span>
+                <div>
+                  <div className="flex items-center gap-2 text-sm text-gray-300 mb-3">
+                    <Clock className="w-4 h-4 text-red-400" />
+                    <span className="font-medium">Bump available in:</span>
                   </div>
-                  <div className="flex items-center justify-center space-x-4 text-sm font-mono bg-gray-800 rounded-lg p-4 border border-gray-600">
+                  <div className="flex items-center justify-center gap-3 font-mono bg-xsm-black/60 rounded-xl p-4 border border-xsm-medium-gray/30 mb-3">
                     <div className="text-center">
                       <div className="text-2xl font-bold text-red-400">
                         {pullCooldowns[selectedAdForPull.id].remainingTime?.days || 0}
                       </div>
-                      <div className="text-gray-400 text-xs">days</div>
+                      <div className="text-gray-500 text-xs">days</div>
                     </div>
-                    <div className="text-gray-500 text-xl">:</div>
+                    <div className="text-gray-600 text-xl">:</div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-orange-400">
                         {String(pullCooldowns[selectedAdForPull.id].remainingTime?.hours || 0).padStart(2, '0')}
                       </div>
-                      <div className="text-gray-400 text-xs">hrs</div>
+                      <div className="text-gray-500 text-xs">hrs</div>
                     </div>
-                    <div className="text-gray-500 text-xl">:</div>
+                    <div className="text-gray-600 text-xl">:</div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-yellow-400">
                         {String(pullCooldowns[selectedAdForPull.id].remainingTime?.minutes || 0).padStart(2, '0')}
                       </div>
-                      <div className="text-gray-400 text-xs">min</div>
+                      <div className="text-gray-500 text-xs">min</div>
                     </div>
-                    <div className="text-gray-500 text-xl">:</div>
+                    <div className="text-gray-600 text-xl">:</div>
                     <div className="text-center">
                       <div className="text-2xl font-bold text-green-400">
                         {String(pullCooldowns[selectedAdForPull.id].remainingTime?.seconds || 0).padStart(2, '0')}
                       </div>
-                      <div className="text-gray-400 text-xs">sec</div>
+                      <div className="text-gray-500 text-xs">sec</div>
                     </div>
                   </div>
-                  <p className="text-xs text-gray-400 mt-3">
-                    Listings can only be pulled up every 4 days
+                  <p className="text-xs text-gray-500 text-center">
+                    You can bump this listing again after {bumpCooldownDays} days.
                   </p>
                 </div>
               ) : (
-                /* Show confirmation if can be pulled */
-                <div className="mb-6">
-                  <p className="text-gray-300">
-                    Are you sure you want to pull up this listing? It will appear at the top of the marketplace.
+                /* Show confirmation if can be bumped */
+                <div>
+                  <p className="text-gray-300 text-sm mb-2">
+                    Bumping will move your listing to the top of the marketplace so more buyers see it first.
                   </p>
                   {selectedAdForPull.lastPulledAt && (
-                    <p className="text-xs text-gray-400 mt-2">
-                      Last pulled: {new Date(selectedAdForPull.lastPulledAt).toLocaleDateString()}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Last bumped: {new Date(selectedAdForPull.lastPulledAt).toLocaleDateString()}
                     </p>
                   )}
                 </div>

@@ -11,7 +11,7 @@ class Message {
         $data['createdAt'] = date('Y-m-d H:i:s');
         $data['updatedAt'] = date('Y-m-d H:i:s');
         
-        $fields = ['content', 'senderId', 'chatId', 'messageType', 'replyToId', 'isRead', 'createdAt', 'updatedAt'];
+        $fields = ['content', 'senderId', 'chatId', 'messageType', 'replyToId', 'isRead', 'status', 'createdAt', 'updatedAt'];
         $insertFields = [];
         $insertValues = [];
         $params = [];
@@ -36,6 +36,13 @@ class Message {
             $insertValues[] = ':isRead';
             $params[':isRead'] = 0;
         }
+
+        // Default status = 'sent' (Revision 14)
+        if (!isset($data['status'])) {
+            $insertFields[] = 'status';
+            $insertValues[] = ':status';
+            $params[':status'] = 'sent';
+        }
         
         $sql = "INSERT INTO " . self::$table . " (" . implode(', ', $insertFields) . ") VALUES (" . implode(', ', $insertValues) . ")";
         
@@ -43,6 +50,52 @@ class Message {
         $stmt->execute($params);
         
         return $pdo->lastInsertId();
+    }
+
+    // Mark message(s) in a chat as read by a user (Revision 14)
+    public static function markChatRead($chatId, $readerId) {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("
+            UPDATE messages 
+            SET isRead = 1, status = 'read', readAt = NOW()
+            WHERE chatId = ? AND senderId != ? AND (isRead = 0 OR status = 'sent' OR status = 'delivered')
+        ");
+        $stmt->execute([$chatId, $readerId]);
+        return $stmt->rowCount();
+    }
+
+    // Mark messages as delivered for all messages in a chat sent to a user
+    public static function markDelivered($chatId, $recipientId) {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("
+            UPDATE messages 
+            SET status = 'delivered'
+            WHERE chatId = ? AND senderId != ? AND status = 'sent'
+        ");
+        $stmt->execute([$chatId, $recipientId]);
+        return $stmt->rowCount();
+    }
+
+    // Mark a message as viewed by website agent (Revision 14)
+    public static function markAgentViewed($messageId) {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("UPDATE messages SET status = 'agent_viewed' WHERE id = ?");
+        $stmt->execute([$messageId]);
+        return $stmt->rowCount();
+    }
+
+    // Get unread count for a user across all their chats (Revision 7)
+    public static function getUnreadCountForUser($userId) {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("
+            SELECT COUNT(*) as unread_count
+            FROM messages m
+            INNER JOIN chat_participants cp ON m.chatId = cp.chatId
+            WHERE cp.userId = ? AND cp.isActive = 1 AND m.senderId != ? AND m.isRead = 0
+        ");
+        $stmt->execute([$userId, $userId]);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return (int)($row['unread_count'] ?? 0);
     }
     
     public static function findById($id) {

@@ -793,30 +793,54 @@ const Chat: React.FC = () => {
           <p className="text-xl text-white">
             Communicate safely with buyers and sellers through our secure messaging system
           </p>
-        </div>
-
-        {/* Restricted Account Alert Banner for Banned Users */}
-        {Boolean((user as any)?.isBanned) && (
-          <div className="mb-6 bg-gradient-to-r from-red-950/90 to-slate-900 border border-red-500/50 rounded-xl p-4 text-white shadow-xl flex items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 flex-shrink-0">
-                <Shield className="w-5 h-5" />
+                {/* Restricted Account Alert Banner for Temporarily Banned Users - Revision 12 */}
+        {Boolean((user as any)?.isBanned) && (() => {
+          const banExpires = (user as any)?.banExpires;
+          const banReason = (user as any)?.banReason;
+          const isPermanent = !banExpires;
+          let remainingText = 'Permanent Ban';
+          if (!isPermanent) {
+            const ms = new Date(banExpires).getTime() - Date.now();
+            if (ms > 0) {
+              const days = Math.floor(ms / 86400000);
+              const hours = Math.floor((ms % 86400000) / 3600000);
+              const mins = Math.floor((ms % 3600000) / 60000);
+              if (days > 0) remainingText = `${days}d ${hours}h remaining`;
+              else if (hours > 0) remainingText = `${hours}h ${mins}m remaining`;
+              else remainingText = `${mins}m remaining`;
+            } else {
+              remainingText = 'Ban expiring soon...';
+            }
+          }
+          return (
+            <div className="mb-6 bg-gradient-to-r from-red-950/90 to-slate-900 border border-red-500/50 rounded-xl p-4 text-white shadow-xl flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 flex-shrink-0">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-red-300 text-sm">
+                    {isPermanent ? 'Permanently Banned' : 'Account Temporarily Restricted'}
+                  </h4>
+                  <p className="text-xs text-gray-300">
+                    {banReason && <span className="text-gray-400">Reason: {banReason}. </span>}
+                    {isPermanent
+                      ? 'Direct messaging has been permanently disabled for this account.'
+                      : `Your ban expires in ${remainingText}. Direct messaging is temporarily restricted.`
+                    }
+                  </p>
+                </div>
               </div>
-              <div>
-                <h4 className="font-bold text-red-300 text-sm">Account Restricted</h4>
-                <p className="text-xs text-gray-300">
-                  Direct buyer/seller messaging is disabled for this account. All communications must go through <strong>Official Support & Admins</strong>.
-                </p>
-              </div>
+              <button
+                onClick={handleOpenWebsiteAgent}
+                className="px-4 py-2 bg-xsm-yellow text-black text-xs font-bold rounded-lg hover:bg-yellow-400 transition-colors flex-shrink-0"
+              >
+                Contact Support
+              </button>
             </div>
-            <button
-              onClick={handleOpenWebsiteAgent}
-              className="px-4 py-2 bg-xsm-yellow text-black text-xs font-bold rounded-lg hover:bg-yellow-400 transition-colors flex-shrink-0"
-            >
-              Contact Support
-            </button>
-          </div>
-        )}
+          );
+        })()}
+        </div>
 
         <div className="bg-xsm-dark-gray rounded-lg overflow-hidden" style={{ height: '600px' }}>
           <div className="flex h-full">
@@ -1139,8 +1163,21 @@ const Chat: React.FC = () => {
                                 ) : (
                                   <p className="text-sm leading-relaxed">{message.content}</p>
                                 )}
-                                <p className={`text-[10px] mt-1 ${isMyMessage ? 'text-black/50 text-right' : 'text-gray-500 text-right'}`}>
-                                  {formatTime(message.createdAt)}
+                                <p className={`text-[10px] mt-1 flex items-center justify-end gap-0.5 ${isMyMessage ? 'text-black/70' : 'text-gray-400'}`}>
+                                  <span>{formatTime(message.createdAt)}</span>
+                                  {isMyMessage && (() => {
+                                    const st = message.status || (message.isRead ? 'read' : 'sent');
+                                    if (st === 'agent_viewed') {
+                                      return <span className="ml-1 font-extrabold text-cyan-600" title="Viewed by Website Agent">✓✓</span>;
+                                    }
+                                    if (st === 'read' || message.isRead) {
+                                      return <span className="ml-1 font-extrabold text-green-700" title="Read">✓✓</span>;
+                                    }
+                                    if (st === 'delivered') {
+                                      return <span className="ml-1 font-bold text-black/40" title="Delivered">✓✓</span>;
+                                    }
+                                    return <span className="ml-1 font-bold text-black/40" title="Sent">✓</span>;
+                                  })()}
                                 </p>
                               </div>
                             </div>
@@ -1159,20 +1196,41 @@ const Chat: React.FC = () => {
                   </div>
 
                   {/* Message Input or Restriction Notice */}
-                  {Boolean((user as any)?.isBanned) && !(
+                    {Boolean((user as any)?.isBanned) && !(
                     selectedChat?.type === 'support' ||
                     selectedChat?.participants?.some(p => (p.user as any)?.isAdmin || ['admin', 'manager', 'agent'].includes((p.user as any)?.role || ''))
                   ) ? (
-                      <div className="p-4 bg-red-950/50 border-t border-red-500/40 text-center text-xs text-red-300 flex items-center justify-center gap-2">
-                        <Shield className="w-4 h-4 text-red-400 flex-shrink-0" />
-                        <span>Direct messaging with users is restricted on this account.</span>
-                        <button
-                          onClick={handleOpenWebsiteAgent}
-                          className="underline font-bold text-xsm-yellow hover:text-yellow-400 ml-1"
-                        >
-                          Contact Official Support
-                        </button>
-                      </div>
+                      (() => {
+                        const banExpires = (user as any)?.banExpires;
+                        const isPermanent = !banExpires;
+                        let remainingText = 'indefinitely';
+                        if (!isPermanent) {
+                          const ms = new Date(banExpires).getTime() - Date.now();
+                          if (ms > 0) {
+                            const days = Math.floor(ms / 86400000);
+                            const hours = Math.floor((ms % 86400000) / 3600000);
+                            const mins = Math.floor((ms % 3600000) / 60000);
+                            if (days > 0) remainingText = `${days} day${days > 1 ? 's' : ''}`;
+                            else if (hours > 0) remainingText = `${hours} hour${hours > 1 ? 's' : ''}`;
+                            else remainingText = `${mins} minute${mins > 1 ? 's' : ''}`;
+                          } else {
+                            remainingText = 'a few moments';
+                          }
+                        }
+                        return (
+                          <div className="p-4 bg-red-950/50 border-t border-red-500/40 text-center">
+                            <div className="flex items-center justify-center gap-2 text-xs text-red-300 flex-wrap">
+                              <Shield className="w-4 h-4 text-red-400 flex-shrink-0" />
+                              <span>
+                                {isPermanent
+                                  ? 'Your account has been permanently banned. Messaging is disabled.'
+                                  : `You cannot send messages while your temporary ban is active. Your ban will expire in ${remainingText}, after which you will be able to send messages again.`
+                                }
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()
                     ) : (
                       <div className="p-4 border-t border-xsm-medium-gray flex items-center space-x-2">
                         {/* Image Button */}

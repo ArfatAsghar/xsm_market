@@ -568,7 +568,11 @@ const AdDetails: React.FC = () => {
       if (response.ok) {
         showSuccess('Listing deleted successfully');
         setShowDeleteModal(false);
-        navigate('/');
+        if (user?.username) {
+          navigate(`/u/${user.username}`);
+        } else {
+          navigate('/profile');
+        }
       } else {
         throw new Error('Failed to delete listing');
       }

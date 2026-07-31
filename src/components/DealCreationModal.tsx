@@ -229,8 +229,8 @@ Deal Status: Waiting for seller review`);
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-xsm-dark-gray rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-xsm-gray">
-          <h2 className="text-2xl font-bold text-white">Create a Deal</h2>
+        <div className="flex items-center justify-between p-4 border-b border-xsm-gray">
+          <h2 className="text-xl font-bold text-white">Create a Deal</h2>
           <button
             onClick={() => {
               resetModal();
@@ -238,74 +238,74 @@ Deal Status: Waiting for seller review`);
             }}
             className="text-white hover:text-xsm-yellow transition-colors"
           >
-            <X className="w-6 h-6" />
+            <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-5">
           {step === 'fee-selection' && (
             <>
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-2xl font-bold text-white">Escrow Service Fee</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-white">Escrow Service Fee</h2>
                 <button
                   type="button"
                   onClick={() => setShowInfo(true)}
-                  className="text-gray-400 hover:text-xsm-yellow p-1.5 transition-colors flex items-center gap-1.5 text-sm font-medium border border-gray-700 rounded-lg bg-gray-800/40"
+                  className="text-gray-400 hover:text-xsm-yellow p-1 transition-colors flex items-center gap-1 text-xs font-medium border border-gray-700 rounded-lg bg-gray-800/40"
                   title="View Discount Fee Programs"
                 >
-                  <HelpCircle className="w-4.5 h-4.5" />
+                  <HelpCircle className="w-4 h-4" />
                   <span>Discount Tiers</span>
                 </button>
               </div>
               
-              <div className="bg-xsm-gray rounded-lg p-6 mb-6">
-                <h3 className="text-lg font-semibold text-white mb-4">Standard Fee Structure</h3>
-                <table className="w-full text-left text-sm text-xsm-light-gray border-collapse">
+              <div className="bg-xsm-gray rounded-lg p-4 mb-4">
+                <h3 className="text-sm font-semibold text-white mb-2">Standard Fee Structure</h3>
+                <table className="w-full text-left text-xs text-xsm-light-gray border-collapse">
                   <thead>
                     <tr className="border-b border-gray-700">
-                      <th className="py-2 text-white font-semibold">Deal Amount</th>
-                      <th className="py-2 text-white font-semibold">Fee</th>
+                      <th className="py-1.5 text-white font-semibold">Deal Amount</th>
+                      <th className="py-1.5 text-white font-semibold">Fee</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr className="border-b border-gray-800">
-                      <td className="py-3 font-medium text-white">$1 – $50</td>
-                      <td className="py-3 text-xsm-yellow font-bold">Minimum $2</td>
+                      <td className="py-1.5 font-medium text-white">$1 – $50</td>
+                      <td className="py-1.5 text-xsm-yellow font-bold">Minimum $2</td>
                     </tr>
                     <tr className="border-b border-gray-800">
-                      <td className="py-3 font-medium text-white">$50 – $100</td>
-                      <td className="py-3 text-xsm-yellow font-bold">5%</td>
+                      <td className="py-1.5 font-medium text-white">$50 – $100</td>
+                      <td className="py-1.5 text-xsm-yellow font-bold">5%</td>
                     </tr>
                     <tr>
-                      <td className="py-3 font-medium text-white">Above $100</td>
-                      <td className="py-3 text-xsm-yellow font-bold">4%</td>
+                      <td className="py-1.5 font-medium text-white">Above $100</td>
+                      <td className="py-1.5 text-xsm-yellow font-bold">4%</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
 
               {/* Calculated Fee Summary */}
-              <div className="bg-gray-800/80 border border-gray-700 rounded-lg p-6 mb-8 text-center">
-                <p className="text-gray-400 text-xs mb-1 uppercase tracking-wider font-semibold">Your Calculated Service Fee</p>
-                <p className="text-4xl font-extrabold text-xsm-yellow mb-2">${escrowFee.toFixed(2)}</p>
+              <div className="bg-gray-800/80 border border-gray-700 rounded-lg p-4 mb-4 text-center">
+                <p className="text-gray-400 text-[11px] mb-0.5 uppercase tracking-wider font-semibold">Your Calculated Service Fee</p>
+                <p className="text-3xl font-extrabold text-xsm-yellow mb-1">${escrowFee.toFixed(2)}</p>
                 <p className="text-xsm-light-gray text-xs leading-relaxed">
                   Based on the channel price of <span className="text-white font-semibold">${numericPrice.toFixed(2)}</span>
                 </p>
                 {/* Active tier badge */}
-                <div className={`mt-3 inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold ${activeTier.color} bg-white/5 border border-white/10`}>
+                <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${activeTier.color} bg-white/5 border border-white/10`}>
                   {activeTier.icon && <span>{activeTier.icon}</span>}
                   <span>{activeTier.label}</span>
                 </div>
-                <div className="mt-4 pt-3 border-t border-gray-700 flex justify-between items-center text-sm px-4">
+                <div className="mt-3 pt-2.5 border-t border-gray-700 flex justify-between items-center text-sm px-2">
                   <span className="text-xsm-light-gray font-medium">Total with Fee:</span>
-                  <span className="text-white font-bold text-lg">${(numericPrice + escrowFee).toFixed(2)}</span>
+                  <span className="text-white font-bold text-base">${(numericPrice + escrowFee).toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Continue Button */}
               <button
                 onClick={handleFeeSelection}
-                className="w-full bg-xsm-yellow text-black font-bold py-3 rounded-lg hover:bg-yellow-400 transition-colors"
+                className="w-full bg-xsm-yellow text-black font-bold py-2.5 rounded-lg hover:bg-yellow-400 transition-colors text-sm"
               >
                 Continue to Payment Methods
               </button>

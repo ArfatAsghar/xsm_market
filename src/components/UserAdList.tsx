@@ -258,41 +258,38 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
 
   const confirmDelete = async () => {
     if (!selectedAdForDelete) return;
+    const deletedId = selectedAdForDelete.id;
 
     try {
-      await deleteAd(selectedAdForDelete.id);
-      await fetchUserAds(); // Refresh the list
+      await deleteAd(deletedId);
+      // Remove deleted ad instantly from state
+      setAds(prevAds => prevAds.filter(ad => ad.id !== deletedId));
       setShowDeleteModal(false);
       setSelectedAdForDelete(null);
-      showSuccess('Listing Deleted!', 'Your listing has been deleted successfully!');
+      showSuccess('Listing Deleted! 🗑️', 'Your listing card has been removed instantly.');
     } catch (err: any) {
       showError('Error', err.message || 'Failed to delete ad');
     }
   };
 
   const handlePullUp = async (id: number) => {
-    // Find the ad
     const ad = ads.find(a => a.id === id);
     if (!ad) return;
     
-    // Check if the ad can be bumped
     const cooldown = pullCooldowns[id];
     
     if (cooldown && cooldown.canPull) {
-      // Can bump - do it directly
       try {
         const result = await pullUpAd(id);
         if (result.success) {
-          // Show success notification
           showSuccess('Listing Bumped! 🚀', 'Your listing has been moved to the top of the marketplace!');
-          // Refresh the ads list to show the updated position
-          await fetchUserAds();
+          const nowStr = new Date().toISOString();
+          setAds(prevAds => prevAds.map(item => item.id === id ? { ...item, lastPulledAt: nowStr } : item));
         }
       } catch (err: any) {
         showError('Bump Failed', err.message || 'Failed to bump listing');
       }
     } else {
-      // Cannot bump yet - show modal with countdown
       setSelectedAdForPull(ad);
       setShowPullModal(true);
     }
@@ -304,13 +301,13 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
     try {
       const result = await pullUpAd(selectedAdForPull.id);
       if (result.success) {
-        // Refresh the ads list to show the updated position
-        await fetchUserAds();
+        const nowStr = new Date().toISOString();
+        setAds(prevAds => prevAds.map(item => item.id === selectedAdForPull.id ? { ...item, lastPulledAt: nowStr } : item));
+        showSuccess('Listing Bumped! 🚀', 'Your listing has been moved to the top of the marketplace!');
         setShowPullModal(false);
         setSelectedAdForPull(null);
       }
     } catch (err: any) {
-      // Keep modal open to show error
       console.error('Pull up error:', err);
     }
   };

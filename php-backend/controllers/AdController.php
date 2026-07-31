@@ -105,6 +105,19 @@ class AdController {
             $detectedPlatform = 'tiktok';
         }
         
+        // Check for existing active listing for this channel URL
+        $existingAd = Ad::findActiveByChannelUrl($channelUrl);
+        if ($existingAd) {
+            if ((int)$existingAd['userId'] === (int)$user['id']) {
+                Response::error('This channel is already listed in your profile.', 400);
+                return;
+            } else {
+                // Channel is listed by another user — transfer ownership upon new listing creation
+                Ad::delete($existingAd['id']);
+                error_log("Transferred listing ownership for {$channelUrl}. Previous listing #{$existingAd['id']} deleted.");
+            }
+        }
+        
         try {
             // Prepare data for Ad::create - exact match to Node.js
             $adData = [

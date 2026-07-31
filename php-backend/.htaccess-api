@@ -1,0 +1,8 @@
+RewriteEngine On
+
+# Serve real files directly (check.php, db-setup.php, route-test.php, etc)
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^ - [L]
+
+# Route all other requests to index.php
+RewriteRule ^ index.php [QSA,L]

@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import ChannelCard from '../components/ChannelCard';
 import AdList from '../components/AdList';
 import AuthWidget from '../components/AuthWidget';
-import { TrendingUp, Zap, Shield, Search, Check, Sliders } from 'lucide-react';
+import { TrendingUp, Zap, Shield, Search, Check, Sliders, Bell, X } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useToast } from "@/components/ui/use-toast";
 import { getAllAds } from '../services/ads';
 import { generateAdSlug } from '@/utils/idEncoder';
+
+const API_URL = import.meta.env.VITE_API_URL || 'https://xsmmarket.com/api';
 
 interface ChannelData {
   id: string;
@@ -74,6 +76,20 @@ const Home: React.FC<HomeProps> = () => {
 
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const [updates, setUpdates] = useState<any[]>([]);
+  const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API_URL}/updates`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.updates)) {
+          setUpdates(data.updates);
+        }
+      })
+      .catch(err => console.warn('Failed to fetch website updates:', err));
   }, []);
   
   // Category and type options
@@ -248,16 +264,37 @@ const Home: React.FC<HomeProps> = () => {
         <div className="flex-grow">
           {/* Search & Filter Section */}
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 mt-10">
-            <div className="bg-xsm-dark-gray rounded-lg p-6 mb-8 shadow-lg border border-xsm-medium-gray/30 relative overflow-hidden">
+            {/* Website Update News Ticker Bar per Revision 28 */}
+            {updates.length > 0 && (
+              <div 
+                onClick={() => setShowUpdatesModal(true)}
+                className="bg-gradient-to-r from-amber-950/80 via-xsm-black to-amber-950/80 border border-xsm-yellow/40 rounded-xl px-4 py-2.5 flex items-center gap-3 cursor-pointer hover:border-xsm-yellow transition-all shadow-md group mb-6"
+              >
+                <div className="flex items-center gap-1.5 bg-xsm-yellow text-black text-xs font-bold px-2.5 py-1 rounded-full shrink-0 uppercase tracking-wider shadow">
+                  <Bell className="w-3.5 h-3.5" />
+                  <span>Website Update</span>
+                </div>
+                <div className="overflow-hidden flex-1 relative">
+                  <p className="text-white text-xs sm:text-sm font-medium truncate group-hover:text-xsm-yellow transition-colors">
+                    <strong className="text-xsm-yellow">{updates[0].title}:</strong> {updates[0].description}
+                  </p>
+                </div>
+                <span className="text-xs text-xsm-yellow font-semibold underline shrink-0 hidden sm:inline">
+                  View All Announcements ({updates.length}) →
+                </span>
+              </div>
+            )}
+
+            <div className="bg-xsm-dark-gray rounded-xl p-4 sm:p-5 mb-6 shadow-lg border border-xsm-medium-gray/30 relative overflow-hidden">
             {/* Fade gradient effect for search section */}
             <div className="absolute inset-0 bg-gradient-radial from-xsm-yellow/10 via-xsm-dark-gray/80 to-xsm-dark-gray pointer-events-none"></div>
             
             <div className="relative z-10">
-              <div className="flex items-center justify-between mb-4">
+              <div className={`flex items-center justify-between ${showSearchBar ? 'mb-4' : 'mb-0'}`}>
                 <div className="flex items-center space-x-3">
                   {!showSearchBar ? (
                     <button 
-                      className="w-11 h-11 p-2.5 rounded-xl bg-gradient-to-r from-yellow-400 via-xsm-yellow to-amber-500 text-black shadow-md hover:brightness-110 border border-yellow-300/40 flex items-center justify-center transition-all shrink-0 cursor-pointer"
+                      className="w-11 h-11 rounded-xl bg-gradient-to-r from-yellow-400 via-xsm-yellow to-amber-500 text-black shadow-md hover:brightness-110 border border-yellow-300/40 flex items-center justify-center transition-all shrink-0 cursor-pointer"
                       onClick={() => setShowSearchBar(true)}
                       title="Show Search"
                     >
@@ -524,69 +561,38 @@ const Home: React.FC<HomeProps> = () => {
         )}
         </div>
 
-        {/* Home Marketing Section (above global footer) */}
-        <footer className="bg-gradient-to-r from-xsm-black via-xsm-dark-gray to-xsm-black py-16 pb-8 mt-auto border-t border-xsm-medium-gray/30 relative w-full">
-          
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            {/* Hero Section */}
-            <div className="text-center mb-12">
-              <div className="space-y-8 mb-12">
-                {/* Main title with gradient effect */}
-                <div className="relative">
-                  <div className="absolute inset-0 bg-gradient-radial from-xsm-yellow/20 via-transparent to-transparent opacity-75 blur-xl"></div>
-                  <h1 className="text-2xl md:text-3xl lg:text-4xl font-bold text-white relative z-10 tracking-tight">
-                    XSM-Market is a versatile platform for secure social media account transactions
-                  </h1>
-                </div>
-
-                {/* Main description with gradient background */}
-                <div className="relative max-w-3xl mx-auto">
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-xsm-yellow/5 to-transparent"></div>
-                  <p className="text-base md:text-lg text-xsm-light-gray py-4 px-6 relative z-10">
-                    XSM-Market is your trusted platform for securely making deals between sellers and buyers of all kinds of social media accounts.
-                  </p>
-                </div>
-
-                {/* Buyer & Seller Benefits */}
-                <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-                  <div className="bg-xsm-black/50 p-6 rounded-lg border border-xsm-medium-gray/30">
-                    <h3 className="text-xl font-medium text-xsm-yellow mb-3">For Buyers</h3>
-                    <p className="text-white">
-                      We guarantee the transfer of your new channel to you or your money back. Our website agent service ensures your investment is protected.
-                    </p>
-                  </div>
-                  <div className="bg-xsm-black/50 p-6 rounded-lg border border-xsm-medium-gray/30">
-                    <h3 className="text-xl font-medium text-xsm-yellow mb-3">For Sellers</h3>
-                    <p className="text-white">
-                      You can be sure that you either get your agreed upon payment, or your channel will be returned to you. Our platform ensures secure transactions.
-                    </p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Features Section - Simple Row */}
-              <div className="flex flex-wrap justify-center gap-8 text-sm mt-12">
-                <div className="flex items-center space-x-2 text-white">
-                  <Shield className="w-5 h-5 text-xsm-yellow" />
-                  <span>Secure Website Agent</span>
-                </div>
-                <div className="flex items-center space-x-2 text-white">
-                  <TrendingUp className="w-5 h-5 text-xsm-yellow" />
-                  <span>Verified Growth</span>
-                </div>
-                <div className="flex items-center space-x-2 text-white">
-                  <Zap className="w-5 h-5 text-xsm-yellow" />
-                  <span>Instant Transfers</span>
-                </div>
-              </div>
-            </div>
-            
-            {/* Supported Platforms section removed as requested */}
-            
-            {/* No navigation links or copyright here - those are in the global footer */}
-          </div>
-        </footer>
+        {/* Home Marketing Section removed per Revision 33 */}
       </div>
+
+      {/* Website Updates History Modal per Revision 28 */}
+      {showUpdatesModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-xsm-dark-gray border border-xsm-medium-gray/40 rounded-2xl max-w-2xl w-full p-6 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-4 border-b border-xsm-medium-gray/30 mb-6">
+              <div className="flex items-center gap-2">
+                <Bell className="w-5 h-5 text-xsm-yellow" />
+                <h2 className="text-xl font-bold text-white">Website Announcement History</h2>
+              </div>
+              <button onClick={() => setShowUpdatesModal(false)} className="text-xsm-light-gray hover:text-white p-1">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              {updates.map((update) => (
+                <div key={update.id} className="p-4 bg-xsm-black/60 border border-xsm-medium-gray/20 rounded-xl">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <h3 className="text-white font-bold text-base">{update.title}</h3>
+                    <span className="text-xs text-xsm-light-gray">
+                      {new Date(update.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                    </span>
+                  </div>
+                  <p className="text-xsm-light-gray text-xs sm:text-sm leading-relaxed">{update.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 };

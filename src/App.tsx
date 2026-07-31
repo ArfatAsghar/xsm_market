@@ -33,13 +33,42 @@ import Contact from './pages/Contact';
 import SellerDeals from './components/SellerDeals';
 import BuyerDeals from './components/BuyerDeals';
 import AdDetails from './pages/AdDetails';
-import { getBanData, handleBanResponse, BanData, clearBanData } from '@/services/auth';
+import { getBanData, handleBanResponse, BanData, clearBanData, API_URL } from '@/services/auth';
 
 // Inner component that has access to AuthContext
 const AppContent: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { isLoggedIn, user, setIsLoggedIn, setUser } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Fetch unread messages count periodically when logged in
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setUnreadCount(0);
+      return;
+    }
+    const fetchUnread = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch(`${API_URL}/chat/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data.unreadCount === 'number') {
+            setUnreadCount(data.unreadCount);
+          }
+        }
+      } catch (e) {
+        // silent catch
+      }
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 15000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   // ── Ban management ──────────────────────────────────────────────────────────
   const [banData, setBanDataState] = useState<BanData | null>(() => getBanData());
@@ -155,63 +184,59 @@ const AppContent: React.FC = () => {
           </Routes>
         </main>
           
-        {/* Floating Chat Button */}
-        <button
-          onClick={() => navigate('/chat')}
-          className="fixed bg-xsm-yellow hover:bg-yellow-500 text-black p-4 rounded-full shadow-lg transition-all duration-300 hover:scale-110 z-[9999] flex items-center justify-center relative"
-          style={{ 
-            bottom: '24px', 
-            right: '24px',
-            position: 'fixed'
-          }}
-          aria-label="Open Chat"
-        >
-          <MessageCircle className="w-6 h-6" />
-          {/* Unread notification indicator */}
-          <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white flex items-center justify-center">
-            <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-          </div>
-        </button>
+        {/* Floating Chat Button — Hidden when on chat page */}
+        {location.pathname !== '/chat' && (
+          <button
+            onClick={() => navigate('/chat')}
+            className="fixed bg-xsm-yellow hover:bg-yellow-500 text-black p-4 rounded-full shadow-lg transition-all duration-300 hover:scale-110 z-[9999] flex items-center justify-center relative"
+            style={{ 
+              bottom: '24px', 
+              right: '24px',
+              position: 'fixed'
+            }}
+            aria-label="Open Chat"
+          >
+            <MessageCircle className="w-6 h-6" />
+            {/* Unread notification badge count */}
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center shadow-lg border-2 border-xsm-black animate-pulse">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            )}
+          </button>
+        )}
       </ErrorBoundary>
 
-      {/* Footer - Simplified design */}
-      <footer className="bg-xsm-black border-t border-xsm-medium-gray/30 py-4">
+      {/* Footer - Aligned layout per Revision 32 */}
+      <footer className="bg-xsm-black border-t border-xsm-medium-gray/30 py-6">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Logo and Button Row */}
-          <div className="flex justify-between items-center mb-3">
-            {/* Logo with glow effect (left) */}
-            <div className="group relative">
-              {/* Logo highlight background with yellow fade in middle */}
-              <div className="absolute -inset-4 bg-gradient-radial from-xsm-yellow/30 via-xsm-medium-gray/30 to-transparent rounded-full blur-lg opacity-80 group-hover:opacity-100 transition-all duration-300 group-hover:from-xsm-yellow/50"></div>
-              {/* Extra glow effect on hover */}
-              <div className="absolute -inset-2 bg-gradient-radial from-xsm-yellow/15 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 animate-pulse"></div>
-              <div className="absolute -inset-6 bg-gradient-radial from-xsm-yellow/5 via-transparent to-transparent rounded-full animate-pulse opacity-70"></div>
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+            {/* Logo and Begin Selling Button (left aligned, indented from left) */}
+            <div className="flex items-center gap-5 pl-2 sm:pl-4">
               <img 
                 src="/images/logo.png" 
                 alt="XSM Market Logo" 
-                className="h-10 md:h-[48px] object-contain relative z-10 drop-shadow-[0_0_4px_rgba(255,208,0,0.5)]"
+                className="h-10 md:h-11 object-contain drop-shadow-[0_0_4px_rgba(255,208,0,0.5)]"
               />
+              <button
+                onClick={() => {navigate('/sell'); window.scrollTo({ top: 0, behavior: 'smooth' });}}
+                className="bg-xsm-yellow text-black px-4 py-2 text-sm font-semibold rounded hover:bg-yellow-500 transition-colors shadow-sm"
+              >
+                Begin Selling
+              </button>
             </div>
             
-            {/* Begin Selling Button (right) */}
-            <button
-              onClick={() => {navigate('/sell'); window.scrollTo({ top: 0, behavior: 'smooth' });}}
-              className="bg-xsm-yellow text-black px-4 py-2 text-sm font-medium rounded hover:bg-yellow-500 transition-colors"
-            >
-              Begin Selling
-            </button>
-          </div>
-          
-          {/* Simple Navigation */}
-          <div className="flex flex-wrap justify-center gap-6 text-sm text-xsm-light-gray">
-            <button onClick={() => {navigate('/about'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">About Us</button>
-            <button onClick={() => {navigate('/contact'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">Contact</button>
-            <button onClick={() => {navigate('/terms'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">Terms of Service</button>
-            <button onClick={() => {navigate('/privacy'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">Privacy Policy</button>
+            {/* Navigation Links (vertically aligned with logo row) */}
+            <div className="flex flex-wrap justify-center items-center gap-6 text-sm font-medium text-xsm-light-gray">
+              <button onClick={() => {navigate('/about'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">About Us</button>
+              <button onClick={() => {navigate('/contact'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">Contact</button>
+              <button onClick={() => {navigate('/terms'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">Terms of Service</button>
+              <button onClick={() => {navigate('/privacy'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">Privacy Policy</button>
+            </div>
           </div>
           
           {/* Copyright */}
-          <p className="mt-3 text-center text-xs text-xsm-medium-gray">
+          <p className="mt-4 pt-4 border-t border-xsm-medium-gray/20 text-center text-xs text-xsm-medium-gray">
             © 2025 XSM Market. All rights reserved.
           </p>
         </div>

@@ -17,13 +17,13 @@ const About: React.FC = () => {
           </p>
         </div>
 
-        {/* Mission Statement */}
+        {/* Mission Statement per Revision 31 */}
         <div className="xsm-card mb-16 text-center">
           <h2 className="text-3xl font-bold text-xsm-yellow mb-6">Our Mission</h2>
           <p className="text-lg text-white leading-relaxed max-w-4xl mx-auto">
-            To revolutionize the digital asset marketplace by providing a secure, transparent, and efficient platform 
-            for YouTube channel trading. We believe in empowering creators to monetize their hard work while helping 
-            investors discover profitable opportunities in the creator economy.
+            To revolutionize the digital asset marketplace by providing a premier, secure, transparent, and efficient platform 
+            for Social Media Asset Trading. We empower creators to realize the true value of their hard work while connecting 
+            investors with high-performing, verified digital assets in a safe trading environment.
           </p>
         </div>
 
@@ -114,7 +114,7 @@ const About: React.FC = () => {
                   </div>
                   <div>
                     <h4 className="text-white font-semibold">Go Live</h4>
-                    <p className="text-xsm-light-gray text-sm">Your channel appears on our marketplace for buyers</p>
+                    <p className="text-xsm-light-gray text-sm">Your Product appears on our marketplace for buyers</p>
                   </div>
                 </div>
                 <div className="flex items-start space-x-4">
@@ -174,28 +174,7 @@ const About: React.FC = () => {
           </div>
         </div>
 
-        {/* Stats */}
-        <div className="mb-16">
-          <h2 className="text-3xl font-bold text-xsm-yellow mb-12 text-center">Our Impact</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <div className="text-center">
-              <div className="text-4xl font-bold text-xsm-yellow mb-2">$2.5M+</div>
-              <div className="text-white font-medium">Total Transactions</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-xsm-yellow mb-2">500+</div>
-              <div className="text-white font-medium">Channels Sold</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-xsm-yellow mb-2">1,200+</div>
-              <div className="text-white font-medium">Happy Users</div>
-            </div>
-            <div className="text-center">
-              <div className="text-4xl font-bold text-xsm-yellow mb-2">99.8%</div>
-              <div className="text-white font-medium">Success Rate</div>
-            </div>
-          </div>
-        </div>
+        {/* Stats — Temporarily hidden per Revision 30 */}
 
         {/* Values */}
         <div className="xsm-card text-center">

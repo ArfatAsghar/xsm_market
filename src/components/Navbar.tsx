@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Menu, X, User, PlusCircle, LogOut, Settings, Heart, Star, MessageSquare, FileText, Crown } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
-import { logout } from '@/services/auth';
+import { logout, API_URL } from '@/services/auth';
 import { isCurrentUserAdmin } from '@/utils/adminConfig';
 import VipSubscriptionModal from './VipSubscriptionModal';
 import AuthWidget from './AuthWidget';
@@ -32,6 +32,32 @@ const Navbar: React.FC<NavbarProps> = () => {
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [showVipModal, setShowVipModal] = useState(false);
   const { isLoggedIn, setIsLoggedIn, user, setUser } = useAuth();
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  // Fetch unread messages count (Revision 7)
+  useEffect(() => {
+    if (!isLoggedIn) return;
+    const fetchUnread = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch(`${API_URL}/chat/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (typeof data.unreadCount === 'number') {
+            setUnreadCount(data.unreadCount);
+          }
+        }
+      } catch (e) {
+        // silent catch
+      }
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 15000);
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   // Helper function to navigate and scroll to top
   const navigateToPage = (page: string) => {
@@ -159,54 +185,53 @@ const Navbar: React.FC<NavbarProps> = () => {
               />
             </div>
 
-            {/* Desktop Navigation on right */}
-            <div className="hidden md:flex items-center space-x-4">
-              {/* Chat Button - only show for logged in users */}
-              {/* Profile Dropdown or Login Button */}
-              {isLoggedIn ? (
-                <div className="flex items-center space-x-3">
-                  {/* Greeting text */}
-                  <span className="text-white text-sm hidden md:block flex items-center gap-1">
-                    Hi, <span className="text-xsm-yellow font-medium">{user?.username || 'User'}</span>
-                    {(user as any)?.isVip && (
-                      <Crown className="w-3.5 h-3.5 text-yellow-400 animate-pulse fill-yellow-400/20" title="VIP Member" />
-                    )}
-                  </span>
-                  
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="flex items-center space-x-2 hover:opacity-80 transition-opacity relative">
-                        <div className={`w-8 h-8 rounded-full overflow-hidden ${
-                          (user as any)?.isVip 
-                            ? 'ring-2 ring-yellow-400 bg-gradient-to-tr from-yellow-500 to-amber-500' 
-                            : 'bg-xsm-yellow'
-                        }`}>
-                          {user?.profilePicture ? (
-                            <img
-                              src={user.profilePicture}
-                              alt={user.username}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <User className="w-5 h-5 text-black m-1.5" />
-                          )}
-                        </div>
-                        {(user as any)?.isVip && (
-                          <div className="absolute -top-1 -right-1 bg-yellow-400 text-black rounded-full p-0.5 shadow-md">
-                            <Crown className="w-2.5 h-2.5 fill-current" />
+              {/* Desktop Navigation on right */}
+              <div className="hidden md:flex items-center space-x-4">
+                {/* Profile Dropdown or Login Button */}
+                {isLoggedIn ? (
+                  <div className="flex items-center space-x-3">
+                    {/* Greeting text */}
+                    <span className="text-white text-sm hidden md:block flex items-center gap-1">
+                      Hi, <span className="text-xsm-yellow font-medium">{user?.username || 'User'}</span>
+                      {(user as any)?.isVip && (
+                        <Crown className="w-3.5 h-3.5 text-yellow-400 animate-pulse fill-yellow-400/20" title="VIP Member" />
+                      )}
+                    </span>
+                    
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="flex items-center space-x-2 hover:opacity-80 transition-opacity relative">
+                          <div className={`w-8 h-8 rounded-full overflow-hidden ${
+                            (user as any)?.isVip 
+                              ? 'ring-2 ring-yellow-400 bg-gradient-to-tr from-yellow-500 to-amber-500' 
+                              : 'bg-xsm-yellow'
+                          }`}>
+                            {user?.profilePicture ? (
+                              <img
+                                src={user.profilePicture}
+                                alt={user.username}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <User className="w-5 h-5 text-black m-1.5" />
+                            )}
                           </div>
-                        )}
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent className="bg-xsm-dark-gray border-xsm-medium-gray">
-                      <DropdownMenuItem onClick={() => navigateToPage(`/u/${user?.username}`)} className="cursor-pointer">
-                        <User className="mr-2 h-4 w-4" />
-                        <span>Profile</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setShowVipModal(true)} className="cursor-pointer text-yellow-400 hover:text-yellow-300 font-semibold focus:text-yellow-300">
-                        <Crown className="mr-2 h-4 w-4 fill-yellow-400/20" />
-                        <span>VIP Membership</span>
-                      </DropdownMenuItem>
+                          {(user as any)?.isVip && (
+                            <div className="absolute -top-1 -right-1 bg-yellow-400 text-black rounded-full p-0.5 shadow-md">
+                              <Crown className="w-2.5 h-2.5 fill-current" />
+                            </div>
+                          )}
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent className="bg-xsm-dark-gray border-xsm-medium-gray">
+                        <DropdownMenuItem onClick={() => navigateToPage(`/u/${user?.username}`)} className="cursor-pointer">
+                          <User className="mr-2 h-4 w-4" />
+                          <span>Profile</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setShowVipModal(true)} className="cursor-pointer text-yellow-400 hover:text-yellow-300 font-semibold focus:text-yellow-300">
+                          <Crown className="mr-2 h-4 w-4 fill-yellow-400/20" />
+                          <span>VIP Membership</span>
+                        </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => navigateToPage('my-deals')} className="cursor-pointer">
                         <FileText className="mr-2 h-4 w-4" />
                         <span>My Deals</span>

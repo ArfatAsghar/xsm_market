@@ -569,14 +569,10 @@ class ChatController {
                 return;
             }
 
-            $stmt = $this->db->prepare("
-                UPDATE messages SET isRead = 1
-                WHERE chatId = ? AND senderId != ? AND isRead = 0
-            ");
-            $stmt->execute([$chatId, $userId]);
+            $affected = Message::markChatRead((int)$chatId, $userId);
 
             http_response_code(200);
-            echo json_encode(['message' => 'Messages marked as read']);
+            echo json_encode(['success' => true, 'markedRead' => $affected, 'message' => 'Messages marked as read']);
         } catch (Exception $e) {
             error_log('Error marking messages as read: ' . $e->getMessage());
             http_response_code(500);
@@ -1331,6 +1327,32 @@ class ChatController {
             http_response_code(403);
             echo json_encode(['message' => 'Access denied. Authorized dashboard access required.']);
             exit;
+        }
+    }
+
+    // Get total unread messages count for current user (Revision 7)
+    public function getUnreadCount() {
+        try {
+            $user = $this->authMiddleware->authenticate();
+            $unreadCount = Message::getUnreadCountForUser((int)$user['id']);
+            http_response_code(200);
+            echo json_encode(['unreadCount' => $unreadCount, 'success' => true]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['message' => $e->getMessage()]);
+        }
+    }
+
+    // Mark a message as viewed by website agent (Revision 14)
+    public function markAgentViewed($messageId) {
+        try {
+            $user = $this->authMiddleware->authenticate();
+            $affected = Message::markAgentViewed((int)$messageId);
+            http_response_code(200);
+            echo json_encode(['success' => true, 'updated' => $affected]);
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['message' => $e->getMessage()]);
         }
     }
 }

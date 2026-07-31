@@ -1,4 +1,14 @@
 <?php
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
+set_exception_handler(function($e) {
+    http_response_code(500);
+    header('Content-Type: application/json');
+    echo json_encode(['message' => $e->getMessage(), 'error' => 'Server Error: ' . $e->getMessage()]);
+    exit;
+});
+
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
@@ -6,7 +16,7 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Credentials: true');
 
 // Handle preflight OPTIONS requests
-if ($_SERVER['REQUEST_METHOD'] == 'OPTIONS') {
+if (($_SERVER['REQUEST_METHOD'] ?? '') == 'OPTIONS') {
     http_response_code(200);
     exit();
 }
@@ -81,10 +91,10 @@ require_once __DIR__ . '/controllers/ChatUploadController.php';
 require_once __DIR__ . '/controllers/AdUploadController.php';
 require_once __DIR__ . '/controllers/AdminController.php';
 
-// Error reporting for debugging
+// Error reporting — keep display_errors OFF in production to prevent HTML leaking into JSON
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
-ini_set('log_errors', 1);
+ini_set('display_errors', '0');  // MUST be 0: HTML errors corrupt JSON API responses
+ini_set('log_errors', '1');     // Log to error_log only
 
 
 // Parse the request
@@ -92,8 +102,11 @@ $request_uri = $_SERVER['REQUEST_URI'];
 $path = parse_url($request_uri, PHP_URL_PATH);
 $method = $_SERVER['REQUEST_METHOD'];
 
-// Remove base path if needed (adjust for your hosting setup)
-$path = str_replace('/api', '', $path);
+// Remove leading /api prefix (strip only once from the start, not all occurrences)
+if (strpos($path, '/api') === 0) {
+    $path = substr($path, 4); // /api/ads -> /ads, /api/auth/login -> /auth/login
+}
+if (empty($path)) $path = '/';
 
 // Debug logging
 error_log("Received request: $method $request_uri");
@@ -205,12 +218,40 @@ try {
             Response::error('Debug failed: ' . $e->getMessage(), 500);
         }
     }
+    // Website updates / announcements routes per Revision 28
+    elseif (strpos($path, '/updates') === 0) {
+        handleUpdatesRoutes($path, $method);
+    }
     else {
         Response::error('Route not found', 404);
     }
 } catch (Exception $e) {
     error_log('API Error: ' . $e->getMessage());
     Response::error('Internal server error: ' . $e->getMessage(), 500);
+}
+
+function handleUpdatesRoutes($path, $method) {
+    $pdo = Database::getConnection();
+    if ($method === 'GET') {
+        $stmt = $pdo->query("SELECT * FROM website_updates ORDER BY created_at DESC");
+        $updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        Response::success(['updates' => $updates]);
+    } elseif ($method === 'POST') {
+        $user = AuthMiddleware::requireAdmin();
+        $input = json_decode(file_get_contents('php://input'), true);
+        $title = trim($input['title'] ?? '');
+        $description = trim($input['description'] ?? '');
+        if (!$title || !$description) {
+            Response::error('Title and description are required', 400);
+            return;
+        }
+        $stmt = $pdo->prepare("INSERT INTO website_updates (title, description) VALUES (?, ?)");
+        $stmt->execute([$title, $description]);
+        $id = $pdo->lastInsertId();
+        Response::success(['message' => 'Website update published successfully', 'id' => $id]);
+    } else {
+        Response::error('Method not allowed', 405);
+    }
 }
 
 // Route handlers
@@ -604,6 +645,12 @@ function handleChatRoutes($controller, $path, $method) {
             break;
         case preg_match('/^\/chat\/admin\/messages\/(\d+)$/', $path, $matches) && $method === 'DELETE':
             $controller->adminDeleteMessage($matches[1]);
+            break;
+        case $path === '/chat/unread-count' && $method === 'GET':
+            $controller->getUnreadCount();
+            break;
+        case preg_match('/^\/chat\/messages\/(\d+)\/agent-viewed$/', $path, $matches) && $method === 'PUT':
+            $controller->markAgentViewed($matches[1]);
             break;
         default:
             Response::error('Chat route not found', 404);

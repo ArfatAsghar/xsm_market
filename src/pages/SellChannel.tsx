@@ -1068,40 +1068,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
               </div>
             </div>
 
-            {/* Preferred Payment Methods Selector */}
-            <div className="p-4 bg-xsm-black/50 border border-xsm-medium-gray/30 rounded-xl space-y-3">
-              <label className="block text-white font-semibold text-sm">
-                Preferred Payment Methods <span className="text-xsm-light-gray font-normal text-xs">(Select options you accept)</span>
-              </label>
-              <div className="flex flex-wrap gap-2">
-                {AVAILABLE_PAYMENT_METHODS.map((pm) => {
-                  const isSelected = formData.preferredPaymentMethods.includes(pm.name);
-                  return (
-                    <button
-                      key={pm.id}
-                      type="button"
-                      onClick={() => {
-                        setFormData(prev => {
-                          const current = prev.preferredPaymentMethods;
-                          const next = current.includes(pm.name)
-                            ? current.filter(m => m !== pm.name)
-                            : [...current, pm.name];
-                          return { ...prev, preferredPaymentMethods: next };
-                        });
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border cursor-pointer ${
-                        isSelected
-                          ? 'bg-xsm-yellow text-xsm-black border-xsm-yellow shadow-md'
-                          : 'bg-xsm-dark-gray text-xsm-light-gray border-xsm-medium-gray/40 hover:border-xsm-yellow/50 hover:text-white'
-                      }`}
-                    >
-                      <span>{pm.icon}</span>
-                      <span>{pm.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+
 
             {/* Optional Fields Section */}
             <div className="pt-6">
@@ -1336,6 +1303,41 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                     className="hidden"
                     id="file-upload"
                   />
+                </div>
+              </div>
+
+              {/* Preferred Payment Methods Selector — Moved to end of form */}
+              <div className="mt-8 p-4 bg-xsm-black/50 border border-xsm-medium-gray/30 rounded-xl space-y-3">
+                <label className="block text-white font-semibold text-sm">
+                  Preferred Payment Methods <span className="text-xsm-light-gray font-normal text-xs">(Select options you accept)</span>
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {AVAILABLE_PAYMENT_METHODS.map((pm) => {
+                    const isSelected = formData.preferredPaymentMethods.includes(pm.name);
+                    return (
+                      <button
+                        key={pm.id}
+                        type="button"
+                        onClick={() => {
+                          setFormData(prev => {
+                            const current = prev.preferredPaymentMethods;
+                            const next = current.includes(pm.name)
+                              ? current.filter(m => m !== pm.name)
+                              : [...current, pm.name];
+                            return { ...prev, preferredPaymentMethods: next };
+                          });
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border cursor-pointer ${
+                          isSelected
+                            ? 'bg-xsm-yellow text-xsm-black border-xsm-yellow shadow-md'
+                            : 'bg-xsm-dark-gray text-xsm-light-gray border-xsm-medium-gray/40 hover:border-xsm-yellow/50 hover:text-white'
+                        }`}
+                      >
+                        <span>{pm.icon}</span>
+                        <span>{pm.name}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

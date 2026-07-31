@@ -177,7 +177,7 @@ class Ad {
         }
         
         if (!$includeBanned) {
-            $sql .= " AND (a.isBanned = 0 OR a.isBanned IS NULL)";
+            $sql .= " AND (u.isBanned = 0 OR u.isBanned IS NULL)";
         }
 
         
@@ -207,13 +207,13 @@ class Ad {
             $params[':search'] = '%' . $filters['search'] . '%';
         }
         
-        // Sort order - pinned ads first, then by specified sort order
+        // Sort order
         $sortBy = $filters['sortBy'] ?? 'createdAt';
         $sortOrder = $filters['sortOrder'] ?? 'DESC';
         $validSortFields = ['createdAt', 'price', 'subscribers', 'views'];
         $sortField = in_array($sortBy, $validSortFields) ? $sortBy : 'createdAt';
         
-        $sql .= " ORDER BY a.pinned DESC, a.{$sortField} {$sortOrder} LIMIT :limit OFFSET :offset";
+        $sql .= " ORDER BY a.{$sortField} {$sortOrder} LIMIT :limit OFFSET :offset";
         
         $stmt = $pdo->prepare($sql);
         $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
@@ -339,7 +339,7 @@ class Ad {
             FROM " . self::$table . " a
             INNER JOIN users u ON a.userId = u.id
             WHERE a.status = 'active'
-            AND (a.isBanned = 0 OR a.isBanned IS NULL)
+            AND (u.isBanned = 0 OR u.isBanned IS NULL)
             AND (a.title LIKE :search OR a.description LIKE :search OR a.category LIKE :search)
             ORDER BY a.createdAt DESC
             LIMIT :limit
@@ -417,7 +417,7 @@ class Ad {
         $includeBanned = !empty($filters['includeBanned']);
         $isAdmin = !empty($filters['isAdmin']);
         
-        $sql = "SELECT COUNT(*) as count FROM " . self::$table . " a WHERE 1=1";
+        $sql = "SELECT COUNT(*) as count FROM " . self::$table . " a INNER JOIN users u ON a.userId = u.id WHERE 1=1";
         $params = [];
         
         if ($isAdmin) {
@@ -430,7 +430,7 @@ class Ad {
         }
         
         if (!$includeBanned) {
-            $sql .= " AND (a.isBanned = 0 OR a.isBanned IS NULL)";
+            $sql .= " AND (u.isBanned = 0 OR u.isBanned IS NULL)";
         }
         
         // Apply filters
@@ -506,6 +506,50 @@ class Ad {
             ':id' => $id,
             ':pulledAt' => $pulledAt,
             ':createdAt' => $pulledAt
+        ]);
+    }
+
+    public static function findActiveByChannelUrl($channelUrl) {
+        $pdo = Database::getConnection();
+        $cleanUrl = strtolower(trim(preg_replace('/^https?:\/\/(www\.)?/', '', rtrim($channelUrl, '/'))));
+        
+        $sql = "SELECT * FROM " . self::$table . " 
+                WHERE status = 'active' 
+                AND (
+                    LOWER(channelUrl) LIKE :exactUrl
+                    OR LOWER(channelUrl) LIKE :cleanUrl
+                )
+                ORDER BY createdAt DESC LIMIT 1";
+        
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            ':exactUrl' => '%' . strtolower(trim($channelUrl)) . '%',
+            ':cleanUrl' => '%' . $cleanUrl . '%'
+        ]);
+        
+        $ad = $stmt->fetch();
+        if ($ad) {
+            self::formatJsonFields($ad);
+        }
+        return $ad;
+    }
+
+    public static function deactivateByChannelUrl($channelUrl) {
+        $pdo = Database::getConnection();
+        $cleanUrl = strtolower(trim(preg_replace('/^https?:\/\/(www\.)?/', '', rtrim($channelUrl, '/'))));
+        
+        $sql = "UPDATE " . self::$table . " 
+                SET status = 'cancelled' 
+                WHERE status = 'active'
+                AND (
+                    LOWER(channelUrl) LIKE :exactUrl
+                    OR LOWER(channelUrl) LIKE :cleanUrl
+                )";
+        
+        $stmt = $pdo->prepare($sql);
+        return $stmt->execute([
+            ':exactUrl' => '%' . strtolower(trim($channelUrl)) . '%',
+            ':cleanUrl' => '%' . $cleanUrl . '%'
         ]);
     }
 }

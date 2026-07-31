@@ -119,62 +119,38 @@ const Contact: React.FC<ContactProps> = () => {
         </div>
 
         <div className="grid lg:grid-cols-3 gap-8">
-          {/* Contact Information */}
+          {/* Contact Information per Revision 29 */}
           <div className="space-y-6">
             <div className="xsm-card">
               <h3 className="text-xl font-bold text-xsm-yellow mb-6">Get in Touch</h3>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div className="flex items-center space-x-3">
                   <Mail className="w-5 h-5 text-xsm-yellow flex-shrink-0" />
                   <div>
-                    <div className="text-white font-medium">Email</div>
+                    <div className="text-white font-medium">Email Address</div>
                     <div className="text-xsm-light-gray">support@xsmmarket.com</div>
                   </div>
                 </div>
+
                 <div className="flex items-center space-x-3">
-                  <Phone className="w-5 h-5 text-xsm-yellow flex-shrink-0" />
+                  <MessageCircle className="w-5 h-5 text-xsm-yellow flex-shrink-0" />
                   <div>
-                    <div className="text-white font-medium">Phone</div>
-                    <div className="text-xsm-light-gray">+1 (555) 123-4567</div>
-                  </div>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <MapPin className="w-5 h-5 text-xsm-yellow flex-shrink-0" />
-                  <div>
-                    <div className="text-white font-medium">Address</div>
-                    <div className="text-xsm-light-gray">
-                      123 Digital Ave<br />
-                      Tech City, TC 12345<br />
-                      United States
-                    </div>
+                    <div className="text-white font-medium">Help & Support</div>
+                    <div className="text-xsm-light-gray">Available via live chat & ticket support</div>
                   </div>
                 </div>
               </div>
             </div>
 
             <div className="xsm-card">
-              <h3 className="text-xl font-bold text-xsm-yellow mb-4">Business Hours</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-white">Monday - Friday</span>
-                  <span className="text-xsm-light-gray">9:00 AM - 6:00 PM EST</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white">Saturday</span>
-                  <span className="text-xsm-light-gray">10:00 AM - 4:00 PM EST</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-white">Sunday</span>
-                  <span className="text-xsm-light-gray">Closed</span>
-                </div>
-              </div>
-              <div className="mt-4 p-3 bg-xsm-black/50 rounded-lg">
+              <h3 className="text-xl font-bold text-xsm-yellow mb-4">Response Time</h3>
+              <div className="p-3.5 bg-xsm-black/50 rounded-lg">
                 <div className="flex items-center space-x-2 text-sm">
                   <Clock className="w-4 h-4 text-xsm-yellow" />
-                  <span className="text-white font-medium">Emergency Support</span>
+                  <span className="text-white font-medium">Fast Support Turnaround</span>
                 </div>
-                <p className="text-xs text-xsm-light-gray mt-1">
-                  24/7 support available for urgent transaction issues
+                <p className="text-xs text-xsm-light-gray mt-1.5 leading-relaxed">
+                  Our team typical responds within 24 hours. 24/7 priority support is available for active transaction escrows.
                 </p>
               </div>
             </div>

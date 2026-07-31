@@ -1,5 +1,4 @@
-// API URL - use the proxy in development  
-export const API_URL = import.meta.env.DEV ? '/api' : 'https://xsmmarket.com/api';
+export const API_URL = '/api';
 
 console.log('🌐 API_URL configured as:', API_URL);
 
@@ -282,7 +281,18 @@ export const login = async (email: string, password: string, recaptchaToken?: st
       credentials: 'include'
     });
 
-    const data = await response.json();
+    let data: any;
+    try {
+      const text = await response.text();
+      try {
+        data = JSON.parse(text);
+      } catch (e) {
+        console.error('Non-JSON response from login endpoint:', text);
+        throw new Error(text && text.includes('Database') ? 'Database connection failed. Please check Hostinger database config.' : 'Server returned invalid response format');
+      }
+    } catch (e: any) {
+      throw new Error(e.message || 'Server error during login');
+    }
     console.log('📡 Login response received:', { 
       ok: response.ok, 
       status: response.status,

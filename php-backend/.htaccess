@@ -1,79 +1,12 @@
-# XSM Market - Production .htaccess (LiteSpeed / cPanel / Hostinger)
 RewriteEngine On
 
-# ─── Security: block dotfiles ────────────────────────────────────────────────
-<FilesMatch "^\.">
-    Order allow,deny
-    Deny from all
-</FilesMatch>
+# Serve real files and directories directly
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
 
-# Block sensitive extensions
-<FilesMatch "\.(env|log|sql|sh|git)$">
-    Order allow,deny
-    Deny from all
-</FilesMatch>
+# Route /api/* requests to api/index.php
+RewriteRule ^api/ api/index.php [QSA,L]
 
-# ─── CORS: handle pre-flight OPTIONS ─────────────────────────────────────────
-<IfModule mod_headers.c>
-    Header always set Access-Control-Allow-Origin "*"
-    Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
-    Header always set Access-Control-Allow-Credentials "true"
-    Header always set Access-Control-Max-Age "3600"
-</IfModule>
-
-RewriteCond %{REQUEST_METHOD} OPTIONS
-RewriteRule ^ - [R=200,L]
-
-# ─── Remove www ──────────────────────────────────────────────────────────────
-RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
-RewriteRule ^ https://%1%{REQUEST_URI} [R=301,L]
-
-# ─── API routes → api/index.php ──────────────────────────────────────────────
-# Skip real files (uploads, webhooks, check scripts)
-RewriteCond %{REQUEST_URI} !^/api/uploads/
-RewriteCond %{REQUEST_URI} !^/api/webhooks/
-RewriteRule ^api/(.*)$ api/index.php [QSA,L]
-
-# Direct shorthand endpoints (auth, ads, chat …)
-RewriteRule ^(auth|user|ads|chat|admin|contact|social-media|debug|health)(/.*)?$ api/index.php [QSA,L]
-
-# ─── Webhook ─────────────────────────────────────────────────────────────────
-RewriteRule ^api/webhooks/nowpayments/?$ api/webhooks/nowpayments.php [QSA,L]
-RewriteRule ^webhooks/nowpayments/?$     api/webhooks/nowpayments.php [QSA,L]
-
-# ─── Serve uploads directly ──────────────────────────────────────────────────
-RewriteRule ^uploads/(.*)$ api/uploads/$1 [L]
-
-# ─── React SPA catch-all ─────────────────────────────────────────────────────
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteCond %{REQUEST_URI}      !^/api/
+# React SPA - everything else loads index.html
 RewriteRule ^ index.html [L]
-
-# ─── Error pages ─────────────────────────────────────────────────────────────
-ErrorDocument 404 /index.html
-
-# ─── PHP / upload limits (LiteSpeed php.ini override) ────────────────────────
-<IfModule LiteSpeed>
-    php_value upload_max_filesize 10M
-    php_value post_max_size 10M
-    php_value max_execution_time 60
-    php_value memory_limit 256M
-</IfModule>
-
-# Compression
-<IfModule mod_deflate.c>
-    AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript application/json
-</IfModule>
-
-# Cache static assets
-<IfModule mod_expires.c>
-    ExpiresActive On
-    ExpiresByType text/css              "access plus 1 month"
-    ExpiresByType application/javascript "access plus 1 month"
-    ExpiresByType image/png             "access plus 1 month"
-    ExpiresByType image/jpeg            "access plus 1 month"
-    ExpiresByType image/gif             "access plus 1 month"
-    ExpiresByType image/webp            "access plus 1 month"
-</IfModule>

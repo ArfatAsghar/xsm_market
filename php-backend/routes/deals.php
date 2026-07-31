@@ -102,14 +102,14 @@ function createDeal($data) {
         $max_stmt = $pdo->query("
             SELECT COALESCE(MAX(
                 CAST(
-                    REPLACE(REPLACE(transaction_id, 'TXN-', ''), 'XSM', '') AS UNSIGNED
+                    REPLACE(REPLACE(REPLACE(transaction_id, 'TXN-', ''), 'TXN', ''), 'XSM', '') AS UNSIGNED
                 )
             ), COALESCE(MAX(id), 0)) as max_seq 
             FROM deals FOR UPDATE
         ");
         $max_row  = $max_stmt->fetch(PDO::FETCH_ASSOC);
         $next_seq = ((int)($max_row['max_seq'] ?? 0)) + 1;
-        $transaction_id = str_pad($next_seq, 6, '0', STR_PAD_LEFT);
+        $transaction_id = 'TXN' . str_pad($next_seq, 4, '0', STR_PAD_LEFT);
         
         // Insert deal
         $stmt = $pdo->prepare("

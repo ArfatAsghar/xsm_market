@@ -373,20 +373,22 @@ class AuthController {
                 if (!empty($user['banExpires'])) {
                     $expires = strtotime($user['banExpires']);
                     if ($expires > 0 && $expires <= time()) {
-                        // Auto-unban
+                        // Auto-unban expired temporary ban
                         $stmt = $this->db->prepare(
                             "UPDATE users SET isBanned=0, banReason=NULL, bannedAt=NULL, bannedBy=NULL, banExpires=NULL, unbannedAt=NOW() WHERE id=?"
                         );
                         $stmt->execute([$user['id']]);
                         $user['isBanned'] = 0;
+                        $user['banExpires'] = null;
+                        $user['banReason'] = null;
                     }
                 }
             }
 
-            // Generate tokens - exact match to Node.js
+            // Generate tokens - banned users can still log in (Revision 13)
             $tokens = JWT::generateTokens($user['id']);
             
-            error_log('Login successful for user: ' . $user['id'] . ', authProvider: ' . $user['authProvider']);
+            error_log('Login successful for user: ' . $user['id'] . ', authProvider: ' . $user['authProvider'] . ', isBanned: ' . ($user['isBanned'] ? 'yes' : 'no'));
             
             Response::success([
                 'token' => $tokens['accessToken'],
@@ -403,7 +405,12 @@ class AuthController {
                     'role' => $user['role'] ?? 'user',
                     'authProvider' => $user['authProvider'],
                     'vipUntil' => $user['vipUntil'] ?? null,
-                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time()
+                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time(),
+                    // Ban status fields (Revisions 11, 12, 13)
+                    'isBanned' => (bool)$user['isBanned'],
+                    'banReason' => $user['banReason'] ?? null,
+                    'banExpires' => $user['banExpires'] ?? null,
+                    'bannedAt' => $user['bannedAt'] ?? null
                 ]
             ]);
             
@@ -641,7 +648,23 @@ class AuthController {
                 error_log('New Google user created: ' . json_encode(['id' => $userId, 'username' => $uniqueUsername]));
             }
             
-            // Generate tokens - exact match to Node.js response
+            // Auto-unban if ban has expired (Revision 13)
+            if (!empty($user['isBanned'])) {
+                if (!empty($user['banExpires'])) {
+                    $expires = strtotime($user['banExpires']);
+                    if ($expires > 0 && $expires <= time()) {
+                        $stmt = $this->db->prepare(
+                            "UPDATE users SET isBanned=0, banReason=NULL, bannedAt=NULL, bannedBy=NULL, banExpires=NULL, unbannedAt=NOW() WHERE id=?"
+                        );
+                        $stmt->execute([$user['id']]);
+                        $user['isBanned'] = 0;
+                        $user['banExpires'] = null;
+                        $user['banReason'] = null;
+                    }
+                }
+            }
+
+            // Generate tokens - banned users can log in and redirect to Home (Revision 13)
             $tokens = JWT::generateTokens($user['id']);
             
             Response::success([
@@ -659,7 +682,12 @@ class AuthController {
                     'role' => $user['role'] ?? 'user',
                     'authProvider' => $user['authProvider'],
                     'vipUntil' => $user['vipUntil'] ?? null,
-                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time()
+                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time(),
+                    // Ban status fields (Revisions 11, 12, 13)
+                    'isBanned' => (bool)($user['isBanned'] ?? false),
+                    'banReason' => $user['banReason'] ?? null,
+                    'banExpires' => $user['banExpires'] ?? null,
+                    'bannedAt' => $user['bannedAt'] ?? null
                 ]
             ]);
             

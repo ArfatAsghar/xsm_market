@@ -51,7 +51,7 @@ class Database {
                 error_log('✅ Database connection established successfully');
             } catch (PDOException $e) {
                 error_log('❌ Database connection failed: ' . $e->getMessage());
-                throw new Exception('Database connection failed');
+                throw new Exception('Database connection failed: ' . $e->getMessage());
             }
         }
         
@@ -87,17 +87,15 @@ class Database {
                 }
             }
 
-            // Backfill & normalize any deals missing or using prefix in transaction_id with permanent 6-digit sequential IDs
+            // Backfill & normalize any deals missing or using legacy prefixes to TXN0001 format
             $pdo->exec("
                 UPDATE deals 
-                SET transaction_id = LPAD(REPLACE(REPLACE(transaction_id, 'TXN-', ''), 'XSM', ''), 6, '0')
-                WHERE transaction_id LIKE 'TXN-%' OR transaction_id LIKE 'XSM%'
-            ");
+                SET transaction_id = CONCAT('TXN', LPAD(CAST(REPLACE(REPLACE(REPLACE(transaction_id, 'TXN-', ''), 'TXN', ''), 'XSM', '') AS UNSIGNED), 4, '0'))
+                WHERE transaction_id IS NOT NULL AND transaction_id != '' AND transaction_id NOT LIKE 'TXN%';
 
-            $pdo->exec("
                 UPDATE deals 
-                SET transaction_id = LPAD(id, 6, '0') 
-                WHERE transaction_id IS NULL OR transaction_id = '' OR transaction_id = '0'
+                SET transaction_id = CONCAT('TXN', LPAD(id, 4, '0')) 
+                WHERE transaction_id IS NULL OR transaction_id = '' OR transaction_id = '0';
             ");
 
             // Check & add banExpires to users table
@@ -160,6 +158,24 @@ class Database {
                 error_log("Added 'verificationCode' column to ads table");
             }
 
+            // Check & add message status column for tick system (Revision 14)
+            $messagesColumns = $pdo->query("SHOW COLUMNS FROM messages")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('status', $messagesColumns)) {
+                $pdo->exec("ALTER TABLE messages ADD COLUMN status ENUM('sent','delivered','read','agent_viewed') NOT NULL DEFAULT 'sent'");
+                error_log("Added 'status' column to messages table");
+            }
+            if (!in_array('readAt', $messagesColumns)) {
+                $pdo->exec("ALTER TABLE messages ADD COLUMN readAt DATETIME NULL DEFAULT NULL");
+                error_log("Added 'readAt' column to messages table");
+            }
+
+            // Check & add unread_count tracking to chats (Revision 7)
+            $chatsColumns = $pdo->query("SHOW COLUMNS FROM chats")->fetchAll(PDO::FETCH_COLUMN);
+            if (!in_array('unread_count', $chatsColumns)) {
+                $pdo->exec("ALTER TABLE chats ADD COLUMN unread_count INT DEFAULT 0");
+                error_log("Added 'unread_count' column to chats table");
+            }
+
             // Create vip_purchases table if missing
             $pdo->exec("
                 CREATE TABLE IF NOT EXISTS vip_purchases (
@@ -170,7 +186,17 @@ class Database {
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             ");
-        } catch (Exception $e) {
+
+            // Create website_updates table if missing
+            $pdo->exec("
+                CREATE TABLE IF NOT EXISTS website_updates (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    title VARCHAR(255) NOT NULL,
+                    description TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            ");
+        } catch (Throwable $e) {
             error_log('Schema update failed: ' . $e->getMessage());
         }
     }

@@ -94,7 +94,10 @@ deployment-summary.sh
 update-hostinger-backend.sh
 start.sh
 deploy-temp/
+clean-pkg/
+temp-php-pkg/
 .claude/
 public/check.php
 public/unzip.php
+
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Star, Users, Eye, DollarSign, Shield, MessageCircle, CreditCard } from 'lucide-react';
+import { X, Star, Users, Eye, DollarSign, Shield, MessageCircle, CreditCard, User } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import DealCreationModal from './DealCreationModal';
 
@@ -101,6 +101,11 @@ const ChannelModal: React.FC<ChannelModalProps> = ({ channel, isOpen, onClose, o
   const { user, isLoggedIn } = useAuth();
   const [showDealModal, setShowDealModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+
+  const isOwnListing = Boolean(
+    isLoggedIn && user && channel &&
+    String(user.id) === String(channel.seller?.id)
+  );
 
   if (!isOpen || !channel) return null;
 
@@ -411,14 +416,25 @@ const ChannelModal: React.FC<ChannelModalProps> = ({ channel, isOpen, onClose, o
                         {channel.seller.sales} successful sales
                       </div>
                     </div>
-                    <button 
-                      onClick={handleContact}
-                      disabled={isCreating}
-                      className="w-full xsm-button-secondary flex items-center justify-center space-x-2 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <MessageCircle className="w-5 h-5" />
-                      <span>{isCreating ? 'Connecting...' : 'Contact Seller'}</span>
-                    </button>
+                    {isOwnListing ? (
+                      <button
+                        disabled
+                        className="w-full bg-xsm-medium-gray/40 text-xsm-light-gray flex items-center justify-center space-x-2 py-3 rounded-md font-medium cursor-not-allowed opacity-75 border border-xsm-medium-gray/30"
+                        title="You are the seller of this listing"
+                      >
+                        <User className="w-5 h-5" />
+                        <span>Your Listing</span>
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={handleContact}
+                        disabled={isCreating}
+                        className="w-full xsm-button-secondary flex items-center justify-center space-x-2 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <MessageCircle className="w-5 h-5" />
+                        <span>{isCreating ? 'Connecting...' : 'Contact Seller'}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
 

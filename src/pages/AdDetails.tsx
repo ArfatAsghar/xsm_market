@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, Zap, TrendingUp, Pin, Clock, Crown, X, FileText, MoreHorizontal } from 'lucide-react';
+import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, Zap, TrendingUp, Pin, Clock, Crown, X, FileText, MoreHorizontal, User } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import DealCreationModal from '@/components/DealCreationModal';
@@ -113,6 +113,11 @@ const AdDetails: React.FC = () => {
   
   const [channel, setChannel] = useState<ChannelData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const isOwnListing = Boolean(
+    isLoggedIn && user && channel &&
+    String(user.id) === String(channel.seller?.id)
+  );
   const [error, setError] = useState<string | null>(null);
   const [showDealModal, setShowDealModal] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -751,14 +756,25 @@ const AdDetails: React.FC = () => {
                   </div>
                 </div>
 
-                <button 
-                  onClick={handleContact}
-                  disabled={isCreating}
-                  className="w-full xsm-button-secondary flex items-center justify-center space-x-2 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <MessageCircle className="w-5 h-5" />
-                  <span>{isCreating ? 'Connecting...' : 'Contact Seller'}</span>
-                </button>
+                {isOwnListing ? (
+                  <button 
+                    disabled
+                    className="w-full bg-xsm-medium-gray/40 text-xsm-light-gray flex items-center justify-center space-x-2 py-3 rounded-md font-medium cursor-not-allowed opacity-75 border border-xsm-medium-gray/30"
+                    title="You are the seller of this listing"
+                  >
+                    <User className="w-5 h-5" />
+                    <span>Your Listing</span>
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleContact}
+                    disabled={isCreating}
+                    className="w-full xsm-button-secondary flex items-center justify-center space-x-2 py-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <MessageCircle className="w-5 h-5" />
+                    <span>{isCreating ? 'Connecting...' : 'Contact Seller'}</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -769,13 +785,23 @@ const AdDetails: React.FC = () => {
                   {formatPrice(channel.price)}
                 </div>
 
-                <button
-                  onClick={handlePurchase}
-                  className="w-full xsm-button text-xl py-5 flex items-center justify-center space-x-2"
-                >
-                  <CreditCard className="w-6 h-6" />
-                  <span>BUY</span>
-                </button>
+                {isOwnListing ? (
+                  <button
+                    disabled
+                    className="w-full bg-xsm-medium-gray/40 text-xsm-light-gray text-xl py-5 rounded-md font-bold cursor-not-allowed opacity-75 border border-xsm-medium-gray/30 flex items-center justify-center space-x-2"
+                    title="You cannot purchase your own listing"
+                  >
+                    <span>YOUR LISTING</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handlePurchase}
+                    className="w-full xsm-button text-xl py-5 flex items-center justify-center space-x-2"
+                  >
+                    <CreditCard className="w-6 h-6" />
+                    <span>BUY</span>
+                  </button>
+                )}
 
                 {/* Preferred Payment Methods under BUY Button */}
                 {channel.preferredPaymentMethods && channel.preferredPaymentMethods.length > 0 && (

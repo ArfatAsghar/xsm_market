@@ -86,8 +86,8 @@ class AdController {
             return;
         }
         
-        if (intval($subscribers) < 100) {
-            Response::error('Minimum subscribers should be 100', 400);
+        if (intval($subscribers) < 0) {
+            Response::error('Subscribers cannot be negative', 400);
             return;
         }
         

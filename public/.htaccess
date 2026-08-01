@@ -1,10 +1,12 @@
-Options -MultiViews
 RewriteEngine On
 
-# Route all /api/* requests to the PHP backend
-RewriteRule ^api/?(.*)$ php-backend/index.php [L,QSA]
+# Serve real files and directories directly (assets, images, favicons etc.)
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
 
-# For all other non-file/non-directory requests, serve index.html (React Router SPA)
-RewriteCond %{REQUEST_FILENAME} !-f
-RewriteCond %{REQUEST_FILENAME} !-d
-RewriteRule ^ index.html [QSA,L]
+# Route /api/* requests to api/index.php
+RewriteRule ^api/ api/index.php [QSA,L]
+
+# React SPA - everything else loads index.html
+RewriteRule ^ index.html [L]

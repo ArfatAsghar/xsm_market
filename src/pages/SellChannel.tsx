@@ -109,7 +109,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     formData.channelUrl.trim().length > 0 &&
     formData.category.trim().length > 0 &&
     formData.price.trim().length > 0 && parseFloat(formData.price) >= 5 &&
-    formData.subscribers.trim().length > 0 && parseInt(formData.subscribers) >= 100;
+    formData.subscribers.trim().length > 0 && parseInt(formData.subscribers) >= 0;
   // For new listings verification is required; edit mode skips verification
   const isFormValid = isFieldsValid && (isEditMode || isCodeVerified === true);
   const contentTypeDropdownRef = useRef<HTMLDivElement>(null);
@@ -570,13 +570,13 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         return;
       }
 
-      // Validation: Minimum subscribers 100
+      // Validation: Non-negative subscribers
       const subscribers = parseInt(formData.subscribers);
-      if (subscribers < 100) {
+      if (isNaN(subscribers) || subscribers < 0) {
         toast({
           variant: "destructive",
           title: "Invalid Subscribers",
-          description: "Minimum subscribers should be 100",
+          description: "Subscribers cannot be negative",
         });
         setIsSubmitting(false);
         return;

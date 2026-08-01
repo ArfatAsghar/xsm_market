@@ -1168,16 +1168,24 @@ const Chat: React.FC = () => {
                                   <span>{formatTime(message.createdAt)}</span>
                                   {isMyMessage && (() => {
                                     const st = message.status || (message.isRead ? 'read' : 'sent');
-                                    if (st === 'agent_viewed') {
-                                      return <span className="ml-1 font-extrabold text-cyan-600" title="Viewed by Website Agent">✓✓</span>;
+                                    if (st === 'agent_viewed' || (message as any)?.agent_viewed) {
+                                      return (
+                                        <span 
+                                          className="ml-1 font-extrabold inline-flex items-center gap-0.5 text-amber-500 bg-amber-950/60 px-1 py-0.5 rounded border border-amber-500/50 text-[10px] shadow-sm" 
+                                          title="Viewed by Website Agent 🌟"
+                                        >
+                                          <Shield className="w-2.5 h-2.5 text-amber-400 fill-amber-400/30" />
+                                          <span>✓✓</span>
+                                        </span>
+                                      );
                                     }
                                     if (st === 'read' || message.isRead) {
-                                      return <span className="ml-1 font-extrabold text-green-700" title="Read">✓✓</span>;
+                                      return <span className="ml-1 font-extrabold text-emerald-600 text-xs" title="Read (2 Green Ticks)">✓✓</span>;
                                     }
                                     if (st === 'delivered') {
-                                      return <span className="ml-1 font-bold text-black/40" title="Delivered">✓✓</span>;
+                                      return <span className="ml-1 font-bold text-gray-500 text-xs" title="Delivered (2 Grey Ticks)">✓✓</span>;
                                     }
-                                    return <span className="ml-1 font-bold text-black/40" title="Sent">✓</span>;
+                                    return <span className="ml-1 font-bold text-gray-400 text-xs" title="Sent (1 Grey Tick)">✓</span>;
                                   })()}
                                 </p>
                               </div>

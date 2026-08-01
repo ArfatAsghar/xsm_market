@@ -299,6 +299,9 @@ class ChatController {
             $stmt->execute([$chatId, $limit, $offset]);
             $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+            // Auto-mark unread messages as read when opening chat
+            Message::markChatRead((int)$chatId, $userId);
+
             $stmt = $this->db->prepare("
                 UPDATE chat_participants SET lastSeenAt = NOW()
                 WHERE chatId = ? AND userId = ?
@@ -317,6 +320,7 @@ class ChatController {
                     'fileSize' => $msg['fileSize'] ? (int)$msg['fileSize'] : null,
                     'thumbnail' => $msg['thumbnail'],
                     'isRead' => (bool)$msg['isRead'],
+                    'status' => $msg['status'] ?? ($msg['isRead'] ? 'read' : 'sent'),
                     'createdAt' => $msg['createdAt'],
                     'updatedAt' => $msg['updatedAt'],
                     'sender' => [
@@ -521,6 +525,7 @@ class ChatController {
                 'messageType' => $messageData['messageType'],
                 'mediaUrl' => $mediaUrl ?: ($messageData['mediaUrl'] ?? null),
                 'isRead' => (bool)$messageData['isRead'],
+                'status' => $messageData['status'] ?? 'sent',
                 'createdAt' => $messageData['createdAt'],
                 'updatedAt' => $messageData['updatedAt'],
                 'sender' => [

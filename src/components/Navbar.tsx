@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  Menu, X, User, PlusCircle, LogOut, Settings, Heart, Star,
-  MessageSquare, FileText, Crown, Bell, ShoppingBag, Inbox,
-  Store, LayoutGrid, Shield
-} from 'lucide-react';
+  FaStore, FaInbox, FaTag, FaBell, FaUser, FaSignOutAlt,
+  FaFileAlt, FaCrown, FaTachometerAlt, FaBars, FaTimes,
+  FaChevronDown, FaEnvelope, FaCheck
+} from 'react-icons/fa';
+import { Shield } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { logout, API_URL } from '@/services/auth';
 import { isCurrentUserAdmin } from '@/utils/adminConfig';
@@ -19,9 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-interface NavbarProps {}
-
-const Navbar: React.FC<NavbarProps> = () => {
+const Navbar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -31,352 +30,378 @@ const Navbar: React.FC<NavbarProps> = () => {
   const { isLoggedIn, setIsLoggedIn, user, setUser } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState<Array<{id: number; text: string; read: boolean; time: string}>>([]);
+  const [notifications, setNotifications] = useState<Array<{ id: number; text: string; read: boolean; time: string }>>([]);
   const notifRef = useRef<HTMLDivElement>(null);
 
-  // Fetch unread messages count
+  // Fetch unread messages
   useEffect(() => {
-    if (!isLoggedIn) {
-      setUnreadCount(0);
-      return;
-    }
+    if (!isLoggedIn) { setUnreadCount(0); return; }
     const fetchUnread = async () => {
       try {
         const token = localStorage.getItem('token');
         if (!token) return;
-        const res = await fetch(`${API_URL}/chat/unread-count`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
+        const res = await fetch(`${API_URL}/chat/unread-count`, { headers: { Authorization: `Bearer ${token}` } });
         if (res.ok) {
           const data = await res.json();
-          if (typeof data.unreadCount === 'number') {
-            setUnreadCount(data.unreadCount);
-          }
+          if (typeof data.unreadCount === 'number') setUnreadCount(data.unreadCount);
         }
-      } catch (e) {
-        // silent
-      }
+      } catch {}
     };
     fetchUnread();
-    const interval = setInterval(fetchUnread, 15000);
-    return () => clearInterval(interval);
+    const iv = setInterval(fetchUnread, 15000);
+    return () => clearInterval(iv);
   }, [isLoggedIn]);
 
-  // Close notification panel on outside click
+  // Close notif panel on outside click
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setShowNotifications(false);
-      }
+    const h = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setShowNotifications(false);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
   }, []);
 
-  // Seed sample notifications based on unread count
+  // Build notification list from unread count
   useEffect(() => {
-    if (!isLoggedIn) {
-      setNotifications([]);
-      return;
-    }
-    const base: Array<{id: number; text: string; read: boolean; time: string}> = [];
-    if (unreadCount > 0) {
-      base.push({ id: 1, text: `You have ${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`, read: false, time: 'Just now' });
-    }
-    setNotifications(base);
+    if (!isLoggedIn) { setNotifications([]); return; }
+    const list: typeof notifications = [];
+    if (unreadCount > 0)
+      list.push({ id: 1, text: `You have ${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`, read: false, time: 'Just now' });
+    setNotifications(list);
   }, [unreadCount, isLoggedIn]);
 
   const unreadNotifCount = notifications.filter(n => !n.read).length;
+  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
-  const markAllRead = () => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-  };
-
-  // Navigate helper
-  const navigateToPage = (page: string) => {
-    if (page === 'home') page = '/';
-    navigate(page);
+  const navigateTo = (path: string) => {
+    navigate(path === 'home' ? '/' : path);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setIsMenuOpen(false);
   };
 
   // Admin check
   useEffect(() => {
-    const checkAdminStatus = async () => {
+    const check = async () => {
       if (isLoggedIn && user) {
         const role = (user as any).role;
-        if (role === 'admin' || role === 'manager' || role === 'viewer') { setIsUserAdmin(true); return; }
-        if ((user as any).isAdmin === true) { setIsUserAdmin(true); return; }
-        if (user.email || user.username) {
-          const adminStatus = await isCurrentUserAdmin(user.email, user.username);
-          setIsUserAdmin(adminStatus);
-        } else { setIsUserAdmin(false); }
-      } else { setIsUserAdmin(false); }
+        if (['admin', 'manager', 'viewer'].includes(role) || (user as any).isAdmin === true) { setIsUserAdmin(true); return; }
+        if (user.email || user.username) setIsUserAdmin(await isCurrentUserAdmin(user.email, user.username));
+        else setIsUserAdmin(false);
+      } else setIsUserAdmin(false);
     };
-    checkAdminStatus();
+    check();
   }, [isLoggedIn, user?.email, user?.username, (user as any)?.isAdmin, (user as any)?.role]);
 
-  const handleLogout = () => {
-    logout();
-    setIsLoggedIn(false);
-    navigateToPage('/');
-  };
+  const handleLogout = () => { logout(); setIsLoggedIn(false); navigateTo('/'); };
 
-  const isActive = (path: string) => location.pathname === path || (path === '/' && location.pathname === '/');
+  const isActive = (path: string) =>
+    path === '/' ? location.pathname === '/' : location.pathname === path || location.pathname.startsWith(path + '/');
+
+  // Nav link with animated underline
+  const NavLink = ({
+    path, icon, label, badge, requireAuth = false
+  }: { path: string; icon: React.ReactNode; label: string; badge?: number; requireAuth?: boolean }) => {
+    const active = isActive(path);
+    return (
+      <button
+        onClick={() => {
+          if (requireAuth && !isLoggedIn) { setShowAuthWidget(true); return; }
+          navigateTo(path);
+        }}
+        className={`relative group flex items-center gap-2 px-1 py-1 text-[13.5px] font-semibold tracking-wide transition-colors duration-200 ${
+          active ? 'text-xsm-yellow' : 'text-gray-300 hover:text-white'
+        }`}
+        style={{ background: 'none', border: 'none' }}
+      >
+        <span className={`text-base transition-transform duration-200 group-hover:scale-110 ${active ? 'text-xsm-yellow' : 'text-gray-400 group-hover:text-xsm-yellow'}`}>
+          {icon}
+        </span>
+        <span>{label}</span>
+        {badge && badge > 0 ? (
+          <span className="ml-0.5 bg-red-500 text-white text-[9px] font-extrabold min-w-[17px] h-[17px] flex items-center justify-center rounded-full px-1 shadow-md border border-black/30">
+            {badge > 99 ? '99+' : badge}
+          </span>
+        ) : null}
+        {/* Animated underline */}
+        <span
+          className={`absolute bottom-[-4px] left-0 h-[2px] bg-gradient-to-r from-xsm-yellow via-yellow-400 to-xsm-yellow rounded-full transition-all duration-300 ${
+            active ? 'w-full opacity-100' : 'w-0 opacity-0 group-hover:w-full group-hover:opacity-100'
+          }`}
+        />
+      </button>
+    );
+  };
 
   return (
     <>
       {showAuthWidget && (
-        <AuthWidget
-          onClose={() => setShowAuthWidget(false)}
-          onNavigate={(page) => { navigateToPage(page); }}
-        />
+        <AuthWidget onClose={() => setShowAuthWidget(false)} onNavigate={navigateTo} />
       )}
 
-      <nav className="bg-xsm-black border-b border-xsm-medium-gray/60 sticky top-0 z-50" style={{ boxShadow: '0 2px 20px rgba(255,208,0,0.06)' }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-[62px]">
+      <nav
+        className="sticky top-0 z-50 border-b border-white/[0.06]"
+        style={{
+          background: 'linear-gradient(135deg, rgba(10,10,10,0.98) 0%, rgba(18,18,18,0.98) 50%, rgba(10,10,10,0.98) 100%)',
+          backdropFilter: 'blur(20px)',
+          WebkitBackdropFilter: 'blur(20px)',
+          boxShadow: '0 1px 40px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(255,208,0,0.08), inset 0 1px 0 rgba(255,255,255,0.03)',
+        }}
+      >
+        {/* Subtle yellow top accent line */}
+        <div
+          className="absolute top-0 left-0 right-0 h-[1px]"
+          style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,208,0,0.6) 30%, rgba(255,208,0,0.9) 50%, rgba(255,208,0,0.6) 70%, transparent 100%)' }}
+        />
+
+        <div className="max-w-[1280px] mx-auto px-5 sm:px-8">
+          <div className="flex items-center justify-between h-[64px]">
 
             {/* ── LEFT: Logo ── */}
-            <div
-              className="flex items-center flex-shrink-0 cursor-pointer group"
-              onClick={() => navigateToPage('/')}
+            <button
+              onClick={() => navigateTo('/')}
+              className="flex items-center gap-3 flex-shrink-0 group focus:outline-none"
             >
               <div className="relative">
-                <div className="absolute -inset-3 bg-gradient-radial from-xsm-yellow/20 via-transparent to-transparent rounded-full blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <div
+                  className="absolute -inset-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                  style={{ background: 'radial-gradient(circle, rgba(255,208,0,0.18) 0%, transparent 70%)' }}
+                />
                 <img
                   src="/images/logo.png"
                   alt="XSM Market"
-                  className="h-9 md:h-10 object-contain relative z-10 drop-shadow-[0_0_6px_rgba(255,208,0,0.4)] group-hover:drop-shadow-[0_0_12px_rgba(255,208,0,0.7)] transition-all duration-300"
+                  className="h-9 object-contain relative z-10 transition-all duration-300"
+                  style={{ filter: 'drop-shadow(0 0 6px rgba(255,208,0,0.35))' }}
                 />
               </div>
+            </button>
+
+            {/* ── CENTER: Desktop Nav Links ── */}
+            <div className="hidden md:flex items-center gap-7">
+              <NavLink path="/" icon={<FaStore />} label="Marketplace" />
+              <NavLink path="/chat" icon={<FaInbox />} label="Inbox" badge={unreadCount} requireAuth />
+              <NavLink path="/sell" icon={<FaTag />} label="Sell" requireAuth />
             </div>
 
-            {/* ── CENTER: Nav Items (desktop) ── */}
-            <div className="hidden md:flex items-center gap-1">
-              {/* Sell */}
-              <button
-                onClick={() => isLoggedIn ? navigateToPage('/sell') : setShowAuthWidget(true)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                  isActive('/sell')
-                    ? 'bg-xsm-yellow text-black shadow-[0_0_12px_rgba(255,208,0,0.4)]'
-                    : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
-                }`}
-              >
-                <PlusCircle className="w-4 h-4" />
-                <span>Sell</span>
-              </button>
-
-              {/* Marketplace */}
-              <button
-                onClick={() => navigateToPage('/')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                  isActive('/')
-                    ? 'bg-xsm-yellow text-black shadow-[0_0_12px_rgba(255,208,0,0.4)]'
-                    : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
-                }`}
-              >
-                <Store className="w-4 h-4" />
-                <span>Marketplace</span>
-              </button>
-
-              {/* Inbox */}
-              <button
-                onClick={() => isLoggedIn ? navigateToPage('/chat') : setShowAuthWidget(true)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 relative ${
-                  isActive('/chat')
-                    ? 'bg-xsm-yellow text-black shadow-[0_0_12px_rgba(255,208,0,0.4)]'
-                    : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
-                }`}
-              >
-                <MessageSquare className="w-4 h-4" />
-                <span>Inbox</span>
-                {unreadCount > 0 && (
-                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1 shadow border border-xsm-black">
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                  </span>
-                )}
-              </button>
-
-              {/* Admin Dashboard */}
-              {isLoggedIn && isUserAdmin && (
-                <button
-                  onClick={() => navigateToPage('/admin-dashboard')}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
-                    isActive('/admin-dashboard')
-                      ? 'bg-xsm-yellow text-black shadow-[0_0_12px_rgba(255,208,0,0.4)]'
-                      : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
-                  }`}
-                >
-                  <Shield className="w-4 h-4" />
-                  <span>Dashboard</span>
-                </button>
-              )}
-            </div>
-
-            {/* ── RIGHT: Notifications + Profile ── */}
+            {/* ── RIGHT: Actions ── */}
             <div className="hidden md:flex items-center gap-2">
 
-              {/* Notifications Bell */}
+              {/* Notification Bell */}
               {isLoggedIn && (
                 <div className="relative" ref={notifRef}>
                   <button
-                    onClick={() => setShowNotifications(prev => !prev)}
-                    className="relative w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-xsm-yellow hover:bg-white/5 border border-transparent hover:border-white/10 transition-all duration-200"
+                    onClick={() => setShowNotifications(p => !p)}
+                    className="relative w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-xsm-yellow transition-colors duration-200"
+                    style={{ background: showNotifications ? 'rgba(255,208,0,0.08)' : 'transparent' }}
                     title="Notifications"
                   >
-                    <Bell className="w-5 h-5" />
+                    <FaBell className="text-[16px]" />
                     {unreadNotifCount > 0 && (
-                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-xsm-black" />
+                      <span className="absolute top-[7px] right-[7px] w-[8px] h-[8px] bg-red-500 rounded-full border-[1.5px] border-[#0a0a0a] animate-pulse" />
                     )}
                   </button>
 
-                  {/* Notifications Dropdown Panel */}
                   {showNotifications && (
-                    <div className="absolute right-0 top-full mt-2 w-80 bg-[#151515] border border-xsm-medium-gray/60 rounded-xl shadow-2xl overflow-hidden z-50" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,208,0,0.08)' }}>
-                      {/* Header */}
-                      <div className="flex items-center justify-between px-4 py-3 border-b border-xsm-medium-gray/40">
-                        <span className="text-sm font-semibold text-white">Notifications</span>
+                    <div
+                      className="absolute right-0 top-full mt-3 w-[300px] rounded-xl overflow-hidden z-50"
+                      style={{
+                        background: 'linear-gradient(145deg, #111111, #0d0d0d)',
+                        border: '1px solid rgba(255,255,255,0.07)',
+                        boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(255,208,0,0.06)',
+                      }}
+                    >
+                      {/* Panel header */}
+                      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                        <div className="flex items-center gap-2">
+                          <FaBell className="text-xsm-yellow text-sm" />
+                          <span className="text-sm font-bold text-white tracking-wide">Notifications</span>
+                          {unreadNotifCount > 0 && (
+                            <span className="bg-xsm-yellow text-black text-[10px] font-extrabold px-1.5 py-0.5 rounded-full">
+                              {unreadNotifCount}
+                            </span>
+                          )}
+                        </div>
                         {unreadNotifCount > 0 && (
-                          <button onClick={markAllRead} className="text-xs text-xsm-yellow hover:text-yellow-400 transition-colors">
-                            Mark all read
+                          <button onClick={markAllRead} className="text-xs text-gray-500 hover:text-xsm-yellow transition-colors flex items-center gap-1">
+                            <FaCheck className="text-[10px]" /> All read
                           </button>
                         )}
                       </div>
 
                       {/* Items */}
-                      <div className="max-h-64 overflow-y-auto">
+                      <div className="max-h-60 overflow-y-auto">
                         {notifications.length === 0 ? (
-                          <div className="px-4 py-8 text-center">
-                            <Bell className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-                            <p className="text-gray-400 text-sm">No notifications</p>
+                          <div className="flex flex-col items-center justify-center py-10 gap-2">
+                            <FaBell className="text-3xl text-gray-700" />
+                            <p className="text-gray-500 text-sm">You're all caught up!</p>
                           </div>
                         ) : (
-                          notifications.map(notif => (
-                            <div
-                              key={notif.id}
-                              onClick={() => { navigateToPage('/chat'); setShowNotifications(false); }}
-                              className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-white/5 border-b border-xsm-medium-gray/20 last:border-0 ${
-                                !notif.read ? 'bg-xsm-yellow/5' : ''
-                              }`}
+                          notifications.map(n => (
+                            <button
+                              key={n.id}
+                              onClick={() => { navigateTo('/chat'); setShowNotifications(false); }}
+                              className="flex items-start gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
+                              style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
                             >
-                              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                !notif.read ? 'bg-xsm-yellow/20' : 'bg-white/5'
-                              }`}>
-                                <MessageSquare className={`w-4 h-4 ${!notif.read ? 'text-xsm-yellow' : 'text-gray-500'}`} />
+                              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${!n.read ? 'bg-xsm-yellow/15' : 'bg-white/5'}`}>
+                                <FaEnvelope className={`text-sm ${!n.read ? 'text-xsm-yellow' : 'text-gray-500'}`} />
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <p className={`text-sm leading-tight ${!notif.read ? 'text-white font-medium' : 'text-gray-400'}`}>
-                                  {notif.text}
-                                </p>
-                                <p className="text-xs text-gray-600 mt-0.5">{notif.time}</p>
+                              <div className="flex-1">
+                                <p className={`text-sm leading-snug ${!n.read ? 'text-white font-medium' : 'text-gray-400'}`}>{n.text}</p>
+                                <p className="text-[11px] text-gray-600 mt-0.5">{n.time}</p>
                               </div>
-                              {!notif.read && (
-                                <span className="w-2 h-2 bg-xsm-yellow rounded-full flex-shrink-0 mt-1" />
-                              )}
-                            </div>
+                              {!n.read && <span className="w-2 h-2 bg-xsm-yellow rounded-full mt-1.5 flex-shrink-0" />}
+                            </button>
                           ))
                         )}
                       </div>
 
-                      {/* Footer */}
-                      <div className="border-t border-xsm-medium-gray/40 px-4 py-2.5">
-                        <button
-                          onClick={() => { navigateToPage('/chat'); setShowNotifications(false); }}
-                          className="text-xs text-xsm-yellow hover:text-yellow-400 transition-colors w-full text-center"
-                        >
-                          Go to Inbox →
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => { navigateTo('/chat'); setShowNotifications(false); }}
+                        className="block w-full px-4 py-2.5 text-xs font-semibold text-xsm-yellow hover:text-yellow-400 text-center transition-colors"
+                        style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+                      >
+                        Open Inbox →
+                      </button>
                     </div>
                   )}
                 </div>
               )}
 
+              {/* Divider */}
+              {isLoggedIn && <div className="w-px h-6 bg-white/10" />}
+
               {/* Profile Dropdown or Login */}
               {isLoggedIn ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-lg hover:bg-white/5 border border-transparent hover:border-white/10 transition-all duration-200 group">
+                    <button className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all duration-200 hover:bg-white/[0.05] border border-transparent hover:border-white/[0.08] group focus:outline-none">
                       {/* Avatar */}
-                      <div className={`w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ${
-                        (user as any)?.isVip
-                          ? 'ring-2 ring-xsm-yellow bg-gradient-to-tr from-yellow-500 to-amber-500'
-                          : 'bg-xsm-yellow'
-                      }`}>
-                        {user?.profilePicture ? (
-                          <img src={user.profilePicture} alt={user.username} className="w-full h-full object-cover" />
-                        ) : (
-                          <User className="w-4 h-4 text-black m-2" />
-                        )}
+                      <div
+                        className={`w-[30px] h-[30px] rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center ${
+                          (user as any)?.isVip
+                            ? 'ring-[1.5px] ring-xsm-yellow bg-gradient-to-tr from-yellow-500 to-amber-600'
+                            : 'bg-xsm-yellow'
+                        }`}
+                      >
+                        {user?.profilePicture
+                          ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
+                          : <FaUser className="text-black text-[11px]" />
+                        }
                       </div>
-                      {/* Name */}
-                      <div className="flex flex-col items-start">
-                        <span className="text-white text-xs font-semibold leading-tight group-hover:text-xsm-yellow transition-colors">
+                      <div className="flex flex-col items-start leading-tight">
+                        <span className="text-[12.5px] font-bold text-white group-hover:text-xsm-yellow transition-colors">
                           {user?.username || 'Account'}
                         </span>
                         {(user as any)?.isVip && (
-                          <span className="text-[10px] text-yellow-400 font-medium leading-tight flex items-center gap-0.5">
-                            <Crown className="w-2.5 h-2.5 fill-yellow-400/50" /> VIP
+                          <span className="text-[10px] text-yellow-400 flex items-center gap-0.5 font-medium">
+                            <FaCrown className="text-[8px]" /> VIP
                           </span>
                         )}
                       </div>
+                      <FaChevronDown className="text-gray-500 text-[10px] group-hover:text-gray-300 transition-colors" />
                     </button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent className="bg-[#151515] border-xsm-medium-gray/60 min-w-[200px] shadow-2xl" align="end">
-                    <DropdownMenuLabel className="text-gray-400 text-xs px-2">My Account</DropdownMenuLabel>
-                    <DropdownMenuSeparator className="bg-xsm-medium-gray/30" />
-                    <DropdownMenuItem onClick={() => navigateToPage(`/u/${user?.username}`)} className="cursor-pointer text-gray-200 hover:text-white focus:text-white hover:bg-white/5 focus:bg-white/5">
-                      <User className="mr-2 h-4 w-4 text-gray-400" />
-                      <span>Profile</span>
+                  <DropdownMenuContent
+                    align="end"
+                    className="min-w-[210px] rounded-xl overflow-hidden p-1"
+                    style={{
+                      background: 'linear-gradient(145deg, #111111, #0d0d0d)',
+                      border: '1px solid rgba(255,255,255,0.07)',
+                      boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(255,208,0,0.06)',
+                    }}
+                  >
+                    <DropdownMenuLabel className="px-3 py-2 text-[11px] font-bold text-gray-500 uppercase tracking-widest">My Account</DropdownMenuLabel>
+                    
+                    <DropdownMenuItem
+                      onClick={() => navigateTo(`/u/${user?.username}`)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-gray-300 hover:text-white hover:bg-white/[0.05] focus:bg-white/[0.05] focus:text-white transition-colors"
+                    >
+                      <FaUser className="text-gray-500 text-sm flex-shrink-0" />
+                      <span className="text-sm font-medium">Profile</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigateToPage('/my-deals')} className="cursor-pointer text-gray-200 hover:text-white focus:text-white hover:bg-white/5 focus:bg-white/5">
-                      <FileText className="mr-2 h-4 w-4 text-gray-400" />
-                      <span>My Deals</span>
+
+                    <DropdownMenuItem
+                      onClick={() => navigateTo('/my-deals')}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-gray-300 hover:text-white hover:bg-white/[0.05] focus:bg-white/[0.05] focus:text-white transition-colors"
+                    >
+                      <FaFileAlt className="text-gray-500 text-sm flex-shrink-0" />
+                      <span className="text-sm font-medium">My Deals</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => navigateToPage('/seller-deals')} className="cursor-pointer text-gray-200 hover:text-white focus:text-white hover:bg-white/5 focus:bg-white/5">
-                      <FileText className="mr-2 h-4 w-4 text-gray-400" />
-                      <span>Seller Deals</span>
+
+                    <DropdownMenuItem
+                      onClick={() => navigateTo('/seller-deals')}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-gray-300 hover:text-white hover:bg-white/[0.05] focus:bg-white/[0.05] focus:text-white transition-colors"
+                    >
+                      <FaFileAlt className="text-gray-500 text-sm flex-shrink-0" />
+                      <span className="text-sm font-medium">Seller Deals</span>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-xsm-medium-gray/30" />
-                    <DropdownMenuItem onClick={() => setShowVipModal(true)} className="cursor-pointer text-yellow-400 hover:text-yellow-300 focus:text-yellow-300 hover:bg-yellow-400/10 focus:bg-yellow-400/10 font-semibold">
-                      <Crown className="mr-2 h-4 w-4 fill-yellow-400/30" />
-                      <span>VIP Membership</span>
+
+                    {isUserAdmin && (
+                      <>
+                        <DropdownMenuSeparator className="my-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                        <DropdownMenuItem
+                          onClick={() => navigateTo('/admin-dashboard')}
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 focus:bg-blue-500/10 focus:text-blue-300 transition-colors"
+                        >
+                          <FaTachometerAlt className="text-sm flex-shrink-0" />
+                          <span className="text-sm font-semibold">Admin Dashboard</span>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+
+                    <DropdownMenuSeparator className="my-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+
+                    <DropdownMenuItem
+                      onClick={() => setShowVipModal(true)}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer font-semibold transition-colors"
+                      style={{ color: '#facc15' }}
+                    >
+                      <FaCrown className="text-sm flex-shrink-0 opacity-70" />
+                      <span className="text-sm">VIP Membership</span>
                     </DropdownMenuItem>
-                    <DropdownMenuSeparator className="bg-xsm-medium-gray/30" />
-                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-400 hover:text-red-300 focus:text-red-300 hover:bg-red-400/10 focus:bg-red-400/10">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Logout</span>
+
+                    <DropdownMenuSeparator className="my-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-red-400 hover:text-red-300 hover:bg-red-500/10 focus:bg-red-500/10 focus:text-red-300 transition-colors"
+                    >
+                      <FaSignOutAlt className="text-sm flex-shrink-0" />
+                      <span className="text-sm font-medium">Logout</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
                 <button
                   onClick={() => setShowAuthWidget(true)}
-                  className="bg-xsm-yellow hover:bg-yellow-400 text-black px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 flex items-center gap-2 shadow-[0_0_12px_rgba(255,208,0,0.25)] hover:shadow-[0_0_20px_rgba(255,208,0,0.4)]"
+                  className="relative flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-bold text-black overflow-hidden transition-all duration-200 hover:scale-[1.03] active:scale-[0.98]"
+                  style={{
+                    background: 'linear-gradient(135deg, #FFD700 0%, #FFC200 50%, #FFD700 100%)',
+                    boxShadow: '0 0 20px rgba(255,208,0,0.3), 0 4px 15px rgba(0,0,0,0.3)',
+                  }}
                 >
-                  <User className="w-4 h-4" />
+                  <FaUser className="text-[12px]" />
                   <span>Login</span>
                 </button>
               )}
             </div>
 
-            {/* ── MOBILE: Hamburger + unread badge ── */}
+            {/* ── MOBILE hamburger ── */}
             <div className="md:hidden flex items-center gap-2">
               {isLoggedIn && unreadCount > 0 && (
                 <button
-                  onClick={() => navigateToPage('/chat')}
+                  onClick={() => navigateTo('/chat')}
                   className="relative w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-xsm-yellow"
                 >
-                  <MessageSquare className="w-5 h-5" />
-                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-xsm-black" />
+                  <FaInbox className="text-base" />
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border border-[#0a0a0a]" />
                 </button>
               )}
               <button
-                onClick={() => setIsMenuOpen(!isMenuOpen)}
+                onClick={() => setIsMenuOpen(p => !p)}
                 className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
               >
-                {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+                {isMenuOpen ? <FaTimes className="text-base" /> : <FaBars className="text-base" />}
               </button>
             </div>
 
@@ -385,88 +410,88 @@ const Navbar: React.FC<NavbarProps> = () => {
 
         {/* ── MOBILE MENU ── */}
         {isMenuOpen && (
-          <div className="md:hidden bg-[#0d0d0d] border-t border-xsm-medium-gray/40">
-            <div className="px-3 py-3 space-y-1">
-              {/* User greeting */}
+          <div
+            className="md:hidden border-t"
+            style={{
+              background: 'linear-gradient(180deg, #0d0d0d 0%, #080808 100%)',
+              borderColor: 'rgba(255,255,255,0.06)',
+            }}
+          >
+            <div className="px-4 py-4 space-y-1">
               {isLoggedIn && (
-                <div className="flex items-center gap-3 px-3 py-2 mb-2">
-                  <div className={`w-9 h-9 rounded-full overflow-hidden flex-shrink-0 ${(user as any)?.isVip ? 'ring-2 ring-xsm-yellow' : 'bg-xsm-yellow'}`}>
-                    {user?.profilePicture ? (
-                      <img src={user.profilePicture} alt={user.username} className="w-full h-full object-cover" />
-                    ) : (
-                      <User className="w-5 h-5 text-black m-2" />
-                    )}
+                <div className="flex items-center gap-3 px-2 py-3 mb-2 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
+                  <div className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${(user as any)?.isVip ? 'ring-2 ring-xsm-yellow bg-gradient-to-tr from-yellow-500 to-amber-600' : 'bg-xsm-yellow'}`}>
+                    {user?.profilePicture
+                      ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
+                      : <FaUser className="text-black text-sm" />
+                    }
                   </div>
                   <div>
-                    <p className="text-white text-sm font-semibold">{user?.username}</p>
-                    {(user as any)?.isVip && <p className="text-yellow-400 text-xs flex items-center gap-1"><Crown className="w-3 h-3" /> VIP Member</p>}
+                    <p className="text-white text-sm font-bold">{user?.username}</p>
+                    {(user as any)?.isVip && <p className="text-yellow-400 text-xs flex items-center gap-1"><FaCrown className="text-[9px]" /> VIP Member</p>}
                   </div>
                 </div>
               )}
 
-              {/* Nav Links */}
+              {/* Mobile nav items */}
               {[
-                { label: 'Sell', path: '/sell', icon: PlusCircle, requireAuth: true },
-                { label: 'Marketplace', path: '/', icon: Store, requireAuth: false },
-                { label: 'Inbox', path: '/chat', icon: MessageSquare, requireAuth: true, badge: unreadCount },
+                { path: '/', icon: <FaStore />, label: 'Marketplace' },
+                { path: '/chat', icon: <FaInbox />, label: 'Inbox', badge: unreadCount, requireAuth: true },
+                { path: '/sell', icon: <FaTag />, label: 'Sell', requireAuth: true },
               ].map(item => (
                 <button
                   key={item.path}
                   onClick={() => {
                     if (item.requireAuth && !isLoggedIn) { setIsMenuOpen(false); setShowAuthWidget(true); return; }
-                    navigateToPage(item.path);
+                    navigateTo(item.path);
                   }}
-                  className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
+                  className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-semibold transition-all duration-200 ${
                     isActive(item.path)
-                      ? 'bg-xsm-yellow text-black'
-                      : 'text-gray-300 hover:text-white hover:bg-white/5'
+                      ? 'bg-xsm-yellow/10 text-xsm-yellow border border-xsm-yellow/20'
+                      : 'text-gray-300 hover:text-white hover:bg-white/[0.04] border border-transparent'
                   }`}
                 >
-                  <item.icon className="w-4 h-4" />
+                  <span className={isActive(item.path) ? 'text-xsm-yellow' : 'text-gray-500'}>{item.icon}</span>
                   <span>{item.label}</span>
-                  {item.badge && item.badge > 0 && (
-                    <span className="ml-auto bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                  {item.badge && item.badge > 0 ? (
+                    <span className="ml-auto bg-red-500 text-white text-[10px] font-extrabold px-2 py-0.5 rounded-full">
                       {item.badge > 99 ? '99+' : item.badge}
                     </span>
-                  )}
+                  ) : null}
                 </button>
               ))}
 
-              {isLoggedIn && isUserAdmin && (
-                <button
-                  onClick={() => navigateToPage('/admin-dashboard')}
-                  className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
-                >
-                  <Shield className="w-4 h-4" />
-                  <span>Admin Dashboard</span>
-                </button>
-              )}
-
-              <div className="border-t border-xsm-medium-gray/30 pt-2 mt-2 space-y-1">
+              <div className="border-t pt-2 mt-2 space-y-1" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
                 {isLoggedIn ? (
                   <>
-                    <button onClick={() => navigateToPage(`/u/${user?.username}`)} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
-                      <User className="w-4 h-4" /> <span>Profile</span>
+                    <button onClick={() => navigateTo(`/u/${user?.username}`)} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                      <FaUser className="text-sm text-gray-600" /><span>Profile</span>
                     </button>
-                    <button onClick={() => navigateToPage('/my-deals')} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
-                      <FileText className="w-4 h-4" /> <span>My Deals</span>
+                    <button onClick={() => navigateTo('/my-deals')} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                      <FaFileAlt className="text-sm text-gray-600" /><span>My Deals</span>
                     </button>
-                    <button onClick={() => navigateToPage('/seller-deals')} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
-                      <FileText className="w-4 h-4" /> <span>Seller Deals</span>
+                    <button onClick={() => navigateTo('/seller-deals')} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
+                      <FaFileAlt className="text-sm text-gray-600" /><span>Seller Deals</span>
                     </button>
-                    <button onClick={() => { setShowVipModal(true); setIsMenuOpen(false); }} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-semibold text-yellow-400 hover:bg-yellow-400/10 transition-colors">
-                      <Crown className="w-4 h-4 fill-yellow-400/30" /> <span>VIP Membership</span>
+                    {isUserAdmin && (
+                      <button onClick={() => navigateTo('/admin-dashboard')} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors">
+                        <FaTachometerAlt className="text-sm" /><span>Admin Dashboard</span>
+                      </button>
+                    )}
+                    <button onClick={() => { setShowVipModal(true); setIsMenuOpen(false); }} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-yellow-400 hover:bg-yellow-400/10 transition-colors">
+                      <FaCrown className="text-sm opacity-80" /><span>VIP Membership</span>
                     </button>
-                    <button onClick={() => { handleLogout(); }} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-400/10 transition-colors">
-                      <LogOut className="w-4 h-4" /> <span>Logout</span>
+                    <button onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-medium text-red-400 hover:bg-red-500/10 transition-colors">
+                      <FaSignOutAlt className="text-sm" /><span>Logout</span>
                     </button>
                   </>
                 ) : (
                   <button
                     onClick={() => { setIsMenuOpen(false); setShowAuthWidget(true); }}
-                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-bold bg-xsm-yellow text-black hover:bg-yellow-400 transition-colors"
+                    className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl text-sm font-bold text-black transition-colors"
+                    style={{ background: 'linear-gradient(135deg, #FFD700, #FFC200)' }}
                   >
-                    <User className="w-4 h-4" /> <span>Login / Sign Up</span>
+                    <FaUser /><span>Login / Sign Up</span>
                   </button>
                 )}
               </div>
@@ -481,9 +506,9 @@ const Navbar: React.FC<NavbarProps> = () => {
           onClose={() => setShowVipModal(false)}
           onSuccess={(vipUntil) => {
             if (user) {
-              const updatedUser = { ...user, isVip: true, vipUntil };
-              localStorage.setItem('userData', JSON.stringify(updatedUser));
-              setUser(updatedUser as any);
+              const updated = { ...user, isVip: true, vipUntil };
+              localStorage.setItem('userData', JSON.stringify(updated));
+              setUser(updated as any);
             }
           }}
         />

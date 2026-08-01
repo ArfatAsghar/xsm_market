@@ -150,9 +150,9 @@ const AdList: React.FC<AdListProps> = ({
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = filtered.filter(ad => 
-        ad.title.toLowerCase().includes(query) ||
-        ad.category.toLowerCase().includes(query) ||
-        ad.description.toLowerCase().includes(query)
+        (ad.title || '').toLowerCase().includes(query) ||
+        (ad.category || '').toLowerCase().includes(query) ||
+        (ad.description || '').toLowerCase().includes(query)
       );
     }
 

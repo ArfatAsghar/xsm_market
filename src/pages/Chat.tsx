@@ -551,6 +551,7 @@ const Chat: React.FC = () => {
   // };
 
   const formatTime = (dateString: string) => {
+    if (!dateString || typeof dateString !== 'string') return '';
     // Parse the date string. If it doesn't have timezone info, treat as UTC
     let date: Date;
     if (dateString.includes('T') || dateString.includes('Z')) {
@@ -597,7 +598,7 @@ const Chat: React.FC = () => {
   };
 
   const formatLastSeen = (dateString: string) => {
-    if (!dateString) return '';
+    if (!dateString || typeof dateString !== 'string') return '';
     
     // Parse the date string properly with timezone handling
     let date: Date;

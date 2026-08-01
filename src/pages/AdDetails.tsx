@@ -371,8 +371,8 @@ const AdDetails: React.FC = () => {
     }).format(price);
   };
 
-  const getOnlineStatus = (lastSeenAt?: string) => {
-    if (!lastSeenAt) return { status: 'offline', text: 'Offline' };
+  const formatLastSeen = (lastSeenAt?: string) => {
+    if (!lastSeenAt || typeof lastSeenAt !== 'string') return { status: 'offline', text: 'Offline' };
     
     // Parse the date string properly with timezone handling
     let lastSeen: Date;

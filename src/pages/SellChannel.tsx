@@ -1315,14 +1315,14 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                 </label>
                 <div className="flex flex-wrap gap-2">
                   {AVAILABLE_PAYMENT_METHODS.map((pm) => {
-                    const isSelected = formData.preferredPaymentMethods.includes(pm.name);
+                    const isSelected = (formData.preferredPaymentMethods || []).includes(pm.name);
                     return (
                       <button
                         key={pm.id}
                         type="button"
                         onClick={() => {
                           setFormData(prev => {
-                            const current = prev.preferredPaymentMethods;
+                            const current = prev.preferredPaymentMethods || [];
                             const next = current.includes(pm.name)
                               ? current.filter(m => m !== pm.name)
                               : [...current, pm.name];

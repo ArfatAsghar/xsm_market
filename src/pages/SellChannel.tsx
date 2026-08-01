@@ -105,11 +105,13 @@ const SellChannel: React.FC<SellChannelProps> = () => {
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
 
   // Title comes from auto-extraction; not required to be typed manually
-  const isFormValid = 
+  const isFieldsValid = 
     formData.channelUrl.trim().length > 0 &&
     formData.category.trim().length > 0 &&
     formData.price.trim().length > 0 && parseFloat(formData.price) >= 5 &&
     formData.subscribers.trim().length > 0 && parseInt(formData.subscribers) >= 100;
+  // For new listings verification is required; edit mode skips verification
+  const isFormValid = isFieldsValid && (isEditMode || isCodeVerified === true);
   const contentTypeDropdownRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -1344,6 +1346,14 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
              {/* Submit Button */}
             <div className="mt-8 text-center">
+              {/* Hint text when fields are filled but verification is pending */}
+              {!isEditMode && isFieldsValid && isCodeVerified !== true && (
+                <p className="text-amber-400 text-sm mb-3 font-medium">
+                  {isCodeVerified === false
+                    ? '❌ Verification code not found in channel bio. Add it to your YouTube bio and click Auto-Fill again.'
+                    : '⏳ Add the verification code to your YouTube channel bio, then click Auto-Fill to verify ownership before publishing.'}
+                </p>
+              )}
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitting || !isFormValid}
@@ -1351,7 +1361,9 @@ const SellChannel: React.FC<SellChannelProps> = () => {
               >
                 {isSubmitting 
                   ? (isEditMode ? 'Updating Listing...' : 'Creating Listing...') 
-                  : (isEditMode ? 'Update Listing' : 'Create Listing')
+                  : !isEditMode && isFieldsValid && isCodeVerified !== true
+                    ? '🔐 Verify Channel Ownership First'
+                    : (isEditMode ? 'Update Listing' : 'Create Listing')
                 }
               </button>
             </div>

@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Menu, X, User, PlusCircle, LogOut, Settings, Heart, Star, MessageSquare, FileText, Crown } from 'lucide-react';
+import {
+  Menu, X, User, PlusCircle, LogOut, Settings, Heart, Star,
+  MessageSquare, FileText, Crown, Bell, ShoppingBag, Inbox,
+  Store, LayoutGrid, Shield
+} from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { logout, API_URL } from '@/services/auth';
 import { isCurrentUserAdmin } from '@/utils/adminConfig';
 import VipSubscriptionModal from './VipSubscriptionModal';
 import AuthWidget from './AuthWidget';
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage,
-} from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,9 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-interface NavbarProps {
-  // No longer need currentPage and setCurrentPage
-}
+interface NavbarProps {}
 
 const Navbar: React.FC<NavbarProps> = () => {
   const navigate = useNavigate();
@@ -33,10 +30,16 @@ const Navbar: React.FC<NavbarProps> = () => {
   const [showVipModal, setShowVipModal] = useState(false);
   const { isLoggedIn, setIsLoggedIn, user, setUser } = useAuth();
   const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [notifications, setNotifications] = useState<Array<{id: number; text: string; read: boolean; time: string}>>([]);
+  const notifRef = useRef<HTMLDivElement>(null);
 
-  // Fetch unread messages count (Revision 7)
+  // Fetch unread messages count
   useEffect(() => {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn) {
+      setUnreadCount(0);
+      return;
+    }
     const fetchUnread = async () => {
       try {
         const token = localStorage.getItem('token');
@@ -51,7 +54,7 @@ const Navbar: React.FC<NavbarProps> = () => {
           }
         }
       } catch (e) {
-        // silent catch
+        // silent
       }
     };
     fetchUnread();
@@ -59,199 +62,298 @@ const Navbar: React.FC<NavbarProps> = () => {
     return () => clearInterval(interval);
   }, [isLoggedIn]);
 
-  // Helper function to navigate and scroll to top
-  const navigateToPage = (page: string) => {
-    if(page === 'home') page = '/';
-    navigate(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  // Close notification panel on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Seed sample notifications based on unread count
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setNotifications([]);
+      return;
+    }
+    const base: Array<{id: number; text: string; read: boolean; time: string}> = [];
+    if (unreadCount > 0) {
+      base.push({ id: 1, text: `You have ${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`, read: false, time: 'Just now' });
+    }
+    setNotifications(base);
+  }, [unreadCount, isLoggedIn]);
+
+  const unreadNotifCount = notifications.filter(n => !n.read).length;
+
+  const markAllRead = () => {
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   };
 
-  // Check dashboard access when user changes (admin, manager, or viewer)
+  // Navigate helper
+  const navigateToPage = (page: string) => {
+    if (page === 'home') page = '/';
+    navigate(page);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setIsMenuOpen(false);
+  };
+
+  // Admin check
   useEffect(() => {
     const checkAdminStatus = async () => {
       if (isLoggedIn && user) {
         const role = (user as any).role;
-        
-        // Grant dashboard access to admin, manager, or viewer roles
-        if (role === 'admin' || role === 'manager' || role === 'viewer') {
-          setIsUserAdmin(true);
-          return;
-        }
-        
-        // Legacy: check if user has isAdmin flag set to true
-        if ((user as any).isAdmin === true) {
-          setIsUserAdmin(true);
-          return;
-        }
-        
-        // Fallback: check against backend admin configuration
+        if (role === 'admin' || role === 'manager' || role === 'viewer') { setIsUserAdmin(true); return; }
+        if ((user as any).isAdmin === true) { setIsUserAdmin(true); return; }
         if (user.email || user.username) {
           const adminStatus = await isCurrentUserAdmin(user.email, user.username);
           setIsUserAdmin(adminStatus);
-        } else {
-          setIsUserAdmin(false);
-        }
-      } else {
-        setIsUserAdmin(false);
-      }
+        } else { setIsUserAdmin(false); }
+      } else { setIsUserAdmin(false); }
     };
-
     checkAdminStatus();
   }, [isLoggedIn, user?.email, user?.username, (user as any)?.isAdmin, (user as any)?.role]);
 
   const handleLogout = () => {
     logout();
     setIsLoggedIn(false);
-    navigateToPage('home');
+    navigateToPage('/');
   };
 
-  const getNavItems = () => {
-    const items = [];
-    
-    // Always add the 'Begin Selling' button regardless of login status
-    items.push(
-      { id: 'sell', label: 'Begin Selling', icon: PlusCircle }
-    );
-
-    // Add Admin Dashboard button ONLY for the admin user
-    if (isLoggedIn && isUserAdmin) {
-      items.push(
-        { id: 'admin-dashboard', label: 'Admin Dashboard', icon: Settings }
-      );
-    }
-
-    return items;
-  };
-
-  const navItems = getNavItems();
+  const isActive = (path: string) => location.pathname === path || (path === '/' && location.pathname === '/');
 
   return (
     <>
       {showAuthWidget && (
-        <AuthWidget 
-          onClose={() => setShowAuthWidget(false)} 
-          onNavigate={(page) => {
-            navigateToPage(page);
-          }}
+        <AuthWidget
+          onClose={() => setShowAuthWidget(false)}
+          onNavigate={(page) => { navigateToPage(page); }}
         />
       )}
-      <nav className="bg-gradient-to-r from-xsm-black via-xsm-dark-gray to-xsm-black border-b border-xsm-medium-gray sticky top-0 z-50 relative">
-        {/* Middle fade effect */}
-        <div className="absolute inset-0 bg-gradient-radial from-xsm-yellow/10 via-transparent to-transparent opacity-80" style={{left: '50%', transform: 'translateX(-50%)', width: '50%'}}></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-          <div className="flex justify-between items-center h-[60px] md:h-[72px]">
-            {/* Left Side - Begin Selling Button */}
-            <div className="flex items-center">
-              {navItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    if (isLoggedIn) {
-                      navigateToPage(item.id);
-                    } else {
-                      setShowAuthWidget(true);
-                    }
-                  }}
-                  className={
-                    item.id === 'sell' 
-                      ? "bg-xsm-yellow text-black px-3 py-1.5 text-xs font-medium rounded hover:bg-yellow-500 transition-colors flex items-center space-x-1"
-                      : `flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
-                          location.pathname === `/${item.id}` || (item.id === 'home' && location.pathname === '/')
-                            ? 'text-xsm-yellow bg-xsm-medium-gray'
-                            : 'text-white hover:text-xsm-yellow'
-                        }`
-                  }
-                >
-                  {item.icon && <item.icon className="w-4 h-4" />}
-                  <span>{item.label}</span>
-                </button>
-              ))}
-            </div>
-            
-            {/* Center Logo with enhanced highlight effect */}
-            <div 
-              className="flex-shrink-0 cursor-pointer absolute left-1/2 transform -translate-x-1/2 z-10 group"
-              onClick={() => navigateToPage('home')}
+
+      <nav className="bg-xsm-black border-b border-xsm-medium-gray/60 sticky top-0 z-50" style={{ boxShadow: '0 2px 20px rgba(255,208,0,0.06)' }}>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-[62px]">
+
+            {/* ── LEFT: Logo ── */}
+            <div
+              className="flex items-center flex-shrink-0 cursor-pointer group"
+              onClick={() => navigateToPage('/')}
             >
-              {/* Logo highlight background with yellow fade in middle */}
-              <div className="absolute -inset-4 bg-gradient-radial from-xsm-yellow/30 via-xsm-medium-gray/30 to-transparent rounded-full blur-lg opacity-80 group-hover:opacity-100 transition-all duration-300 group-hover:from-xsm-yellow/50"></div>
-              {/* Extra glow effect on hover */}
-              <div className="absolute -inset-2 bg-gradient-radial from-xsm-yellow/15 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 animate-pulse"></div>
-              <div className="absolute -inset-6 bg-gradient-radial from-xsm-yellow/5 via-transparent to-transparent rounded-full animate-pulse opacity-70"></div>
-              <img 
-                src="/images/logo.png" 
-                alt="XSM Market Logo" 
-                className="h-10 md:h-[48px] object-contain relative z-10 drop-shadow-[0_0_4px_rgba(255,208,0,0.5)]"
-              />
+              <div className="relative">
+                <div className="absolute -inset-3 bg-gradient-radial from-xsm-yellow/20 via-transparent to-transparent rounded-full blur-md opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                <img
+                  src="/images/logo.png"
+                  alt="XSM Market"
+                  className="h-9 md:h-10 object-contain relative z-10 drop-shadow-[0_0_6px_rgba(255,208,0,0.4)] group-hover:drop-shadow-[0_0_12px_rgba(255,208,0,0.7)] transition-all duration-300"
+                />
+              </div>
             </div>
 
-              {/* Desktop Navigation on right */}
-              <div className="hidden md:flex items-center space-x-4">
-                {/* Profile Dropdown or Login Button */}
-                {isLoggedIn ? (
-                  <div className="flex items-center space-x-3">
-                    {/* Greeting text */}
-                    <span className="text-white text-sm hidden md:block flex items-center gap-1">
-                      Hi, <span className="text-xsm-yellow font-medium">{user?.username || 'User'}</span>
-                      {(user as any)?.isVip && (
-                        <Crown className="w-3.5 h-3.5 text-yellow-400 animate-pulse fill-yellow-400/20" title="VIP Member" />
-                      )}
-                    </span>
-                    
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button className="flex items-center space-x-2 hover:opacity-80 transition-opacity relative">
-                          <div className={`w-8 h-8 rounded-full overflow-hidden ${
-                            (user as any)?.isVip 
-                              ? 'ring-2 ring-yellow-400 bg-gradient-to-tr from-yellow-500 to-amber-500' 
-                              : 'bg-xsm-yellow'
-                          }`}>
-                            {user?.profilePicture ? (
-                              <img
-                                src={user.profilePicture}
-                                alt={user.username}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <User className="w-5 h-5 text-black m-1.5" />
-                            )}
+            {/* ── CENTER: Nav Items (desktop) ── */}
+            <div className="hidden md:flex items-center gap-1">
+              {/* Sell */}
+              <button
+                onClick={() => isLoggedIn ? navigateToPage('/sell') : setShowAuthWidget(true)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                  isActive('/sell')
+                    ? 'bg-xsm-yellow text-black shadow-[0_0_12px_rgba(255,208,0,0.4)]'
+                    : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
+                }`}
+              >
+                <PlusCircle className="w-4 h-4" />
+                <span>Sell</span>
+              </button>
+
+              {/* Marketplace */}
+              <button
+                onClick={() => navigateToPage('/')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                  isActive('/')
+                    ? 'bg-xsm-yellow text-black shadow-[0_0_12px_rgba(255,208,0,0.4)]'
+                    : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
+                }`}
+              >
+                <Store className="w-4 h-4" />
+                <span>Marketplace</span>
+              </button>
+
+              {/* Inbox */}
+              <button
+                onClick={() => isLoggedIn ? navigateToPage('/chat') : setShowAuthWidget(true)}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 relative ${
+                  isActive('/chat')
+                    ? 'bg-xsm-yellow text-black shadow-[0_0_12px_rgba(255,208,0,0.4)]'
+                    : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                <span>Inbox</span>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-full px-1 shadow border border-xsm-black">
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Admin Dashboard */}
+              {isLoggedIn && isUserAdmin && (
+                <button
+                  onClick={() => navigateToPage('/admin-dashboard')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all duration-200 ${
+                    isActive('/admin-dashboard')
+                      ? 'bg-xsm-yellow text-black shadow-[0_0_12px_rgba(255,208,0,0.4)]'
+                      : 'text-gray-300 hover:text-white hover:bg-white/5 border border-transparent hover:border-white/10'
+                  }`}
+                >
+                  <Shield className="w-4 h-4" />
+                  <span>Dashboard</span>
+                </button>
+              )}
+            </div>
+
+            {/* ── RIGHT: Notifications + Profile ── */}
+            <div className="hidden md:flex items-center gap-2">
+
+              {/* Notifications Bell */}
+              {isLoggedIn && (
+                <div className="relative" ref={notifRef}>
+                  <button
+                    onClick={() => setShowNotifications(prev => !prev)}
+                    className="relative w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-xsm-yellow hover:bg-white/5 border border-transparent hover:border-white/10 transition-all duration-200"
+                    title="Notifications"
+                  >
+                    <Bell className="w-5 h-5" />
+                    {unreadNotifCount > 0 && (
+                      <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-xsm-black" />
+                    )}
+                  </button>
+
+                  {/* Notifications Dropdown Panel */}
+                  {showNotifications && (
+                    <div className="absolute right-0 top-full mt-2 w-80 bg-[#151515] border border-xsm-medium-gray/60 rounded-xl shadow-2xl overflow-hidden z-50" style={{ boxShadow: '0 8px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,208,0,0.08)' }}>
+                      {/* Header */}
+                      <div className="flex items-center justify-between px-4 py-3 border-b border-xsm-medium-gray/40">
+                        <span className="text-sm font-semibold text-white">Notifications</span>
+                        {unreadNotifCount > 0 && (
+                          <button onClick={markAllRead} className="text-xs text-xsm-yellow hover:text-yellow-400 transition-colors">
+                            Mark all read
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Items */}
+                      <div className="max-h-64 overflow-y-auto">
+                        {notifications.length === 0 ? (
+                          <div className="px-4 py-8 text-center">
+                            <Bell className="w-8 h-8 text-gray-600 mx-auto mb-2" />
+                            <p className="text-gray-400 text-sm">No notifications</p>
                           </div>
-                          {(user as any)?.isVip && (
-                            <div className="absolute -top-1 -right-1 bg-yellow-400 text-black rounded-full p-0.5 shadow-md">
-                              <Crown className="w-2.5 h-2.5 fill-current" />
+                        ) : (
+                          notifications.map(notif => (
+                            <div
+                              key={notif.id}
+                              onClick={() => { navigateToPage('/chat'); setShowNotifications(false); }}
+                              className={`flex items-start gap-3 px-4 py-3 cursor-pointer transition-colors hover:bg-white/5 border-b border-xsm-medium-gray/20 last:border-0 ${
+                                !notif.read ? 'bg-xsm-yellow/5' : ''
+                              }`}
+                            >
+                              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                !notif.read ? 'bg-xsm-yellow/20' : 'bg-white/5'
+                              }`}>
+                                <MessageSquare className={`w-4 h-4 ${!notif.read ? 'text-xsm-yellow' : 'text-gray-500'}`} />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-sm leading-tight ${!notif.read ? 'text-white font-medium' : 'text-gray-400'}`}>
+                                  {notif.text}
+                                </p>
+                                <p className="text-xs text-gray-600 mt-0.5">{notif.time}</p>
+                              </div>
+                              {!notif.read && (
+                                <span className="w-2 h-2 bg-xsm-yellow rounded-full flex-shrink-0 mt-1" />
+                              )}
                             </div>
-                          )}
+                          ))
+                        )}
+                      </div>
+
+                      {/* Footer */}
+                      <div className="border-t border-xsm-medium-gray/40 px-4 py-2.5">
+                        <button
+                          onClick={() => { navigateToPage('/chat'); setShowNotifications(false); }}
+                          className="text-xs text-xsm-yellow hover:text-yellow-400 transition-colors w-full text-center"
+                        >
+                          Go to Inbox →
                         </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-xsm-dark-gray border-xsm-medium-gray">
-                        <DropdownMenuItem onClick={() => navigateToPage(`/u/${user?.username}`)} className="cursor-pointer">
-                          <User className="mr-2 h-4 w-4" />
-                          <span>Profile</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setShowVipModal(true)} className="cursor-pointer text-yellow-400 hover:text-yellow-300 font-semibold focus:text-yellow-300">
-                          <Crown className="mr-2 h-4 w-4 fill-yellow-400/20" />
-                          <span>VIP Membership</span>
-                        </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigateToPage('my-deals')} className="cursor-pointer">
-                        <FileText className="mr-2 h-4 w-4" />
-                        <span>My Deals</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigateToPage('seller-deals')} className="cursor-pointer">
-                        <FileText className="mr-2 h-4 w-4" />
-                        <span>Seller Deals</span>
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator className="bg-xsm-medium-gray/40" />
-                      <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                        <LogOut className="mr-2 h-4 w-4" />
-                        <span>Logout</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                      </div>
+                    </div>
+                  )}
                 </div>
+              )}
+
+              {/* Profile Dropdown or Login */}
+              {isLoggedIn ? (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button className="flex items-center gap-2 pl-1 pr-3 py-1 rounded-lg hover:bg-white/5 border border-transparent hover:border-white/10 transition-all duration-200 group">
+                      {/* Avatar */}
+                      <div className={`w-8 h-8 rounded-full overflow-hidden flex-shrink-0 ${
+                        (user as any)?.isVip
+                          ? 'ring-2 ring-xsm-yellow bg-gradient-to-tr from-yellow-500 to-amber-500'
+                          : 'bg-xsm-yellow'
+                      }`}>
+                        {user?.profilePicture ? (
+                          <img src={user.profilePicture} alt={user.username} className="w-full h-full object-cover" />
+                        ) : (
+                          <User className="w-4 h-4 text-black m-2" />
+                        )}
+                      </div>
+                      {/* Name */}
+                      <div className="flex flex-col items-start">
+                        <span className="text-white text-xs font-semibold leading-tight group-hover:text-xsm-yellow transition-colors">
+                          {user?.username || 'Account'}
+                        </span>
+                        {(user as any)?.isVip && (
+                          <span className="text-[10px] text-yellow-400 font-medium leading-tight flex items-center gap-0.5">
+                            <Crown className="w-2.5 h-2.5 fill-yellow-400/50" /> VIP
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent className="bg-[#151515] border-xsm-medium-gray/60 min-w-[200px] shadow-2xl" align="end">
+                    <DropdownMenuLabel className="text-gray-400 text-xs px-2">My Account</DropdownMenuLabel>
+                    <DropdownMenuSeparator className="bg-xsm-medium-gray/30" />
+                    <DropdownMenuItem onClick={() => navigateToPage(`/u/${user?.username}`)} className="cursor-pointer text-gray-200 hover:text-white focus:text-white hover:bg-white/5 focus:bg-white/5">
+                      <User className="mr-2 h-4 w-4 text-gray-400" />
+                      <span>Profile</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigateToPage('/my-deals')} className="cursor-pointer text-gray-200 hover:text-white focus:text-white hover:bg-white/5 focus:bg-white/5">
+                      <FileText className="mr-2 h-4 w-4 text-gray-400" />
+                      <span>My Deals</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigateToPage('/seller-deals')} className="cursor-pointer text-gray-200 hover:text-white focus:text-white hover:bg-white/5 focus:bg-white/5">
+                      <FileText className="mr-2 h-4 w-4 text-gray-400" />
+                      <span>Seller Deals</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-xsm-medium-gray/30" />
+                    <DropdownMenuItem onClick={() => setShowVipModal(true)} className="cursor-pointer text-yellow-400 hover:text-yellow-300 focus:text-yellow-300 hover:bg-yellow-400/10 focus:bg-yellow-400/10 font-semibold">
+                      <Crown className="mr-2 h-4 w-4 fill-yellow-400/30" />
+                      <span>VIP Membership</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="bg-xsm-medium-gray/30" />
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-red-400 hover:text-red-300 focus:text-red-300 hover:bg-red-400/10 focus:bg-red-400/10">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Logout</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               ) : (
                 <button
                   onClick={() => setShowAuthWidget(true)}
-                  className="bg-xsm-yellow hover:bg-yellow-500 text-black px-4 py-2 rounded-md text-sm font-medium transition-colors duration-200 flex items-center space-x-2"
+                  className="bg-xsm-yellow hover:bg-yellow-400 text-black px-4 py-2 rounded-lg text-sm font-bold transition-all duration-200 flex items-center gap-2 shadow-[0_0_12px_rgba(255,208,0,0.25)] hover:shadow-[0_0_20px_rgba(255,208,0,0.4)]"
                 >
                   <User className="w-4 h-4" />
                   <span>Login</span>
@@ -259,151 +361,115 @@ const Navbar: React.FC<NavbarProps> = () => {
               )}
             </div>
 
-            {/* Mobile menu button */}
-            <div className="md:hidden">
+            {/* ── MOBILE: Hamburger + unread badge ── */}
+            <div className="md:hidden flex items-center gap-2">
+              {isLoggedIn && unreadCount > 0 && (
+                <button
+                  onClick={() => navigateToPage('/chat')}
+                  className="relative w-9 h-9 flex items-center justify-center rounded-lg text-gray-400 hover:text-xsm-yellow"
+                >
+                  <MessageSquare className="w-5 h-5" />
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border border-xsm-black" />
+                </button>
+              )}
               <button
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
-                className="text-white hover:text-xsm-yellow p-2"
+                className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
               >
-                {isMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                {isMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
               </button>
             </div>
-          </div>
 
-          {/* Mobile menu spacing - ensure we have enough room for the larger logo */}
-          <div className="md:hidden pb-4 pt-2"></div>
+          </div>
         </div>
 
-        {/* Mobile Navigation Menu */}
+        {/* ── MOBILE MENU ── */}
         {isMenuOpen && (
-          <div className="md:hidden bg-xsm-dark-gray border-t border-xsm-medium-gray">
-            <div className="px-2 pt-2 pb-3 space-y-1">
-              {isLoggedIn ? (
-                <>
-                  {/* User greeting for mobile view */}
-                  <div className="flex items-center px-3 py-2 space-x-2">
-                    <Avatar className={`w-8 h-8 border-2 ${
-                      (user as any)?.isVip ? 'border-yellow-400' : 'border-xsm-medium-gray'
-                    }`}>
-                      <AvatarImage src={user?.profilePicture || '/placeholder.svg'} alt={user?.username || 'User'} />
-                      <AvatarFallback className="bg-xsm-medium-gray text-white">
-                        <User className="w-4 h-4" />
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-white flex items-center gap-1">
-                      Hi, <span className="text-xsm-yellow font-medium">{user?.username || 'User'}</span>
-                      {(user as any)?.isVip && (
-                        <Crown className="w-3.5 h-3.5 text-yellow-400 animate-pulse fill-yellow-400/20" />
-                      )}
-                    </span>
+          <div className="md:hidden bg-[#0d0d0d] border-t border-xsm-medium-gray/40">
+            <div className="px-3 py-3 space-y-1">
+              {/* User greeting */}
+              {isLoggedIn && (
+                <div className="flex items-center gap-3 px-3 py-2 mb-2">
+                  <div className={`w-9 h-9 rounded-full overflow-hidden flex-shrink-0 ${(user as any)?.isVip ? 'ring-2 ring-xsm-yellow' : 'bg-xsm-yellow'}`}>
+                    {user?.profilePicture ? (
+                      <img src={user.profilePicture} alt={user.username} className="w-full h-full object-cover" />
+                    ) : (
+                      <User className="w-5 h-5 text-black m-2" />
+                    )}
                   </div>
-                  {/* Show nav items in mobile menu */}
-                  {navItems.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        if (isLoggedIn) {
-                          navigateToPage(item.id);
-                        } else {
-                          setShowAuthWidget(true);
-                        }
-                        setIsMenuOpen(false);
-                      }}
-                      className={`flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium transition-colors duration-200 ${
-                        location.pathname === `/${item.id}` || (item.id === 'home' && location.pathname === '/')
-                          ? 'text-xsm-yellow bg-xsm-medium-gray'
-                          : 'text-white hover:text-xsm-yellow hover:bg-xsm-medium-gray'
-                      }`}
-                    >
-                      {item.icon && <item.icon className="w-5 h-5" />}
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                  
-                  <button
-                    onClick={() => {
-                      setShowVipModal(true);
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium text-yellow-400 hover:text-yellow-300 hover:bg-xsm-medium-gray"
-                  >
-                    <Crown className="w-5 h-5 fill-yellow-400/20" />
-                    <span>VIP Membership</span>
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      navigateToPage(`/u/${user?.username}`);
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium text-white hover:text-xsm-yellow hover:bg-xsm-medium-gray"
-                  >
-                    <User className="w-5 h-5" />
-                    <span>Profile</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      navigateToPage('my-deals');
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium text-white hover:text-xsm-yellow hover:bg-xsm-medium-gray"
-                  >
-                    <FileText className="w-5 h-5" />
-                    <span>My Deals</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      navigateToPage('seller-deals');
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium text-white hover:text-xsm-yellow hover:bg-xsm-medium-gray"
-                  >
-                    <FileText className="w-5 h-5" />
-                    <span>Seller Deals</span>
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      handleLogout();
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium text-white hover:text-xsm-yellow hover:bg-xsm-medium-gray"
-                  >
-                    <LogOut className="w-5 h-5" />
-                    <span>Logout</span>
-                  </button>
-                </>
-              ) : (
-                <>
-                  {/* Show nav items for non-logged in users */}
-                  {navItems.map((item) => (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setShowAuthWidget(true);
-                        setIsMenuOpen(false);
-                      }}
-                      className="flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium text-white hover:text-xsm-yellow hover:bg-xsm-medium-gray"
-                    >
-                      {item.icon && <item.icon className="w-5 h-5" />}
-                      <span>{item.label}</span>
-                    </button>
-                  ))}
-                  
-                  <button
-                    onClick={() => {
-                      navigateToPage('login');
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex items-center space-x-2 w-full px-3 py-2 rounded-md text-base font-medium bg-xsm-yellow hover:bg-yellow-500 text-black"
-                  >
-                    <User className="w-5 h-5" />
-                    <span>Login</span>
-                  </button>
-                </>
+                  <div>
+                    <p className="text-white text-sm font-semibold">{user?.username}</p>
+                    {(user as any)?.isVip && <p className="text-yellow-400 text-xs flex items-center gap-1"><Crown className="w-3 h-3" /> VIP Member</p>}
+                  </div>
+                </div>
               )}
+
+              {/* Nav Links */}
+              {[
+                { label: 'Sell', path: '/sell', icon: PlusCircle, requireAuth: true },
+                { label: 'Marketplace', path: '/', icon: Store, requireAuth: false },
+                { label: 'Inbox', path: '/chat', icon: MessageSquare, requireAuth: true, badge: unreadCount },
+              ].map(item => (
+                <button
+                  key={item.path}
+                  onClick={() => {
+                    if (item.requireAuth && !isLoggedIn) { setIsMenuOpen(false); setShowAuthWidget(true); return; }
+                    navigateToPage(item.path);
+                  }}
+                  className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium transition-colors relative ${
+                    isActive(item.path)
+                      ? 'bg-xsm-yellow text-black'
+                      : 'text-gray-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <item.icon className="w-4 h-4" />
+                  <span>{item.label}</span>
+                  {item.badge && item.badge > 0 && (
+                    <span className="ml-auto bg-red-500 text-white text-xs font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
+                </button>
+              ))}
+
+              {isLoggedIn && isUserAdmin && (
+                <button
+                  onClick={() => navigateToPage('/admin-dashboard')}
+                  className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  <Shield className="w-4 h-4" />
+                  <span>Admin Dashboard</span>
+                </button>
+              )}
+
+              <div className="border-t border-xsm-medium-gray/30 pt-2 mt-2 space-y-1">
+                {isLoggedIn ? (
+                  <>
+                    <button onClick={() => navigateToPage(`/u/${user?.username}`)} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
+                      <User className="w-4 h-4" /> <span>Profile</span>
+                    </button>
+                    <button onClick={() => navigateToPage('/my-deals')} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
+                      <FileText className="w-4 h-4" /> <span>My Deals</span>
+                    </button>
+                    <button onClick={() => navigateToPage('/seller-deals')} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-gray-300 hover:text-white hover:bg-white/5 transition-colors">
+                      <FileText className="w-4 h-4" /> <span>Seller Deals</span>
+                    </button>
+                    <button onClick={() => { setShowVipModal(true); setIsMenuOpen(false); }} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-semibold text-yellow-400 hover:bg-yellow-400/10 transition-colors">
+                      <Crown className="w-4 h-4 fill-yellow-400/30" /> <span>VIP Membership</span>
+                    </button>
+                    <button onClick={() => { handleLogout(); }} className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-red-400 hover:bg-red-400/10 transition-colors">
+                      <LogOut className="w-4 h-4" /> <span>Logout</span>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => { setIsMenuOpen(false); setShowAuthWidget(true); }}
+                    className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-bold bg-xsm-yellow text-black hover:bg-yellow-400 transition-colors"
+                  >
+                    <User className="w-4 h-4" /> <span>Login / Sign Up</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

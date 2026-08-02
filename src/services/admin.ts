@@ -144,7 +144,7 @@ export const getRecentActivities = async () => {
 }; 
 
 // Admin send message to chat
-export const adminSendMessage = async (chatId: string, content: string) => {
+export const adminSendMessage = async (chatId: string, content: string, staffDisplayName?: string) => {
   const token = localStorage.getItem('token');
   if (!token) {
     throw new Error('Authentication required');
@@ -156,7 +156,7 @@ export const adminSendMessage = async (chatId: string, content: string) => {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ content })
+    body: JSON.stringify({ content, staffDisplayName })
   });
 
   if (!response.ok) {

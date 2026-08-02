@@ -1018,7 +1018,7 @@ const Chat: React.FC = () => {
                           );
                         }
 
-                        const isSenderAdmin = !!message.sender?.isAdmin;
+                        const isSenderAdmin = !!message.sender?.isAdmin || (message as any)?.isStaffMessage || Boolean((message as any)?.staffDisplayName);
                         const senderRole = (message.sender as any)?.role ?? '';
 
                         // --- Display name logic (never show raw username for staff) ---
@@ -1027,7 +1027,7 @@ const Chat: React.FC = () => {
                           if (senderRole === 'manager') return 'Manager';
                           return 'Admin';
                         };
-                        const agentDisplayName = (message.sender as any)?.displayName || getAgentLabel();
+                        const agentDisplayName = (message as any)?.staffDisplayName || (message.sender as any)?.displayName || getAgentLabel();
 
                         // Agent/Admin messages: same teal style for both sender and receiver
                         if (isSenderAdmin) {

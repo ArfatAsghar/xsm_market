@@ -168,6 +168,16 @@ class Database {
                 $pdo->exec("ALTER TABLE messages ADD COLUMN readAt DATETIME NULL DEFAULT NULL");
                 error_log("Added 'readAt' column to messages table");
             }
+            // Staff display name: when sent from Admin Dashboard, store custom display name (e.g. "Lancelot", "Lion Slot")
+            if (!in_array('staffDisplayName', $messagesColumns)) {
+                $pdo->exec("ALTER TABLE messages ADD COLUMN staffDisplayName VARCHAR(100) NULL DEFAULT NULL");
+                error_log("Added 'staffDisplayName' column to messages table");
+            }
+            // Flag distinguishing Admin Dashboard messages from personal chat messages
+            if (!in_array('isStaffMessage', $messagesColumns)) {
+                $pdo->exec("ALTER TABLE messages ADD COLUMN isStaffMessage TINYINT(1) NOT NULL DEFAULT 0");
+                error_log("Added 'isStaffMessage' column to messages table");
+            }
 
             // Check & add unread_count tracking to chats (Revision 7)
             $chatsColumns = $pdo->query("SHOW COLUMNS FROM chats")->fetchAll(PDO::FETCH_COLUMN);

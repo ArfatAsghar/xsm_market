@@ -309,6 +309,10 @@ class ChatController {
             $stmt->execute([$chatId, $userId]);
 
             $result = array_map(function($msg) use ($adminEmail) {
+                $isStaffMsg = !empty($msg['isStaffMessage']);
+                $staffName = $msg['staffDisplayName'] ?? null;
+                $effectiveDisplayName = $staffName ?: ($msg['sender_displayName'] ?? null);
+
                 $formatted = [
                     'id' => (int)$msg['id'],
                     'content' => $msg['content'],
@@ -321,12 +325,14 @@ class ChatController {
                     'thumbnail' => $msg['thumbnail'],
                     'isRead' => (bool)$msg['isRead'],
                     'status' => $msg['status'] ?? ($msg['isRead'] ? 'read' : 'sent'),
+                    'isStaffMessage' => $isStaffMsg,
+                    'staffDisplayName' => $staffName,
                     'createdAt' => $msg['createdAt'],
                     'updatedAt' => $msg['updatedAt'],
                     'sender' => [
                         'id' => (int)$msg['sender_id'],
-                        'username' => $msg['sender_username'],
-                        'displayName' => $msg['sender_displayName'] ?? null,
+                        'username' => ($isStaffMsg && $staffName) ? $staffName : $msg['sender_username'],
+                        'displayName' => $effectiveDisplayName,
                         'isAdmin' => (!empty($msg['sender_isAdmin']) || ($adminEmail && strtolower($msg['sender_email'] ?? '') === strtolower($adminEmail)))
                     ]
                 ];
@@ -821,7 +827,13 @@ class ChatController {
     public function adminSendMessage($chatId) {
         try {
             $currentUser = $this->authMiddleware->authenticate();
-            $this->checkManagerAccess($currentUser);
+
+            // Viewer role: read-only, cannot send messages from dashboard
+            if (!AuthMiddleware::checkRole($currentUser, ['admin', 'manager'])) {
+                http_response_code(403);
+                echo json_encode(['message' => 'Viewer role is read-only and cannot send messages.', 'viewerOnly' => true]);
+                return;
+            }
 
             $input = json_decode(file_get_contents('php://input'), true);
             $content = trim($input['content'] ?? '');
@@ -832,42 +844,82 @@ class ChatController {
                 return;
             }
 
+            // ── Resolve staff display name ────────────────────────────────────────────
+            // Priority: 1) explicit staffDisplayName in request body
+            //           2) sender's displayName set in admin panel
+            //           3) role-based default ("Website Agent" for manager, "Support" for admin)
+            $explicitName = isset($input['staffDisplayName']) ? trim($input['staffDisplayName']) : '';
+
+            // Fetch sender's saved displayName and role from DB
+            $senderStmt = $this->db->prepare("SELECT displayName, role FROM users WHERE id = ? LIMIT 1");
+            $senderStmt->execute([(int)$currentUser['id']]);
+            $senderRow = $senderStmt->fetch(PDO::FETCH_ASSOC);
+            $dbDisplayName = $senderRow['displayName'] ?? null;
+            $senderRole    = $senderRow['role'] ?? ($currentUser['role'] ?? 'admin');
+
+            if (!empty($explicitName)) {
+                $staffDisplayName = $explicitName;
+            } elseif (!empty($dbDisplayName)) {
+                $staffDisplayName = $dbDisplayName;
+            } else {
+                $staffDisplayName = ($senderRole === 'manager') ? 'Website Agent' : 'Support';
+            }
+            // ─────────────────────────────────────────────────────────────────────────
+
             $stmt = $this->db->prepare("SELECT id FROM chats WHERE id = ? LIMIT 1");
             $stmt->execute([$chatId]);
-
             if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
                 http_response_code(404);
                 echo json_encode(['message' => 'Chat not found']);
                 return;
             }
 
+            // Insert message — mark as staff message, store resolved display name
             $stmt = $this->db->prepare("
-                INSERT INTO messages (content, senderId, chatId, messageType, createdAt, updatedAt)
-                VALUES (?, ?, ?, 'text', NOW(), NOW())
+                INSERT INTO messages (content, senderId, chatId, messageType, isStaffMessage, staffDisplayName, status, createdAt, updatedAt)
+                VALUES (?, ?, ?, 'text', 1, ?, 'sent', NOW(), NOW())
             ");
-            $stmt->execute([$content, (int)$currentUser['id'], $chatId]);
+            $stmt->execute([$content, (int)$currentUser['id'], (int)$chatId, $staffDisplayName]);
             $messageId = $this->db->lastInsertId();
 
-            $stmt = $this->db->prepare("
-                UPDATE chats SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW()
-                WHERE id = ?
-            ");
+            // Update chat last-message preview
+            $stmt = $this->db->prepare("UPDATE chats SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW() WHERE id = ?");
             $stmt->execute([$content, $chatId]);
 
+            // Fetch full message with sender info
             $stmt = $this->db->prepare("
-                SELECT m.*, u.username as sender_username
+                SELECT m.*,
+                       sender.id as sender_id, sender.username as sender_username,
+                       sender.displayName as sender_displayName, sender.isAdmin as sender_isAdmin,
+                       sender.email as sender_email, sender.role as sender_role
                 FROM messages m
-                LEFT JOIN users u ON m.senderId = u.id
+                INNER JOIN users sender ON m.senderId = sender.id
                 WHERE m.id = ?
             ");
             $stmt->execute([$messageId]);
-            $message = $stmt->fetch(PDO::FETCH_ASSOC);
+            $msgData = $stmt->fetch(PDO::FETCH_ASSOC);
 
             $result = [
-                'id' => (int)$message['id'],
-                'content' => $message['content'],
-                'sender' => 'Admin',
-                'timestamp' => $message['createdAt']
+                'id'              => (int)$msgData['id'],
+                'content'         => $msgData['content'],
+                'senderId'        => (int)$msgData['senderId'],
+                'chatId'          => (int)$msgData['chatId'],
+                'messageType'     => $msgData['messageType'],
+                'mediaUrl'        => null,
+                'isRead'          => false,
+                'status'          => 'sent',
+                'isStaffMessage'  => true,
+                'staffDisplayName'=> $staffDisplayName,
+                'createdAt'       => $msgData['createdAt'],
+                'updatedAt'       => $msgData['updatedAt'],
+                'sender'          => [
+                    'id'          => (int)$msgData['sender_id'],
+                    // Real username intentionally NOT exposed to clients — show displayName only
+                    'username'    => $staffDisplayName,
+                    'displayName' => $staffDisplayName,
+                    'isAdmin'     => true,
+                    'role'        => $msgData['sender_role'] ?? $senderRole
+                ]
             ];
 
             http_response_code(201);
@@ -878,6 +930,7 @@ class ChatController {
             echo json_encode(['message' => 'Server error', 'error' => $e->getMessage()]);
         }
     }
+
 
     // Admin delete individual message
     public function adminDeleteMessage($messageId) {

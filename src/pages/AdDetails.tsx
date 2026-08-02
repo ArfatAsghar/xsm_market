@@ -400,6 +400,8 @@ const AdDetails: React.FC = () => {
     }
   };
 
+  const getOnlineStatus = formatLastSeen;
+
   const handlePurchase = () => {
     if (!isLoggedIn) {
       showError('Please log in to start a deal');
@@ -741,7 +743,7 @@ const AdDetails: React.FC = () => {
 
                     {/* Online/Offline Status */}
                     {(() => {
-                      const status = getOnlineStatus(channel.seller.lastSeenAt);
+                      const status = formatLastSeen(channel.seller.lastSeenAt);
                       return (
                         <div className="flex items-center justify-center space-x-2">
                           <div className={`w-2.5 h-2.5 rounded-full ${status.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}`}></div>

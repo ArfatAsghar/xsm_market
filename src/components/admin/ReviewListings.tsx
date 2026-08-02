@@ -172,27 +172,50 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
     }
   };
 
-  /** Ban a listing — prompt for reason, call API, then send seller notification in chat */
-  const handleBanListing = async (listing: Listing) => {
-    const reason = window.prompt(
-      `Ban Listing: "${listing.title}"\n\nEnter the reason for banning this listing (this will be shown to the seller):`
-    );
-    if (!reason || !reason.trim()) return;
+  // Custom Modal States for Ban, Unban, and Delete Listing
+  const [banModal, setBanModal] = useState<{
+    open: boolean;
+    listing: Listing | null;
+    reason: string;
+    submitting: boolean;
+  }>({ open: false, listing: null, reason: '', submitting: false });
+
+  const [confirmModal, setConfirmModal] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    danger: boolean;
+    onConfirm: () => void;
+  }>({ open: false, title: '', message: '', confirmLabel: 'Confirm', danger: false, onConfirm: () => {} });
+
+  /** Ban a listing — custom modal for reason */
+  const handleBanListing = (listing: Listing) => {
+    setBanModal({ open: true, listing, reason: '', submitting: false });
+  };
+
+  const submitBanListing = async () => {
+    if (!banModal.listing || !banModal.reason.trim()) {
+      toast({ variant: 'destructive', title: '⚠️ Reason Required', description: 'Please enter a reason for banning this listing.' });
+      return;
+    }
+    const listing = banModal.listing;
+    const reason = banModal.reason.trim();
 
     try {
-      setIsBanningListing(true);
-      await banListing(listing.id, reason.trim());
+      setBanModal(prev => ({ ...prev, submitting: true }));
+      await banListing(listing.id, reason);
 
-      // Update local state
       setListings(prev => prev.map(l => l.id === listing.id
-        ? { ...l, isBanned: true, banReason: reason.trim(), bannedAt: new Date().toISOString() }
+        ? { ...l, isBanned: true, banReason: reason, bannedAt: new Date().toISOString() }
         : l
       ));
       if (selectedListing?.id === listing.id) {
-        setSelectedListing(prev => prev ? { ...prev, isBanned: true, banReason: reason.trim() } : prev);
+        setSelectedListing(prev => prev ? { ...prev, isBanned: true, banReason: reason } : prev);
       }
 
       toast({ title: '🚫 Listing Banned', description: `"${listing.title}" has been banned.` });
+      setBanModal({ open: false, listing: null, reason: '', submitting: false });
 
       // Automatically notify the seller via chat
       try {
@@ -206,16 +229,13 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
         });
 
         let chatId: string | null = null;
-
         if (checkRes.ok) {
           const checkResult = await checkRes.json();
-          if (checkResult.exists && checkResult.chatId) {
-            chatId = String(checkResult.chatId);
-          }
+          if (checkResult.exists && checkResult.chatId) chatId = String(checkResult.chatId);
         }
 
         if (!chatId) {
-          const createRes = await fetch(`${API_URL}/chat/ad-inquiry`, {
+          await fetch(`${API_URL}/chat/ad-inquiry`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
             body: JSON.stringify({
@@ -225,12 +245,7 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
               sellerName: listing.sellerUsername
             })
           });
-          if (createRes.ok) {
-            const chat = await createRes.json();
-            chatId = String(chat.chatId || chat.id || chat.data?.id);
-          }
         } else {
-          // Send ban message to existing chat
           await fetch(`${API_URL}/chat/admin/chats/${chatId}/messages`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -240,57 +255,65 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
           });
         }
       } catch (notifyErr) {
-        console.warn('Failed to send ban notification to seller:', notifyErr);
-        // Non-fatal: listing is banned even if notification fails
+        console.warn('Failed to send ban notification:', notifyErr);
       }
-
     } catch (err) {
       console.error('Error banning listing:', err);
       toast({ variant: 'destructive', title: '❌ Ban Failed', description: err instanceof Error ? err.message : 'Failed to ban listing' });
-    } finally {
-      setIsBanningListing(false);
+      setBanModal(prev => ({ ...prev, submitting: false }));
     }
   };
 
   /** Unban a listing */
-  const handleUnbanListing = async (listing: Listing) => {
-    const confirmed = window.confirm(`Unban listing "${listing.title}"? It will become visible to all users again.`);
-    if (!confirmed) return;
-
-    try {
-      await unbanListing(listing.id);
-
-      setListings(prev => prev.map(l => l.id === listing.id
-        ? { ...l, isBanned: false, banReason: '', bannedAt: '' }
-        : l
-      ));
-      if (selectedListing?.id === listing.id) {
-        setSelectedListing(prev => prev ? { ...prev, isBanned: false, banReason: '' } : prev);
+  const handleUnbanListing = (listing: Listing) => {
+    setConfirmModal({
+      open: true,
+      title: 'Unban Listing',
+      message: `Are you sure you want to unban listing "${listing.title}"? It will become visible to all users in the marketplace again.`,
+      confirmLabel: 'Unban Listing',
+      danger: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, open: false }));
+        try {
+          await unbanListing(listing.id);
+          setListings(prev => prev.map(l => l.id === listing.id
+            ? { ...l, isBanned: false, banReason: '', bannedAt: '' }
+            : l
+          ));
+          if (selectedListing?.id === listing.id) {
+            setSelectedListing(prev => prev ? { ...prev, isBanned: false, banReason: '' } : prev);
+          }
+          toast({ title: '✅ Listing Unbanned', description: `"${listing.title}" is now visible to all users.` });
+        } catch (err) {
+          toast({ variant: 'destructive', title: '❌ Unban Failed', description: err instanceof Error ? err.message : 'Failed to unban listing' });
+        }
       }
-
-      toast({ title: '✅ Listing Unbanned', description: `"${listing.title}" is now visible to all users.` });
-    } catch (err) {
-      toast({ variant: 'destructive', title: '❌ Unban Failed', description: err instanceof Error ? err.message : 'Failed to unban listing' });
-    }
+    });
   };
 
-  const handleDeleteListing = async (listing: Listing) => {
-    const confirmed = window.confirm(
-      `⚠️ DELETE CONFIRMATION ⚠️\n\nAre you sure you want to permanently delete this listing?\n\nTitle: "${listing.title}"\nSeller: ${listing.sellerUsername}\nPrice: ${listing.price}\n\nThis action cannot be undone.`
-    );
-    if (!confirmed) return;
-
-    try {
-      await deleteListing(listing.id);
-      setListings(prev => prev.filter(l => l.id !== listing.id));
-      toast({ title: '✅ Listing Deleted', description: `"${listing.title}" has been permanently deleted.` });
-      if (selectedListing?.id === listing.id) {
-        setShowDetailsModal(false);
-        setSelectedListing(null);
+  /** Delete a listing */
+  const handleDeleteListing = (listing: Listing) => {
+    setConfirmModal({
+      open: true,
+      title: 'Delete Listing Permanently',
+      message: `Are you sure you want to permanently delete listing "${listing.title}" by ${listing.sellerUsername}? This action cannot be undone.`,
+      confirmLabel: 'Delete Listing',
+      danger: true,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, open: false }));
+        try {
+          await deleteListing(listing.id);
+          setListings(prev => prev.filter(l => l.id !== listing.id));
+          toast({ title: '✅ Listing Deleted', description: `"${listing.title}" has been permanently deleted.` });
+          if (selectedListing?.id === listing.id) {
+            setShowDetailsModal(false);
+            setSelectedListing(null);
+          }
+        } catch (err) {
+          toast({ variant: 'destructive', title: '❌ Delete Failed', description: err instanceof Error ? err.message : 'Failed to delete listing' });
+        }
       }
-    } catch (err) {
-      toast({ variant: 'destructive', title: '❌ Delete Failed', description: err instanceof Error ? err.message : 'Failed to delete listing' });
-    }
+    });
   };
 
   const formatNumber = (num: number) => {
@@ -720,6 +743,82 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                   )}
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom Ban Listing Modal ── */}
+      {banModal.open && banModal.listing && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-xsm-dark-gray border border-orange-500/50 rounded-2xl shadow-2xl w-full max-w-md p-6 text-white">
+            <div className="flex items-center gap-3 mb-4 border-b border-xsm-medium-gray/40 pb-3">
+              <div className="w-10 h-10 rounded-full bg-orange-500/20 border border-orange-500/40 flex items-center justify-center text-orange-400 flex-shrink-0">
+                <Ban className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Ban Channel Listing</h3>
+                <p className="text-xs text-orange-300">Target: <span className="font-semibold text-white">{banModal.listing.title}</span></p>
+              </div>
+            </div>
+
+            <div className="mb-5">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-xsm-light-gray mb-2">Ban Reason (Shown to Seller) <span className="text-red-400">*</span></label>
+              <textarea
+                value={banModal.reason}
+                onChange={e => setBanModal(prev => ({ ...prev, reason: e.target.value }))}
+                placeholder="Enter detailed reason for restricting this listing..."
+                rows={3}
+                className="w-full bg-xsm-black border border-xsm-medium-gray/80 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-orange-500 transition-colors"
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-xsm-medium-gray/40">
+              <button
+                type="button"
+                onClick={() => setBanModal({ open: false, listing: null, reason: '', submitting: false })}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-xsm-light-gray border border-xsm-medium-gray hover:bg-xsm-medium-gray/40 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={submitBanListing}
+                disabled={banModal.submitting}
+                className="px-5 py-2 rounded-lg text-sm font-bold bg-orange-600 hover:bg-orange-500 text-white transition-colors shadow-lg disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Ban className="w-4 h-4" />
+                {banModal.submitting ? 'Banning...' : 'Confirm Ban'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom General Confirm Modal ── */}
+      {confirmModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-xsm-dark-gray border border-xsm-medium-gray rounded-2xl shadow-2xl w-full max-w-md p-6 text-white">
+            <h3 className="text-lg font-bold text-white mb-2">{confirmModal.title}</h3>
+            <p className="text-sm text-xsm-light-gray mb-6 leading-relaxed">{confirmModal.message}</p>
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-xsm-medium-gray/40">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-xsm-light-gray border border-xsm-medium-gray hover:bg-xsm-medium-gray/40 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmModal.onConfirm}
+                className={`px-5 py-2 rounded-lg text-sm font-bold text-white transition-colors shadow-lg ${
+                  confirmModal.danger ? 'bg-red-600 hover:bg-red-500' : 'bg-emerald-600 hover:bg-emerald-500'
+                }`}
+              >
+                {confirmModal.confirmLabel || 'Confirm'}
+              </button>
             </div>
           </div>
         </div>

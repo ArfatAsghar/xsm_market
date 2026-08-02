@@ -573,10 +573,11 @@ const AdDetails: React.FC = () => {
       if (response.ok) {
         showSuccess('Listing deleted successfully');
         setShowDeleteModal(false);
+        // Explicitly redirect to user profile page, NOT home
         if (user?.username) {
-          navigate(`/u/${user.username}`);
+          navigate(`/u/${user.username}`, { replace: true });
         } else {
-          navigate('/profile');
+          navigate('/profile', { replace: true });
         }
       } else {
         throw new Error('Failed to delete listing');
@@ -589,31 +590,28 @@ const AdDetails: React.FC = () => {
 
   const handlePullListing = async () => {
     if (!channel) return;
-    
-    // Always show modal with cooldown information or pull up button
     setShowPullModal(true);
   };
 
   const confirmPullUp = async () => {
     if (!channel) return;
-    
-    // Double-check cooldown before attempting
+
     if (!pullCooldown.canPull) {
-      showError('Cooldown Active', 'Please wait until the cooldown expires');
+      showError('Cooldown Active ⏳', `You can bump this listing again in ${pullCooldown.timeRemaining || 'a few hours'}.`);
       return;
     }
-    
+
     try {
       const result = await pullUpAd(Number(channel.id));
       if (result.success) {
-        showSuccess('Listing Pulled Up!', 'Your listing has been pulled up successfully!');
+        const nowStr = new Date().toISOString();
+        setChannel(prev => prev ? { ...prev, lastPulledAt: nowStr } : prev);
+        setPullCooldown({ canPull: false, timeRemaining: '24 hours' });
         setShowPullModal(false);
-        // Reload the page to show updated data
-        window.location.reload();
+        showSuccess('Listing Bumped! 🚀', 'Your listing has been moved to the top of the marketplace!');
       }
     } catch (err: any) {
       console.error('Pull up error:', err);
-      // Only show error for unexpected failures, not cooldown errors
       if (err.message && !err.message.includes('cooldown')) {
         showError('Error', err.message || 'Failed to pull up listing');
       }

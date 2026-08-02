@@ -66,30 +66,38 @@ const ManageUsers: React.FC = () => {
       });
   }, []);
 
-  const handleDeleteUser = async (user: UserData) => {
-    const confirmed = window.confirm(
-      `⚠️ DELETE USER CONFIRMATION ⚠️\n\n` +
-      `Are you sure you want to permanently delete this user?\n\n` +
-      `Username: "${user.username}"\n` +
-      `Email: ${user.email}\n` +
-      `Role: ${user.role}\n\n` +
-      `This action cannot be undone and will permanently remove the user and all their data from the database.`
-    );
-    
-    if (!confirmed) {
-      return;
-    }
+  // Custom Role Confirmation Modal State
+  const [roleModal, setRoleModal] = useState<{
+    open: boolean;
+    user: UserData | null;
+    newRole: 'admin' | 'manager' | 'viewer' | 'user' | null;
+    saving: boolean;
+  }>({ open: false, user: null, newRole: null, saving: false });
+
+  // Custom Delete User Confirmation Modal State
+  const [deleteUserModal, setDeleteUserModal] = useState<{
+    open: boolean;
+    user: UserData | null;
+    deleting: boolean;
+  }>({ open: false, user: null, deleting: false });
+
+  const handleDeleteUser = (user: UserData) => {
+    setDeleteUserModal({ open: true, user, deleting: false });
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deleteUserModal.user) return;
+    const targetUser = deleteUserModal.user;
+    setDeleteUserModal(prev => ({ ...prev, deleting: true }));
 
     try {
-      await deleteUser(user.id);
-      
-      // Remove the deleted user from the state
-      setUsers(prevUsers => prevUsers.filter(u => u.id !== user.id));
-      
+      await deleteUser(targetUser.id);
+      setUsers(prevUsers => prevUsers.filter(u => u.id !== targetUser.id));
       toast({
         title: "✅ User Deleted",
-        description: `User "${user.username}" has been permanently deleted.`,
+        description: `User "${targetUser.username}" has been permanently deleted.`,
       });
+      setDeleteUserModal({ open: false, user: null, deleting: false });
     } catch (error) {
       console.error('Error deleting user:', error);
       toast({
@@ -97,10 +105,11 @@ const ManageUsers: React.FC = () => {
         title: "❌ Delete Failed",
         description: error instanceof Error ? error.message : "Failed to delete user",
       });
+      setDeleteUserModal(prev => ({ ...prev, deleting: false }));
     }
   };
 
-  const handleChangeRole = async (user: UserData, newRole: 'admin' | 'manager' | 'viewer' | 'user') => {
+  const handleChangeRole = (user: UserData, newRole: 'admin' | 'manager' | 'viewer' | 'user') => {
     if (user.role === newRole) {
       toast({
         title: "ℹ️ Role Already Assigned",
@@ -108,34 +117,28 @@ const ManageUsers: React.FC = () => {
       });
       return;
     }
+    setRoleModal({ open: true, user, newRole, saving: false });
+  };
 
-    const confirmed = window.confirm(
-      `🔄 CHANGE USER ROLE ⚠️\n\n` +
-      `Are you sure you want to change user "${user.username}" role?\n\n` +
-      `Current Role: ${user.role || 'user'}\n` +
-      `New Role: ${newRole}\n\n` +
-      `This will immediately adjust their access permissions.`
-    );
-    
-    if (!confirmed) {
-      return;
-    }
+  const confirmChangeRole = async () => {
+    if (!roleModal.user || !roleModal.newRole) return;
+    const targetUser = roleModal.user;
+    const targetRole = roleModal.newRole;
+
+    setRoleModal(prev => ({ ...prev, saving: true }));
 
     try {
-      // Use the role update endpoint
-      await updateUserRole(user.id, newRole);
-      
-      // Update the user's role in the state
-      setUsers(prevUsers => 
-        prevUsers.map(u => 
-          u.id === user.id ? { ...u, role: newRole } : u
+      await updateUserRole(targetUser.id, targetRole);
+      setUsers(prevUsers =>
+        prevUsers.map(u =>
+          u.id === targetUser.id ? { ...u, role: targetRole } : u
         )
       );
-      
       toast({
         title: "✅ Role Updated",
-        description: `User "${user.username}" role changed to ${newRole}.`,
+        description: `User "${targetUser.username}" role changed to ${targetRole}.`,
       });
+      setRoleModal({ open: false, user: null, newRole: null, saving: false });
     } catch (error) {
       console.error('Error changing user role:', error);
       toast({
@@ -143,6 +146,7 @@ const ManageUsers: React.FC = () => {
         title: "❌ Role Change Failed",
         description: error instanceof Error ? error.message : "Failed to change user role",
       });
+      setRoleModal(prev => ({ ...prev, saving: false }));
     }
   };
 
@@ -757,6 +761,105 @@ const ManageUsers: React.FC = () => {
               >
                 <Unlock className="w-4 h-4" />
                 {unbanModal.submitting ? 'Unbanning...' : 'Confirm Unban'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom Role Assignment Confirmation Modal ── */}
+      {roleModal.open && roleModal.user && roleModal.newRole && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-xsm-dark-gray border border-xsm-yellow/50 rounded-2xl shadow-2xl w-full max-w-md p-6 text-white">
+            <div className="flex items-center gap-3 mb-4 border-b border-xsm-medium-gray/40 pb-3">
+              <div className="w-10 h-10 rounded-full bg-xsm-yellow/20 border border-xsm-yellow/40 flex items-center justify-center text-xsm-yellow flex-shrink-0">
+                <Shield className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Assign User Role</h3>
+                <p className="text-xs text-xsm-yellow">Target User: <span className="font-semibold text-white">{roleModal.user.username}</span></p>
+              </div>
+            </div>
+
+            <div className="bg-xsm-black/50 border border-xsm-medium-gray/60 rounded-xl p-3.5 mb-5 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-400">Current Role:</span>
+                <span className="font-bold text-gray-300 uppercase bg-gray-800 px-2 py-0.5 rounded border border-gray-700">
+                  {roleModal.user.role || 'user'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-400">New Role to Assign:</span>
+                <span className="font-bold text-xsm-yellow uppercase bg-yellow-950/40 px-2 py-0.5 rounded border border-xsm-yellow/40">
+                  {roleModal.newRole}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-xsm-light-gray mb-6 leading-relaxed bg-black/30 p-3 rounded-lg border border-xsm-medium-gray/30">
+              {roleModal.newRole === 'admin' && '⚠️ Admin Role: Grants complete administrative control over listings, users, deals, and platform settings.'}
+              {roleModal.newRole === 'manager' && '🛡️ Manager Role: Grants access to review listings, resolve support requests, and send agent messages.'}
+              {roleModal.newRole === 'viewer' && '👁️ Viewer Role: Grants read-only access to view chats, listings, and analytics without modification abilities.'}
+              {roleModal.newRole === 'user' && '👤 Regular User Role: Reverts account to standard buyer/seller marketplace access.'}
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-xsm-medium-gray/40">
+              <button
+                type="button"
+                onClick={() => setRoleModal({ open: false, user: null, newRole: null, saving: false })}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-xsm-light-gray border border-xsm-medium-gray hover:bg-xsm-medium-gray/40 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmChangeRole}
+                disabled={roleModal.saving}
+                className="px-5 py-2 rounded-lg text-sm font-bold bg-xsm-yellow text-black hover:bg-yellow-400 transition-colors shadow-lg disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Shield className="w-4 h-4" />
+                {roleModal.saving ? 'Updating...' : 'Confirm Role Assignment'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Custom Delete User Confirmation Modal ── */}
+      {deleteUserModal.open && deleteUserModal.user && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="bg-xsm-dark-gray border border-red-500/50 rounded-2xl shadow-2xl w-full max-w-md p-6 text-white">
+            <div className="flex items-center gap-3 mb-4 border-b border-xsm-medium-gray/40 pb-3">
+              <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 flex-shrink-0">
+                <Trash className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Delete User Account</h3>
+                <p className="text-xs text-red-300">Target User: <span className="font-semibold text-white">{deleteUserModal.user.username}</span></p>
+              </div>
+            </div>
+
+            <p className="text-sm text-xsm-light-gray mb-6 leading-relaxed">
+              Are you sure you want to permanently delete user <span className="text-white font-bold">{deleteUserModal.user.username}</span> (<span className="text-gray-300">{deleteUserModal.user.email}</span>)?
+              This action cannot be undone and will permanently erase their account data.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-xsm-medium-gray/40">
+              <button
+                type="button"
+                onClick={() => setDeleteUserModal({ open: false, user: null, deleting: false })}
+                className="px-4 py-2 rounded-lg text-sm font-medium text-xsm-light-gray border border-xsm-medium-gray hover:bg-xsm-medium-gray/40 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmDeleteUser}
+                disabled={deleteUserModal.deleting}
+                className="px-5 py-2 rounded-lg text-sm font-bold bg-red-600 hover:bg-red-500 text-white transition-colors shadow-lg disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Trash className="w-4 h-4" />
+                {deleteUserModal.deleting ? 'Deleting...' : 'Delete User'}
               </button>
             </div>
           </div>

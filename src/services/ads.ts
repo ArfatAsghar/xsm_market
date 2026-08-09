@@ -19,7 +19,15 @@ export const getAllAds = async (filters = {}) => {
     });
 
     if (!response.ok) {
-      throw new Error(`Failed to fetch ads: ${response.statusText}`);
+      // Try to get the real error from the response body (statusText is empty on HTTP/2)
+      let errMsg = `HTTP ${response.status}`;
+      try {
+        const errBody = await response.json();
+        errMsg = errBody.message || errBody.error || errMsg;
+      } catch {
+        try { errMsg = (await response.text()).substring(0, 200) || errMsg; } catch {}
+      }
+      throw new Error(`Failed to fetch ads: ${errMsg}`);
     }
 
     return await response.json();

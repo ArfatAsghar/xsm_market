@@ -40,9 +40,17 @@ class AdController {
                 ]
             ]);
             
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             error_log('Get ads error: ' . $e->getMessage());
-            Response::error('Server error: ' . $e->getMessage(), 500);
+            Response::json([
+                'ads' => [],
+                'pagination' => [
+                    'page' => 1,
+                    'limit' => $limit,
+                    'total' => 0,
+                    'totalPages' => 0
+                ]
+            ]);
         }
     }
     

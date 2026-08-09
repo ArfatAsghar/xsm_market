@@ -6,6 +6,7 @@ import ReviewListings from '@/components/admin/ReviewListings';
 import ReviewChats from '@/components/admin/ReviewChats';
 import ReviewDeals from '@/components/admin/ReviewDeals';
 import FinancialRecords from '@/components/admin/FinancialRecords';
+import AdminWebsiteUpdates from '@/components/admin/AdminWebsiteUpdates';
 import { getDashboardStats, getFinancialStats } from '@/services/admin';
 import { useAuth } from '@/context/useAuth';
 
@@ -134,6 +135,8 @@ const AdminDashboard: React.FC = () => {
         return <ReviewDeals />;
       case 'financial-records':
         return <FinancialRecords />;
+      case 'website-updates':
+        return <AdminWebsiteUpdates />;
       default:
         return (
           <>
@@ -157,12 +160,13 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             {/* Quick Actions Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
               {[
                 { name: 'Manage Users', view: 'manage-users' },
                 { name: 'Review Listings', view: 'review-listings' },
                 { name: 'Review Chats', view: 'review-chats', icon: MessageSquare, badge: supportRequestCount },
                 { name: 'Review Deals', view: 'review-deals', icon: FileText },
+                { name: 'Website Updates', view: 'website-updates', icon: Bell },
                 ...(isCurrentUserAdmin ? [{ name: 'Financial Records', view: 'financial-records', icon: DollarSign, isSpecial: true }] : [])
               ].map((action: any, index) => (
                 <button

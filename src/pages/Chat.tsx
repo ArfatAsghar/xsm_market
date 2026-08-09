@@ -5,6 +5,7 @@ import { useAuth } from '@/context/useAuth';
 import { API_URL } from '@/services/auth';
 import { getImageUrl } from '@/config/api';
 import { toast } from '@/components/ui/use-toast';
+import { io, Socket } from 'socket.io-client';
 
 // Custom scrollbar styles
 const scrollbarStyles = `
@@ -122,6 +123,10 @@ interface ChatData {
     }>;
   };
   support_requested?: boolean;
+  unreadCount?: number;
+  unread_count?: number;
+  buyerUserId?: number | null;
+  sellerUserId?: number | null;
 }
 
 const Chat: React.FC = () => {
@@ -133,6 +138,11 @@ const Chat: React.FC = () => {
   const [newMessage, setNewMessage] = useState('');
   const [chats, setChats] = useState<ChatData[]>([]);
   const [filteredChats, setFilteredChats] = useState<ChatData[]>([]);
+  const [announcements, setAnnouncements] = useState<Array<{id:number;title:string;description:string;created_at:string}>>([]);
+  const [showAnnouncements, setShowAnnouncements] = useState(false);
+  const [announcementsExpanded, setAnnouncementsExpanded] = useState(false);
+  const [isAnnouncementsSelected, setIsAnnouncementsSelected] = useState(false);
+  const [announcementsUnread, setAnnouncementsUnread] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -144,6 +154,11 @@ const Chat: React.FC = () => {
   const [videoUploading, setVideoUploading] = useState(false);
   const [showDealSummary, setShowDealSummary] = useState(false);
   const [isSendingAgentRequest, setIsSendingAgentRequest] = useState(false);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [remoteTypingUser, setRemoteTypingUser] = useState<string | null>(null);
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastSeenAnnouncementIdRef = useRef<number>(parseInt(localStorage.getItem('xsm_lastSeenAnnouncementId') || '0', 10));
 
   const handleRequestAgent = async () => {
     if (!selectedChat || !user) return;
@@ -184,59 +199,146 @@ const Chat: React.FC = () => {
     }
   };
 
-  // Remove Socket.IO and replace with polling-based real-time updates
+  // Initialize Socket.IO connection
+  useEffect(() => {
+    if (!isLoggedIn || !user) return;
+
+    // Connect to socket server (port 3001 in dev or window.location.origin)
+    const socketUrl = import.meta.env.VITE_SOCKET_URL || (window.location.hostname === 'localhost' ? 'http://localhost:3001' : window.location.origin);
+    const newSocket = io(socketUrl, {
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000
+    });
+
+    newSocket.on('connect', () => {
+      console.log('⚡ Real-time Socket connected:', newSocket.id);
+      newSocket.emit('user_connected', { userId: user.id, username: user.username });
+    });
+
+    newSocket.on('new_message', (msg: Message) => {
+      console.log('💬 Instant socket message received:', msg);
+      if (selectedChat && msg.chatId === selectedChat.id) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === msg.id)) return prev;
+          return [...prev, msg];
+        });
+        setLastMessageId(msg.id);
+        setTimeout(scrollToBottom, 50);
+        // Automatically emit delivered receipt back to sender
+        newSocket.emit('message_delivered', { messageId: msg.id, chatId: msg.chatId });
+      }
+      updateChatLastMessage(msg);
+    });
+
+    newSocket.on('user_typing', (data: { chatId: number; username: string }) => {
+      if (selectedChat && data.chatId === selectedChat.id) {
+        setRemoteTypingUser(data.username);
+      }
+    });
+
+    newSocket.on('user_stop_typing', (data: { chatId: number }) => {
+      if (selectedChat && data.chatId === selectedChat.id) {
+        setRemoteTypingUser(null);
+      }
+    });
+
+    newSocket.on('message_status_update', (data: { messageId: number; status: string; chatId: number }) => {
+      if (selectedChat && data.chatId === selectedChat.id) {
+        setMessages(prev => prev.map(m => m.id === data.messageId ? { ...m, status: data.status, isRead: data.status === 'read' } : m));
+      }
+    });
+
+    newSocket.on('messages_read', (data: { chatId: number }) => {
+      if (selectedChat && data.chatId === selectedChat.id) {
+        setMessages(prev => prev.map(m => ({ ...m, isRead: true, status: 'read' })));
+      }
+    });
+
+    newSocket.on('presence_update', (data: { onlineUserIds: string[] }) => {
+      setOnlineUserIds(new Set(data.onlineUserIds));
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.disconnect();
+    };
+  }, [isLoggedIn, user, selectedChat]);
+
+  // Join chat room whenever selectedChat changes
+  useEffect(() => {
+    if (socket && selectedChat) {
+      socket.emit('join_chat', selectedChat.id);
+      setRemoteTypingUser(null);
+      return () => {
+        socket.emit('leave_chat', selectedChat.id);
+      };
+    }
+  }, [socket, selectedChat]);
+
+  // Combined fallback polling for new messages every 2 seconds
   useEffect(() => {
     if (isLoggedIn && user && selectedChat) {
-      // Start polling for new messages every 2 seconds
       const interval = setInterval(() => {
         checkForNewMessages();
       }, 2000);
 
-      return () => {
-        if (interval) clearInterval(interval);
-      };
+      return () => clearInterval(interval);
     }
   }, [isLoggedIn, user, selectedChat, lastMessageId]);
 
-  // Check for new messages
+  // Check for new messages & sync live status ticks (sent, delivered, read)
   const checkForNewMessages = async () => {
     if (!selectedChat || !user) return;
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/chat/chats/${selectedChat.id}/messages?since=${lastMessageId || 0}`, {
+      const response = await fetch(`${API_URL}/chat/chats/${selectedChat.id}/messages`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
       
       if (response.ok) {
-        const newMessages = await response.json();
-        if (newMessages.length > 0) {
-          let shouldAutoScroll = false;
-          
+        const fetchedMessages = await response.json();
+        if (Array.isArray(fetchedMessages) && fetchedMessages.length > 0) {
+          let hasNewMessage = false;
+
           setMessages(prev => {
-            const existingIds = new Set(prev.map(m => m.id));
-            const uniqueNewMessages = newMessages.filter((m: Message) => !existingIds.has(m.id));
-            
-            // Only auto-scroll if there are actually new messages
-            if (uniqueNewMessages.length > 0) {
-              shouldAutoScroll = true;
+            const prevMap = new Map(prev.map(m => [m.id, m]));
+            let stateChanged = false;
+
+            const merged = fetchedMessages.map((m: Message) => {
+              const existing = prevMap.get(m.id);
+              if (existing) {
+                // If status or read state changed (e.g. sent -> delivered -> read), update live!
+                if (existing.status !== m.status || existing.isRead !== m.isRead) {
+                  stateChanged = true;
+                  return { ...existing, status: m.status, isRead: m.isRead };
+                }
+                return existing;
+              }
+              stateChanged = true;
+              hasNewMessage = true;
+              return m;
+            });
+
+            if (stateChanged || merged.length !== prev.length) {
+              return merged;
             }
-            
-            return [...prev, ...uniqueNewMessages];
+            return prev;
           });
-          
-          // Update last message ID
-          const latestMessage = newMessages[newMessages.length - 1];
-          setLastMessageId(latestMessage.id);
-          
-          // Update chat list with latest message
-          updateChatLastMessage(latestMessage);
-          
-          // Only scroll if there were actually new messages
-          if (shouldAutoScroll) {
-            setTimeout(scrollToBottom, 100);
+
+          const latestMessage = fetchedMessages[fetchedMessages.length - 1];
+          if (latestMessage.id !== lastMessageId) {
+            setLastMessageId(latestMessage.id);
+            updateChatLastMessage(latestMessage);
+            if (hasNewMessage) {
+              setTimeout(scrollToBottom, 100);
+            }
           }
         }
       }
@@ -244,6 +346,27 @@ const Chat: React.FC = () => {
       console.error('Error checking for new messages:', error);
     }
   };
+
+  // Fetch announcements/website updates for Announcements channel
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+    fetch(`${API_URL}/updates`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => {
+        let list: Array<{id:number;title:string;description:string;created_at:string}> = [];
+        if (Array.isArray(data.updates)) list = data.updates;
+        else if (Array.isArray(data)) list = data;
+        setAnnouncements(list);
+        // Check if there are announcements newer than last seen
+        if (list.length > 0) {
+          const latestId = Math.max(...list.map(a => a.id));
+          const lastSeen = lastSeenAnnouncementIdRef.current;
+          setAnnouncementsUnread(latestId > lastSeen);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch chats when component mounts
   useEffect(() => {
@@ -260,19 +383,39 @@ const Chat: React.FC = () => {
     }
   }, [selectedChat]);
 
-  // Filter chats based on search query
+  // Mark announcements as read when user opens them
   useEffect(() => {
+    if (isAnnouncementsSelected && announcements.length > 0) {
+      const latestId = Math.max(...announcements.map(a => a.id));
+      lastSeenAnnouncementIdRef.current = latestId;
+      localStorage.setItem('xsm_lastSeenAnnouncementId', String(latestId));
+      setAnnouncementsUnread(false);
+    }
+  }, [isAnnouncementsSelected, announcements]);
+
+  // Filter and SORT chats — unread ones float to the top
+  useEffect(() => {
+    const sortByUnreadFirst = (list: ChatData[]) => [...list].sort((a, b) => {
+      const aUnread = (a as any).unreadCount || (a as any).unread_count || 0;
+      const bUnread = (b as any).unreadCount || (b as any).unread_count || 0;
+      // Sort unread above read, then by lastMessageTime descending
+      if (bUnread > 0 && aUnread === 0) return 1;
+      if (aUnread > 0 && bUnread === 0) return -1;
+      const aTime = new Date(a.lastMessageTime || 0).getTime();
+      const bTime = new Date(b.lastMessageTime || 0).getTime();
+      return bTime - aTime;
+    });
+
     if (!searchQuery.trim()) {
-      setFilteredChats(chats);
+      setFilteredChats(sortByUnreadFirst(chats));
     } else {
       const filtered = chats.filter(chat => {
         const chatName = getChatDisplayName(chat).toLowerCase();
         const lastMessage = chat.lastMessage?.toLowerCase() || '';
         const query = searchQuery.toLowerCase();
-        
         return chatName.includes(query) || lastMessage.includes(query);
       });
-      setFilteredChats(filtered);
+      setFilteredChats(sortByUnreadFirst(filtered));
     }
   }, [chats, searchQuery]);
 
@@ -284,20 +427,22 @@ const Chat: React.FC = () => {
     }
   }, [selectedChat]);
 
-  // Refresh chat list periodically to show new chats
+  // Refresh chat list periodically to show new chats silently
   useEffect(() => {
     if (isLoggedIn && user) {
       const interval = setInterval(() => {
-        fetchChats();
+        fetchChats(true); // silent update — no loading flicker
       }, 10000); // Refresh every 10 seconds
       
       return () => clearInterval(interval);
     }
   }, [isLoggedIn, user]);
 
-  const fetchChats = async () => {
+  const fetchChats = async (isSilent = false) => {
     try {
-      setLoading(true);
+      if (!isSilent && chats.length === 0) {
+        setLoading(true);
+      }
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/chat/chats`, {
         headers: {
@@ -309,24 +454,30 @@ const Chat: React.FC = () => {
 
       if (!response.ok || !Array.isArray(data)) {
         console.error('Invalid chats response:', data);
-        setChats([]);
-        setFilteredChats([]);
+        if (!isSilent) {
+          setChats([]);
+        }
         return;
       }
 
-      const normalizedChats = data.map((chat: ChatData) => ({
-        ...chat,
-        otherParticipants: Array.isArray(chat.otherParticipants) ? chat.otherParticipants : []
-      }));
+      const normalizedChats = data.map((chat: ChatData) => {
+        const isCurrentlySelected = selectedChat && chat.id === selectedChat.id;
+        return {
+          ...chat,
+          unread_count: isCurrentlySelected ? 0 : ((chat as any).unread_count || 0),
+          unreadCount: isCurrentlySelected ? 0 : ((chat as any).unreadCount || 0),
+          otherParticipants: Array.isArray(chat.otherParticipants) ? chat.otherParticipants : []
+        };
+      });
 
       setChats(normalizedChats);
-      setFilteredChats(normalizedChats);
+      // Note: filteredChats is updated by the useEffect that sorts unread chats to top
     } catch (error) {
       console.error('Error fetching chats:', error);
-      setChats([]);
-      setFilteredChats([]);
     } finally {
-      setLoading(false);
+      if (!isSilent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -367,13 +518,16 @@ const Chat: React.FC = () => {
         setMessages([]);
       }
       
-      // Mark messages as read
+      // Mark messages as read and clear the unread badge immediately in local state
       await fetch(`${API_URL}/chat/chats/${chatId}/read`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
+
+      // Clear local unread count immediately so badge disappears right away
+      setChats(prev => prev.map(c => c.id === chatId ? { ...c, unread_count: 0, unreadCount: 0 } : c));
     } catch (error) {
       console.error('Error fetching messages:', error);
       setMessages([]);
@@ -403,6 +557,11 @@ const Chat: React.FC = () => {
         // Add to local messages immediately
         setMessages(prev => [...prev, message]);
         setLastMessageId(message.id);
+
+        if (socket) {
+          socket.emit('send_message', message);
+          socket.emit('stop_typing', { chatId: selectedChat.id });
+        }
 
         // Update chat list
         updateChatLastMessage(message);
@@ -868,7 +1027,71 @@ const Chat: React.FC = () => {
                 className="overflow-y-auto custom-scrollbar conversation-scrollbar" 
                 style={{ height: 'calc(100% - 113px)' }}
               >
-                {loading ? (
+                {/* ── Pinned Announcements Channel (ALWAYS VISIBLE AT TOP) ── */}
+                <div
+                  className={`border-b cursor-pointer transition-all ${isAnnouncementsSelected ? 'bg-amber-950/40 border-l-4 border-xsm-yellow' : announcementsExpanded ? 'bg-amber-950/30' : announcementsUnread ? 'bg-amber-950/20 border-l-4 border-amber-400 hover:bg-amber-950/30' : 'bg-xsm-dark-gray/60 hover:bg-xsm-dark-gray border-xsm-yellow/20'}`}
+                  onClick={() => {
+                    setIsAnnouncementsSelected(true);
+                    setSelectedChat(null);
+                  }}
+                >
+                  <div className="flex items-center gap-3 p-4">
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-lg shrink-0 shadow-md" style={{ background: 'linear-gradient(135deg,#ffd000,#ff9000)' }}>
+                      📢
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xsm-yellow font-bold text-sm">Announcements Channel</h4>
+                        {announcementsUnread ? (
+                          <span className="text-[10px] bg-amber-500 text-black font-black px-2 py-0.5 rounded-full shadow animate-pulse">NEW</span>
+                        ) : (
+                          <span className="text-[10px] bg-xsm-medium-gray text-gray-300 font-bold px-2 py-0.5 rounded-full">{announcements.length || 2}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 truncate">Official XSM Market updates &amp; news</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setAnnouncementsExpanded(p => !p);
+                      }}
+                      className="text-xsm-yellow font-bold text-xs p-1 hover:bg-white/10 rounded"
+                    >
+                      {announcementsExpanded ? '▲' : '▼'}
+                    </button>
+                  </div>
+                  {announcementsExpanded && (
+                    <div className="border-t max-h-80 overflow-y-auto bg-black/40" style={{ borderColor: 'rgba(255,208,0,0.15)' }}>
+                      {(announcements.length > 0 ? announcements : [
+                        { id: 1, title: '🚀 Welcome to XSM Market', description: 'Experience secure social media account trading with 100% verified escrow protection.', created_at: new Date().toISOString() },
+                        { id: 2, title: '⚡ Real-Time Notification System Active', description: 'Receive instant deal stage updates, in-app audio alerts, and direct message notifications.', created_at: new Date().toISOString() }
+                      ]).map((a) => (
+                        <div
+                          key={a.id}
+                          className="px-4 py-3 border-b hover:bg-white/[0.06] transition-colors cursor-pointer"
+                          style={{ borderColor: 'rgba(255,255,255,0.05)' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setIsAnnouncementsSelected(true);
+                            setSelectedChat(null);
+                          }}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <span className="text-xsm-yellow text-sm mt-0.5">📌</span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white text-xs font-bold">{a.title}</p>
+                              <p className="text-gray-300 text-xs mt-1 leading-relaxed">{a.description}</p>
+                              <p className="text-gray-500 text-[10px] mt-1.5">{new Date(a.created_at).toLocaleDateString()}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {loading && chats.length === 0 ? (
                   <div className="p-4 text-center text-white">Loading chats...</div>
                 ) : filteredChats.length === 0 ? (
                   <div className="p-4 text-center text-gray-400">
@@ -884,41 +1107,65 @@ const Chat: React.FC = () => {
                   </div>
                 ) : (
                   <>
-                    {filteredChats.map(chat => (
-                      <div
-                        key={chat.id}
-                        onClick={() => setSelectedChat(chat)}
-                        className={`p-4 border-b border-xsm-medium-gray cursor-pointer hover:bg-xsm-dark-gray transition-colors ${
-                          selectedChat?.id === chat.id ? 'bg-xsm-medium-gray' : ''
-                        }`}
-                      >
-                        <div className="flex items-center justify-between mb-1">
-                          <div className="flex items-center">
-                            <div className="w-10 h-10 bg-xsm-yellow rounded-full flex items-center justify-center text-xsm-black font-bold text-sm mr-3">
-                              {getChatDisplayName(chat).charAt(0).toUpperCase()}
+                    {filteredChats.map(chat => {
+                      const unreadCount = (chat as any).unreadCount || (chat as any).unread_count || 0;
+                      const hasUnread = unreadCount > 0;
+
+                      return (
+                        <div
+                          key={chat.id}
+                          onClick={() => {
+                            setSelectedChat(chat);
+                            setIsAnnouncementsSelected(false);
+                          }}
+                          className={`p-4 border-b border-xsm-medium-gray cursor-pointer transition-all relative ${
+                            selectedChat?.id === chat.id && !isAnnouncementsSelected
+                              ? 'bg-xsm-medium-gray/80 border-l-4 border-xsm-yellow'
+                              : hasUnread
+                              ? 'bg-amber-950/20 border-l-4 border-amber-500 hover:bg-xsm-dark-gray'
+                              : 'hover:bg-xsm-dark-gray'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center flex-1 min-w-0">
+                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xsm-black font-bold text-sm mr-3 shrink-0 relative ${hasUnread ? 'bg-xsm-yellow ring-2 ring-amber-400' : 'bg-xsm-yellow'}`}>
+                                {getChatDisplayName(chat).charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <h4 className={`text-sm truncate ${hasUnread ? 'text-white font-black' : 'text-white font-medium'}`}>
+                                    {getChatDisplayName(chat)}
+                                  </h4>
+                                  {hasUnread && (
+                                    <span className="w-2.5 h-2.5 bg-xsm-yellow rounded-full animate-pulse shrink-0 shadow-[0_0_8px_#ffd000]" title="Unread messages" />
+                                  )}
+                                </div>
+                                {chat.ad && (
+                                  <p className="text-xs text-xsm-yellow truncate">
+                                    {chat.ad.title} - ${chat.ad.price}
+                                  </p>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <h4 className="text-white font-medium text-sm">
-                                {getChatDisplayName(chat)}
-                              </h4>
-                              {chat.ad && (
-                                <p className="text-xs text-xsm-yellow">
-                                  {chat.ad.title} - ${chat.ad.price}
-                                </p>
+                            <div className="flex flex-col items-end shrink-0 ml-2">
+                              {chat.lastMessageTime && (
+                                <span className={`text-xs ${hasUnread ? 'text-xsm-yellow font-bold' : 'text-gray-400'}`}>
+                                  {formatLastSeen(chat.lastMessageTime)}
+                                </span>
+                              )}
+                              {hasUnread && (
+                                <span className="mt-1 bg-xsm-yellow text-black text-[11px] font-black px-2 py-0.5 rounded-full shadow-md">
+                                  {unreadCount}
+                                </span>
                               )}
                             </div>
                           </div>
-                          {chat.lastMessageTime && (
-                            <span className="text-xs text-gray-400">
-                              {formatLastSeen(chat.lastMessageTime)}
-                            </span>
-                          )}
+                          <p className={`text-sm truncate ${hasUnread ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                            {chat.lastMessage || 'No messages yet'}
+                          </p>
                         </div>
-                        <p className="text-sm text-gray-300 truncate">
-                          {chat.lastMessage || 'No messages yet'}
-                        </p>
-                      </div>
-                    ))}
+                      );
+                    })}
                     <button
                       onClick={handleOpenWebsiteAgent}
                       className="m-4 w-[calc(100%-2rem)] bg-xsm-dark-gray border border-xsm-yellow/40 text-xsm-yellow px-4 py-2 rounded-lg hover:bg-xsm-yellow hover:text-black transition-colors text-sm font-medium"
@@ -932,34 +1179,105 @@ const Chat: React.FC = () => {
 
             {/* Chat Area */}
             <div className="flex-1 flex flex-col">
-              {selectedChat ? (
+              {isAnnouncementsSelected ? (
+                <React.Fragment>
+                  {/* Announcements Chat Header */}
+                  <div className="p-4 border-b border-xsm-medium-gray bg-gradient-to-r from-amber-950/40 via-xsm-black to-xsm-black flex items-center justify-between shadow-md">
+                    <div className="flex items-center space-x-3">
+                      <div className="w-11 h-11 rounded-full flex items-center justify-center text-xl shrink-0 shadow-md" style={{ background: 'linear-gradient(135deg,#ffd000,#ff9000)' }}>
+                        📢
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-white font-bold text-base">Announcements Channel</h3>
+                          <span className="bg-xsm-yellow text-black font-black text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-full shadow">Official</span>
+                        </div>
+                        <p className="text-xs text-gray-400">Official platform update broadcasts from XSM Market Team</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs bg-xsm-yellow/10 text-xsm-yellow border border-xsm-yellow/30 px-3 py-1.5 rounded-full font-semibold">
+                      <span>🔒 Read-Only Channel</span>
+                    </div>
+                  </div>
+
+                  {/* Announcements Chat Messages Feed */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar messages-scrollbar bg-xsm-black/50">
+                    <div className="text-center py-2">
+                      <span className="text-[11px] text-gray-500 bg-xsm-dark-gray px-3.5 py-1.5 rounded-full border border-xsm-medium-gray/30 shadow-sm">
+                        📢 Welcome to the official XSM Market Announcements Channel
+                      </span>
+                    </div>
+
+                    {(announcements.length > 0 ? announcements : [
+                      { id: 1, title: '🚀 Welcome to XSM Market', description: 'Experience secure social media account trading with 100% verified escrow protection.', created_at: new Date().toISOString() },
+                      { id: 2, title: '⚡ Real-Time Notification System Active', description: 'Receive instant deal stage updates, in-app audio alerts, and direct message notifications.', created_at: new Date().toISOString() }
+                    ]).map((item) => (
+                      <div key={item.id} className="max-w-2xl mx-auto bg-gradient-to-r from-amber-950/30 via-xsm-dark-gray to-xsm-dark-gray border border-xsm-yellow/30 rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                        <div className="flex items-center justify-between mb-3 border-b border-xsm-medium-gray/30 pb-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-xs font-bold shadow">📢</span>
+                            <span className="text-xs font-bold text-xsm-yellow uppercase tracking-wider">XSM Official Broadcast</span>
+                          </div>
+                          <span className="text-xs text-gray-500 font-mono">
+                            {new Date(item.created_at).toLocaleString()}
+                          </span>
+                        </div>
+                        <h4 className="text-lg font-bold text-white mb-2 flex items-center gap-2">
+                          <span>📌</span> {item.title}
+                        </h4>
+                        <p className="text-sm text-gray-300 leading-relaxed bg-black/40 p-4 rounded-xl border border-white/5 shadow-inner">
+                          {item.description}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Read-Only Bottom Footer */}
+                  <div className="p-4 border-t border-xsm-medium-gray bg-xsm-black text-center text-xs text-gray-400 flex items-center justify-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-xsm-yellow animate-pulse" />
+                    <span>This is a read-only announcement channel. Only XSM Market Admins can publish updates here.</span>
+                  </div>
+                </React.Fragment>
+              ) : selectedChat ? (
                 <React.Fragment>
                   {/* Chat Header */}
                   <div className="p-4 border-b border-xsm-medium-gray bg-xsm-black flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-xsm-yellow rounded-full flex items-center justify-center text-xsm-black font-bold">
-                        {getChatDisplayName(selectedChat).charAt(0).toUpperCase()}
+                      <div className="relative">
+                        <div className="w-10 h-10 bg-xsm-yellow rounded-full flex items-center justify-center text-xsm-black font-bold">
+                          {getChatDisplayName(selectedChat).charAt(0).toUpperCase()}
+                        </div>
+                        {selectedChat.otherParticipants?.[0]?.id && onlineUserIds.has(String(selectedChat.otherParticipants[0].id)) && (
+                          <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-black rounded-full shadow-[0_0_8px_#10b981]" title="Online now" />
+                        )}
                       </div>
                       <div>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenParticipantProfile(selectedChat)}
-                          className={`text-white font-medium transition-colors text-left ${
-                            getProfileUsernameFromChat(selectedChat)
-                              ? 'hover:text-xsm-yellow cursor-pointer'
-                              : 'cursor-default'
-                          }`}
-                          title={
-                            getProfileUsernameFromChat(selectedChat)
-                              ? 'Open seller profile'
-                              : 'Profile unavailable'
-                          }
-                        >
-                          {getChatDisplayName(selectedChat)}
-                        </button>
-                        {selectedChat.ad && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenParticipantProfile(selectedChat)}
+                            className={`text-white font-medium transition-colors text-left ${
+                              getProfileUsernameFromChat(selectedChat)
+                                ? 'hover:text-xsm-yellow cursor-pointer'
+                                : 'cursor-default'
+                            }`}
+                            title={
+                              getProfileUsernameFromChat(selectedChat)
+                                ? 'Open seller profile'
+                                : 'Profile unavailable'
+                            }
+                          >
+                            {getChatDisplayName(selectedChat)}
+                          </button>
+                        </div>
+                        {remoteTypingUser ? (
+                          <p className="text-xs text-amber-400 font-bold animate-pulse flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" />
+                            <span>{remoteTypingUser} is typing...</span>
+                          </p>
+                        ) : selectedChat.ad ? (
                           <p className="text-sm text-xsm-yellow">{selectedChat.ad.title} - ${selectedChat.ad.price}</p>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                     {selectedChat.name !== 'Website Agent' && (
@@ -1018,7 +1336,7 @@ const Chat: React.FC = () => {
                           );
                         }
 
-                        const isSenderAdmin = !!message.sender?.isAdmin || (message as any)?.isStaffMessage || Boolean((message as any)?.staffDisplayName);
+                        const isSenderAdmin = !!message.sender?.isAdmin || (message as any)?.isStaffMessage || Boolean((message as any)?.staffDisplayName) || ['admin', 'manager', 'agent'].includes((message.sender as any)?.role ?? '');
                         const senderRole = (message.sender as any)?.role ?? '';
 
                         // --- Display name logic (never show raw username for staff) ---
@@ -1027,7 +1345,6 @@ const Chat: React.FC = () => {
                           if (senderRole === 'manager') return 'Manager';
                           return 'Admin';
                         };
-                        const agentDisplayName = (message as any)?.staffDisplayName || (message.sender as any)?.displayName || getAgentLabel();
 
                         // Agent/Admin messages: same teal style for both sender and receiver
                         if (isSenderAdmin) {
@@ -1038,10 +1355,9 @@ const Chat: React.FC = () => {
                                 <Shield className="w-3.5 h-3.5 text-white" />
                               </div>
                               <div className="max-w-xs lg:max-w-md">
-                                {/* Agent name badge */}
+                                {/* Agent name header */}
                                 <div className="flex items-center gap-1.5 mb-1">
-                                  <span className="text-[11px] font-bold text-teal-300 select-none">{agentDisplayName}</span>
-                                  <span className="bg-teal-500/20 border border-teal-400/40 text-teal-300 px-1.5 py-0.5 rounded text-[9px] uppercase font-bold tracking-wider">
+                                  <span className="text-[11px] font-bold text-teal-300 select-none">
                                     {getAgentLabel()}
                                   </span>
                                 </div>
@@ -1090,6 +1406,12 @@ const Chat: React.FC = () => {
                         }
 
                         // Regular messages: my messages (right/yellow) vs other user messages (left/dark)
+                        // For admin/manager/viewer: add buyer (blue ring) vs seller (green ring) distinction
+                        const isAdminViewer = !!(user as any)?.isAdmin || ['admin', 'manager', 'viewer'].includes((user as any)?.role ?? '');
+                        const msgSenderId = Number(message.senderId);
+                        const isBuyer = isAdminViewer && selectedChat.buyerUserId != null && msgSenderId === Number(selectedChat.buyerUserId);
+                        const isSeller = isAdminViewer && selectedChat.sellerUserId != null && msgSenderId === Number(selectedChat.sellerUserId);
+
                         return (
                           <div
                             key={message.id}
@@ -1110,12 +1432,13 @@ const Chat: React.FC = () => {
                                 </p>
                               )}
 
-                              {/* Message bubble */}
+                              {/* Message bubble — buyer gets blue ring, seller gets green ring */}
                               <div
+                                style={isBuyer ? { outline: '2px solid #3b82f6', outlineOffset: '0px' } : isSeller ? { outline: '2px solid #22c55e', outlineOffset: '0px' } : {}}
                                 className={`px-4 py-2.5 shadow-sm ${
                                   isMyMessage
                                     ? 'bg-xsm-yellow text-black rounded-2xl rounded-br-sm'
-                                    : 'bg-[#2a2a2a] text-white border border-white/8 rounded-2xl rounded-bl-sm'
+                                    : 'bg-[#2a2a2a] text-white rounded-2xl rounded-bl-sm'
                                 }`}
                               >
                                 {message.messageType === 'image' && (message.mediaUrl || message.content) ? (
@@ -1301,7 +1624,16 @@ const Chat: React.FC = () => {
                         <input
                           type="text"
                           value={newMessage}
-                          onChange={(e) => setNewMessage(e.target.value)}
+                          onChange={(e) => {
+                            setNewMessage(e.target.value);
+                            if (socket && selectedChat) {
+                              socket.emit('typing', { chatId: selectedChat.id, username: user?.username });
+                              if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                              typingTimeoutRef.current = setTimeout(() => {
+                                socket.emit('stop_typing', { chatId: selectedChat.id });
+                              }, 2000);
+                            }
+                          }}
                           onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
                           placeholder="Type your message..."
                           className="flex-1 px-4 py-2 bg-xsm-dark-gray text-white rounded-lg border border-xsm-medium-gray focus:outline-none focus:border-xsm-yellow"

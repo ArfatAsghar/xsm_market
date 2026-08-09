@@ -102,6 +102,9 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
   const [selectedAdForPin, setSelectedAdForPin] = useState<UserAd | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedAdForDelete, setSelectedAdForDelete] = useState<UserAd | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null); // for smooth removal animation
+  const [showBumpSuccess, setShowBumpSuccess] = useState(false); // bump success popup
+  const [bumpedTitle, setBumpedTitle] = useState('');
   const { user } = useAuth();
   const { showSuccess, showError, showInfo } = useNotifications();
   const navigate = useNavigate();
@@ -259,15 +262,20 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
   const confirmDelete = async () => {
     if (!selectedAdForDelete) return;
     const deletedId = selectedAdForDelete.id;
-
+    setShowDeleteModal(false);
+    setSelectedAdForDelete(null);
+    // Trigger fade-out animation first
+    setDeletingId(deletedId);
     try {
       await deleteAd(deletedId);
-      // Remove deleted ad instantly from state
-      setAds(prevAds => prevAds.filter(ad => ad.id !== deletedId));
-      setShowDeleteModal(false);
-      setSelectedAdForDelete(null);
-      showSuccess('Listing Deleted! 🗑️', 'Your listing card has been removed instantly.');
+      // Remove after animation (300ms)
+      setTimeout(() => {
+        setAds(prevAds => prevAds.filter(ad => ad.id !== deletedId));
+        setDeletingId(null);
+        showSuccess('Listing Deleted! 🗑️', 'Your listing card has been removed.');
+      }, 350);
     } catch (err: any) {
+      setDeletingId(null);
       showError('Error', err.message || 'Failed to delete ad');
     }
   };
@@ -282,9 +290,12 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
       try {
         const result = await pullUpAd(id);
         if (result.success) {
-          showSuccess('Listing Bumped! 🚀', 'Your listing has been moved to the top of the marketplace!');
           const nowStr = new Date().toISOString();
           setAds(prevAds => prevAds.map(item => item.id === id ? { ...item, lastPulledAt: nowStr } : item));
+          // Show premium bump success popup
+          setBumpedTitle(ad.title);
+          setShowBumpSuccess(true);
+          setTimeout(() => setShowBumpSuccess(false), 3500);
         }
       } catch (err: any) {
         showError('Bump Failed', err.message || 'Failed to bump listing');
@@ -501,7 +512,7 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
       ) : (
         <div className="max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {ads.map((ad) => {
+            {ads.map((ad, adIndex) => {
               const isVipListing = Boolean(
                 (user as any)?.isVip ||
                 ((user as any)?.vipUntil && new Date((user as any).vipUntil) > new Date()) ||
@@ -510,6 +521,7 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                 (ad as any)?.seller?.isVip ||
                 ((ad as any)?.seller_vipUntil && new Date((ad as any).seller_vipUntil) > new Date())
               );
+              const isDeleting = deletingId === ad.id;
 
               return (
                 <div
@@ -519,8 +531,11 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                       ? 'bg-gradient-to-b from-amber-950/30 via-xsm-black/70 to-xsm-black/70 border-2 border-amber-500/80 shadow-[0_0_18px_rgba(245,158,11,0.25)] hover:shadow-[0_0_25px_rgba(245,158,11,0.45)]'
                       : 'bg-xsm-black/50 border border-xsm-medium-gray/20 hover:border-xsm-yellow/30'
                   }`}
+                  style={isDeleting ? { opacity: 0, transform: 'scale(0.8)', pointerEvents: 'none', transition: 'opacity 0.35s ease, transform 0.35s ease' } : { transition: 'opacity 0.35s ease, transform 0.35s ease' }}
                   onClick={() => handleViewAd(ad)}
                 >
+                  {/* Listing Number Badge */}
+                  <span className="absolute top-2 left-2 z-10 text-[10px] font-bold text-black bg-xsm-yellow rounded-full px-1.5 py-0.5 leading-none shadow">#{adIndex + 1}</span>
                   {/* Channel Thumbnail Circle with Platform Icon → Product Details */}
                   <div className="relative mb-2 flex items-center">
                     <div className="absolute -left-4 -top-0">
@@ -675,6 +690,21 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
           onClose={handleEditModalClose}
           onUpdate={handleAdUpdate}
         />
+      )}
+
+      {/* ── Bump Success Popup ── */}
+      {showBumpSuccess && (
+        <div className="fixed inset-0 flex items-center justify-center z-[999] pointer-events-none">
+          <div
+            className="bg-gradient-to-br from-amber-950/95 to-xsm-dark-gray border-2 border-xsm-yellow/80 rounded-2xl px-8 py-6 shadow-[0_0_60px_rgba(255,208,0,0.5)] text-center"
+            style={{ animation: 'fadeInPop 0.3s ease' }}
+          >
+            <div className="text-5xl mb-3">🚀</div>
+            <h3 className="text-xl font-black text-xsm-yellow mb-1">Listing Bumped!</h3>
+            <p className="text-sm text-gray-300 max-w-[220px]">Your listing is now at the top of the marketplace.</p>
+            <p className="text-xs text-gray-500 mt-2 truncate max-w-[220px]">{bumpedTitle}</p>
+          </div>
+        </div>
       )}
 
       {/* Bump Modal */}

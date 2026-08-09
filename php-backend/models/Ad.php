@@ -154,79 +154,90 @@ class Ad {
         $includeBanned = !empty($filters['includeBanned']);
         $isAdmin = !empty($filters['isAdmin']);
         
-        $sql = "
-            SELECT a.*, 
-                   u.id as seller_id, 
-                   u.username as seller_username, 
-                   u.profilePicture as seller_profilePicture,
-                   u.vipUntil as seller_vipUntil
-            FROM " . self::$table . " a
-            INNER JOIN users u ON a.userId = u.id
-            WHERE 1=1
-        ";
-        
-        $params = [];
-        
-        if ($isAdmin) {
-            if (!empty($filters['status']) && $filters['status'] !== 'all') {
-                $sql .= " AND a.status = :status";
-                $params[':status'] = $filters['status'];
+        try {
+            $sql = "
+                SELECT a.*, 
+                       u.id as seller_id, 
+                       u.username as seller_username, 
+                       u.profilePicture as seller_profilePicture,
+                       u.vipUntil as seller_vipUntil
+                FROM " . self::$table . " a
+                LEFT JOIN users u ON a.userId = u.id
+                WHERE 1=1
+            ";
+            
+            $params = [];
+            
+            if ($isAdmin) {
+                if (!empty($filters['status']) && $filters['status'] !== 'all') {
+                    $sql .= " AND a.status = :status";
+                    $params[':status'] = $filters['status'];
+                }
+            } else {
+                $sql .= " AND a.status = 'active'";
             }
-        } else {
-            $sql .= " AND a.status = 'active'";
+            
+            // Apply filters
+            if (!empty($filters['platform']) && $filters['platform'] !== 'all') {
+                $sql .= " AND a.platform = :platform";
+                $params[':platform'] = $filters['platform'];
+            }
+            
+            if (!empty($filters['category']) && $filters['category'] !== 'all') {
+                $sql .= " AND a.category = :category";
+                $params[':category'] = $filters['category'];
+            }
+            
+            if (!empty($filters['minPrice'])) {
+                $sql .= " AND a.price >= :minPrice";
+                $params[':minPrice'] = floatval($filters['minPrice']);
+            }
+            
+            if (!empty($filters['maxPrice'])) {
+                $sql .= " AND a.price <= :maxPrice";
+                $params[':maxPrice'] = floatval($filters['maxPrice']);
+            }
+            
+            if (!empty($filters['search'])) {
+                $sql .= " AND (a.title LIKE :search OR a.description LIKE :search OR a.contentCategory LIKE :search)";
+                $params[':search'] = '%' . $filters['search'] . '%';
+            }
+            
+            // Sort order
+            $sortBy = $filters['sortBy'] ?? 'createdAt';
+            $sortOrder = strtoupper($filters['sortOrder'] ?? 'DESC');
+            if ($sortOrder !== 'ASC' && $sortOrder !== 'DESC') $sortOrder = 'DESC';
+            $validSortFields = ['createdAt', 'price', 'subscribers', 'views'];
+            $sortField = in_array($sortBy, $validSortFields) ? $sortBy : 'createdAt';
+            
+            $sql .= " ORDER BY a.{$sortField} {$sortOrder} LIMIT :limit OFFSET :offset";
+            
+            $stmt = $pdo->prepare($sql);
+            $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+            
+            foreach ($params as $key => $value) {
+                $stmt->bindValue($key, $value);
+            }
+            
+            $stmt->execute();
+            $ads = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (Throwable $e) {
+            error_log("Ad::getAll main query failed: " . $e->getMessage() . ". Trying simple fallback.");
+            try {
+                $fallbackSql = "SELECT * FROM " . self::$table . " WHERE status = 'active' ORDER BY createdAt DESC LIMIT :limit OFFSET :offset";
+                $stmt = $pdo->prepare($fallbackSql);
+                $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
+                $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
+                $stmt->execute();
+                $ads = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Throwable $e2) {
+                error_log("Ad::getAll fallback query failed: " . $e2->getMessage());
+                return [];
+            }
         }
         
-        if (!$includeBanned) {
-            $sql .= " AND (u.isBanned = 0 OR u.isBanned IS NULL)";
-        }
-
-        
-        // Apply filters - exact match to Node.js
-        if (!empty($filters['platform']) && $filters['platform'] !== 'all') {
-            $sql .= " AND a.platform = :platform";
-            $params[':platform'] = $filters['platform'];
-        }
-        
-        if (!empty($filters['category']) && $filters['category'] !== 'all') {
-            $sql .= " AND a.category = :category";
-            $params[':category'] = $filters['category'];
-        }
-        
-        if (!empty($filters['minPrice'])) {
-            $sql .= " AND a.price >= :minPrice";
-            $params[':minPrice'] = floatval($filters['minPrice']);
-        }
-        
-        if (!empty($filters['maxPrice'])) {
-            $sql .= " AND a.price <= :maxPrice";
-            $params[':maxPrice'] = floatval($filters['maxPrice']);
-        }
-        
-        if (!empty($filters['search'])) {
-            $sql .= " AND (a.title LIKE :search OR a.description LIKE :search OR a.contentCategory LIKE :search)";
-            $params[':search'] = '%' . $filters['search'] . '%';
-        }
-        
-        // Sort order
-        $sortBy = $filters['sortBy'] ?? 'createdAt';
-        $sortOrder = $filters['sortOrder'] ?? 'DESC';
-        $validSortFields = ['createdAt', 'price', 'subscribers', 'views'];
-        $sortField = in_array($sortBy, $validSortFields) ? $sortBy : 'createdAt';
-        
-        $sql .= " ORDER BY a.{$sortField} {$sortOrder} LIMIT :limit OFFSET :offset";
-        
-        $stmt = $pdo->prepare($sql);
-        $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
-        $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
-        
-        foreach ($params as $key => $value) {
-            $stmt->bindValue($key, $value);
-        }
-        
-        $stmt->execute();
-        $ads = $stmt->fetchAll(PDO::FETCH_ASSOC);
-        
-        // Format response to match Node.js exactly
+        // Format response safely
         foreach ($ads as &$ad) {
             self::formatJsonFields($ad);
             
@@ -234,31 +245,31 @@ class Ad {
             $sellerVipUntil = $ad['seller_vipUntil'] ?? null;
             $sellerIsVip = !empty($sellerVipUntil) && strtotime($sellerVipUntil) > time();
 
-            // Format seller info to match Node.js structure
+            // Format seller info
             $ad['seller'] = [
-                'id' => (int)$ad['seller_id'],
-                'username' => $ad['seller_username'],
-                'profilePicture' => $ad['seller_profilePicture'],
+                'id' => (int)($ad['seller_id'] ?? $ad['userId'] ?? 0),
+                'username' => $ad['seller_username'] ?? 'Seller',
+                'profilePicture' => $ad['seller_profilePicture'] ?? '',
                 'isVip' => $sellerIsVip,
                 'vipUntil' => $sellerVipUntil
             ];
             $ad['seller_isVip'] = $sellerIsVip;
             $ad['isVip'] = $sellerIsVip;
             
-            // Convert numeric fields to proper types
-            $ad['id'] = (int)$ad['id'];
-            $ad['userId'] = (int)$ad['userId'];
-            $ad['price'] = (float)$ad['price'];
-            $ad['subscribers'] = (int)$ad['subscribers'];
-            $ad['monthlyIncome'] = (float)$ad['monthlyIncome'];
-            $ad['views'] = (int)$ad['views'];
-            $ad['totalViews'] = (int)$ad['totalViews'];
-            $ad['isMonetized'] = (bool)$ad['isMonetized'];
-            $ad['verified'] = (bool)$ad['verified'];
-            $ad['premium'] = (bool)$ad['premium'];
-            $ad['rating'] = $ad['rating'] ? (float)$ad['rating'] : 0;
+            // Convert numeric fields to proper types with null coalescing
+            $ad['id'] = (int)($ad['id'] ?? 0);
+            $ad['userId'] = (int)($ad['userId'] ?? 0);
+            $ad['price'] = (float)($ad['price'] ?? 0);
+            $ad['subscribers'] = (int)($ad['subscribers'] ?? 0);
+            $ad['monthlyIncome'] = (float)($ad['monthlyIncome'] ?? 0);
+            $ad['views'] = (int)($ad['views'] ?? 0);
+            $ad['totalViews'] = (int)($ad['totalViews'] ?? $ad['views'] ?? 0);
+            $ad['isMonetized'] = !empty($ad['isMonetized']);
+            $ad['verified'] = !empty($ad['verified']);
+            $ad['premium'] = !empty($ad['premium']);
+            $ad['rating'] = !empty($ad['rating']) ? (float)$ad['rating'] : 0;
             
-            // Remove seller_ prefixed fields
+            // Clean up temporary seller_ prefix fields
             unset($ad['seller_id'], $ad['seller_username'], $ad['seller_profilePicture'], $ad['seller_vipUntil']);
         }
         
@@ -430,24 +441,29 @@ class Ad {
         }
         
         if (!$includeBanned) {
-            $sql .= " AND (u.isBanned = 0 OR u.isBanned IS NULL)";
+            $sql .= " AND (a.isBanned = 0 OR a.isBanned IS NULL)";
         }
         
         // Apply filters
-        if (!empty($filters['platform'])) {
+        if (!empty($filters['platform']) && $filters['platform'] !== 'all') {
             $sql .= " AND a.platform = :platform";
             $params[':platform'] = $filters['platform'];
         }
         
-        if (!empty($filters['category'])) {
+        if (!empty($filters['category']) && $filters['category'] !== 'all') {
             $sql .= " AND a.category = :category";
             $params[':category'] = $filters['category'];
+        }
+        
+        if (!empty($filters['search'])) {
+            $sql .= " AND (a.title LIKE :search OR a.description LIKE :search OR a.contentCategory LIKE :search)";
+            $params[':search'] = '%' . $filters['search'] . '%';
         }
         
         $stmt = $pdo->prepare($sql);
         $stmt->execute($params);
         $result = $stmt->fetch();
-        return $result['count'];
+        return $result ? (int)($result['count'] ?? 0) : 0;
     }
 
     

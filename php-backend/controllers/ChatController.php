@@ -42,7 +42,8 @@ class ChatController {
                     SELECT DISTINCT c.*,
                            a.id as ad_id, a.title as ad_title, a.price as ad_price,
                            m.content as last_message_content, m.createdAt as last_message_time,
-                           sender.id as last_sender_id, sender.username as last_sender_username
+                           sender.id as last_sender_id, sender.username as last_sender_username,
+                           (SELECT COUNT(*) FROM messages um WHERE um.chatId = c.id AND um.senderId != ? AND um.isRead = 0) as unread_count
                     FROM chats c
                     LEFT JOIN ads a ON c.adId = a.id
                     LEFT JOIN messages m ON c.id = m.chatId
@@ -51,13 +52,14 @@ class ChatController {
                     WHERE m2.id IS NULL
                     ORDER BY c.lastMessageTime DESC, c.updatedAt DESC, c.createdAt DESC
                 ");
-                $stmt->execute();
+                $stmt->execute([$userId]);
             } else {
                 $stmt = $this->db->prepare("
                     SELECT DISTINCT c.*,
                            a.id as ad_id, a.title as ad_title, a.price as ad_price,
                            m.content as last_message_content, m.createdAt as last_message_time,
-                           sender.id as last_sender_id, sender.username as last_sender_username
+                           sender.id as last_sender_id, sender.username as last_sender_username,
+                           (SELECT COUNT(*) FROM messages um WHERE um.chatId = c.id AND um.senderId != ? AND um.isRead = 0) as unread_count
                     FROM chats c
                     INNER JOIN chat_participants cp ON c.id = cp.chatId
                     LEFT JOIN ads a ON c.adId = a.id
@@ -67,7 +69,7 @@ class ChatController {
                     WHERE cp.userId = ? AND cp.isActive = 1 AND m2.id IS NULL
                     ORDER BY c.lastMessageTime DESC, c.updatedAt DESC, c.createdAt DESC
                 ");
-                $stmt->execute([$userId]);
+                $stmt->execute([$userId, $userId]);
             }
             $chats = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -87,6 +89,42 @@ class ChatController {
                     return (int)$p['userId'] !== (int)$userId;
                 }));
 
+                // Determine buyer/seller for admin context
+                $buyerUserId = null;
+                $sellerUserId = null;
+                if ($chat['ad_id']) {
+                    // For ad_inquiry chats: the ad owner is the seller, the other participant is the buyer
+                    $adOwnerStmt = $this->db->prepare("SELECT userId FROM ads WHERE id = ? LIMIT 1");
+                    $adOwnerStmt->execute([$chat['ad_id']]);
+                    $adOwnerRow = $adOwnerStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($adOwnerRow) {
+                        $sellerUserId = (int)$adOwnerRow['userId'];
+                        // Buyer is the participant who is NOT the seller
+                        foreach ($participants as $p) {
+                            if ((int)$p['user_id'] !== $sellerUserId) {
+                                $buyerUserId = (int)$p['user_id'];
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    // For direct chats: use deal history if available
+                    $dealCheckStmt = $this->db->prepare("
+                        SELECT buyer_id, seller_id FROM deals
+                        WHERE (buyer_id IN (SELECT userId FROM chat_participants WHERE chatId = ?)
+                           AND seller_id IN (SELECT userId FROM chat_participants WHERE chatId = ?))
+                        ORDER BY created_at DESC LIMIT 1
+                    ");
+                    try {
+                        $dealCheckStmt->execute([$chat['id'], $chat['id']]);
+                        $dealRow = $dealCheckStmt->fetch(PDO::FETCH_ASSOC);
+                        if ($dealRow) {
+                            $buyerUserId = (int)$dealRow['buyer_id'];
+                            $sellerUserId = (int)$dealRow['seller_id'];
+                        }
+                    } catch (Exception $e) { /* deals table may not exist */ }
+                }
+
                 $chatData = [
                     'id' => (int)$chat['id'],
                     'type' => $chat['type'],
@@ -98,6 +136,9 @@ class ChatController {
                     'lastMessageTime' => $chat['lastMessageTime'],
                     'createdAt' => $chat['createdAt'],
                     'updatedAt' => $chat['updatedAt'],
+                    'unread_count' => (int)($chat['unread_count'] ?? 0),
+                    'buyerUserId' => $buyerUserId,
+                    'sellerUserId' => $sellerUserId,
                     'participants' => array_map(function($p) {
                         return [
                             'userId' => (int)$p['userId'],
@@ -299,20 +340,16 @@ class ChatController {
             $stmt->execute([$chatId, $limit, $offset]);
             $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // Auto-mark unread messages as read when opening chat
-            Message::markChatRead((int)$chatId, $userId);
-
             $stmt = $this->db->prepare("
                 UPDATE chat_participants SET lastSeenAt = NOW()
                 WHERE chatId = ? AND userId = ?
             ");
             $stmt->execute([$chatId, $userId]);
 
-            $result = array_map(function($msg) use ($adminEmail) {
-                $isStaffMsg = !empty($msg['isStaffMessage']);
-                $staffName = $msg['staffDisplayName'] ?? null;
-                $effectiveDisplayName = $staffName ?: ($msg['sender_displayName'] ?? null);
+            // Auto-mark incoming sent messages as delivered
+            Message::markDelivered((int)$chatId, $userId);
 
+            $result = array_map(function($msg) use ($adminEmail) {
                 $formatted = [
                     'id' => (int)$msg['id'],
                     'content' => $msg['content'],
@@ -325,14 +362,14 @@ class ChatController {
                     'thumbnail' => $msg['thumbnail'],
                     'isRead' => (bool)$msg['isRead'],
                     'status' => $msg['status'] ?? ($msg['isRead'] ? 'read' : 'sent'),
-                    'isStaffMessage' => $isStaffMsg,
-                    'staffDisplayName' => $staffName,
+                    'deliveredAt' => $msg['deliveredAt'] ?? null,
+                    'readAt' => $msg['readAt'] ?? null,
                     'createdAt' => $msg['createdAt'],
                     'updatedAt' => $msg['updatedAt'],
                     'sender' => [
                         'id' => (int)$msg['sender_id'],
-                        'username' => ($isStaffMsg && $staffName) ? $staffName : $msg['sender_username'],
-                        'displayName' => $effectiveDisplayName,
+                        'username' => $msg['sender_username'],
+                        'displayName' => $msg['sender_displayName'] ?? null,
                         'isAdmin' => (!empty($msg['sender_isAdmin']) || ($adminEmail && strtolower($msg['sender_email'] ?? '') === strtolower($adminEmail)))
                     ]
                 ];
@@ -532,6 +569,8 @@ class ChatController {
                 'mediaUrl' => $mediaUrl ?: ($messageData['mediaUrl'] ?? null),
                 'isRead' => (bool)$messageData['isRead'],
                 'status' => $messageData['status'] ?? 'sent',
+                'deliveredAt' => $messageData['deliveredAt'] ?? null,
+                'readAt' => $messageData['readAt'] ?? null,
                 'createdAt' => $messageData['createdAt'],
                 'updatedAt' => $messageData['updatedAt'],
                 'sender' => [
@@ -551,6 +590,37 @@ class ChatController {
                         'username' => $messageData['reply_sender_username']
                     ]
                 ];
+            }
+
+            // Notify all other participants in this chat
+            try {
+                $recipientStmt = $this->db->prepare("
+                    SELECT u.id, u.username FROM chat_participants cp
+                    INNER JOIN users u ON cp.userId = u.id
+                    WHERE cp.chatId = ? AND cp.userId != ? AND cp.isActive = 1
+                ");
+                $recipientStmt->execute([$chatId, $senderId]);
+                $recipients = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $senderName = $user['username'] ?? 'Someone';
+                $preview = mb_strlen($content) > 60 ? mb_substr($content, 0, 60) . '...' : $content;
+                if ($messageType === 'image') $preview = '📷 Sent an image';
+                if ($messageType === 'video') $preview = '🎥 Sent a video';
+
+                $notifStmt = $this->db->prepare("
+                    INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                    VALUES (?, 'message', ?, ?, ?, 0, NOW())
+                ");
+                foreach ($recipients as $recipient) {
+                    $notifStmt->execute([
+                        (int)$recipient['id'],
+                        'New message from ' . $senderName,
+                        $preview,
+                        '/chat?chatId=' . $chatId
+                    ]);
+                }
+            } catch (Exception $ne) {
+                error_log('Notification insert error: ' . $ne->getMessage());
             }
 
             http_response_code(201);
@@ -581,6 +651,18 @@ class ChatController {
             }
 
             $affected = Message::markChatRead((int)$chatId, $userId);
+
+            // Also mark corresponding message notifications as read in DB
+            try {
+                $notifStmt = $this->db->prepare("
+                    UPDATE notifications
+                    SET isRead = 1
+                    WHERE userId = ? AND isRead = 0 AND (link LIKE ? OR link = ?)
+                ");
+                $notifStmt->execute([$userId, "%chatId={$chatId}%", '/chat?chatId=' . $chatId]);
+            } catch (Exception $ne) {
+                // Ignore notification update error
+            }
 
             http_response_code(200);
             echo json_encode(['success' => true, 'markedRead' => $affected, 'message' => 'Messages marked as read']);
@@ -827,13 +909,7 @@ class ChatController {
     public function adminSendMessage($chatId) {
         try {
             $currentUser = $this->authMiddleware->authenticate();
-
-            // Viewer role: read-only, cannot send messages from dashboard
-            if (!AuthMiddleware::checkRole($currentUser, ['admin', 'manager'])) {
-                http_response_code(403);
-                echo json_encode(['message' => 'Viewer role is read-only and cannot send messages.', 'viewerOnly' => true]);
-                return;
-            }
+            $this->checkManagerAccess($currentUser);
 
             $input = json_decode(file_get_contents('php://input'), true);
             $content = trim($input['content'] ?? '');
@@ -844,82 +920,42 @@ class ChatController {
                 return;
             }
 
-            // ── Resolve staff display name ────────────────────────────────────────────
-            // Priority: 1) explicit staffDisplayName in request body
-            //           2) sender's displayName set in admin panel
-            //           3) role-based default ("Website Agent" for manager, "Support" for admin)
-            $explicitName = isset($input['staffDisplayName']) ? trim($input['staffDisplayName']) : '';
-
-            // Fetch sender's saved displayName and role from DB
-            $senderStmt = $this->db->prepare("SELECT displayName, role FROM users WHERE id = ? LIMIT 1");
-            $senderStmt->execute([(int)$currentUser['id']]);
-            $senderRow = $senderStmt->fetch(PDO::FETCH_ASSOC);
-            $dbDisplayName = $senderRow['displayName'] ?? null;
-            $senderRole    = $senderRow['role'] ?? ($currentUser['role'] ?? 'admin');
-
-            if (!empty($explicitName)) {
-                $staffDisplayName = $explicitName;
-            } elseif (!empty($dbDisplayName)) {
-                $staffDisplayName = $dbDisplayName;
-            } else {
-                $staffDisplayName = ($senderRole === 'manager') ? 'Website Agent' : 'Support';
-            }
-            // ─────────────────────────────────────────────────────────────────────────
-
             $stmt = $this->db->prepare("SELECT id FROM chats WHERE id = ? LIMIT 1");
             $stmt->execute([$chatId]);
+
             if (!$stmt->fetch(PDO::FETCH_ASSOC)) {
                 http_response_code(404);
                 echo json_encode(['message' => 'Chat not found']);
                 return;
             }
 
-            // Insert message — mark as staff message, store resolved display name
             $stmt = $this->db->prepare("
-                INSERT INTO messages (content, senderId, chatId, messageType, isStaffMessage, staffDisplayName, status, createdAt, updatedAt)
-                VALUES (?, ?, ?, 'text', 1, ?, 'sent', NOW(), NOW())
+                INSERT INTO messages (content, senderId, chatId, messageType, createdAt, updatedAt)
+                VALUES (?, ?, ?, 'text', NOW(), NOW())
             ");
-            $stmt->execute([$content, (int)$currentUser['id'], (int)$chatId, $staffDisplayName]);
+            $stmt->execute([$content, (int)$currentUser['id'], $chatId]);
             $messageId = $this->db->lastInsertId();
 
-            // Update chat last-message preview
-            $stmt = $this->db->prepare("UPDATE chats SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW() WHERE id = ?");
+            $stmt = $this->db->prepare("
+                UPDATE chats SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW()
+                WHERE id = ?
+            ");
             $stmt->execute([$content, $chatId]);
 
-            // Fetch full message with sender info
             $stmt = $this->db->prepare("
-                SELECT m.*,
-                       sender.id as sender_id, sender.username as sender_username,
-                       sender.displayName as sender_displayName, sender.isAdmin as sender_isAdmin,
-                       sender.email as sender_email, sender.role as sender_role
+                SELECT m.*, u.username as sender_username
                 FROM messages m
-                INNER JOIN users sender ON m.senderId = sender.id
+                LEFT JOIN users u ON m.senderId = u.id
                 WHERE m.id = ?
             ");
             $stmt->execute([$messageId]);
-            $msgData = $stmt->fetch(PDO::FETCH_ASSOC);
+            $message = $stmt->fetch(PDO::FETCH_ASSOC);
 
             $result = [
-                'id'              => (int)$msgData['id'],
-                'content'         => $msgData['content'],
-                'senderId'        => (int)$msgData['senderId'],
-                'chatId'          => (int)$msgData['chatId'],
-                'messageType'     => $msgData['messageType'],
-                'mediaUrl'        => null,
-                'isRead'          => false,
-                'status'          => 'sent',
-                'isStaffMessage'  => true,
-                'staffDisplayName'=> $staffDisplayName,
-                'createdAt'       => $msgData['createdAt'],
-                'updatedAt'       => $msgData['updatedAt'],
-                'sender'          => [
-                    'id'          => (int)$msgData['sender_id'],
-                    // Real username intentionally NOT exposed to clients — show displayName only
-                    'username'    => $staffDisplayName,
-                    'displayName' => $staffDisplayName,
-                    'isAdmin'     => true,
-                    'role'        => $msgData['sender_role'] ?? $senderRole
-                ]
+                'id' => (int)$message['id'],
+                'content' => $message['content'],
+                'sender' => 'Admin',
+                'timestamp' => $message['createdAt']
             ];
 
             http_response_code(201);
@@ -930,7 +966,6 @@ class ChatController {
             echo json_encode(['message' => 'Server error', 'error' => $e->getMessage()]);
         }
     }
-
 
     // Admin delete individual message
     public function adminDeleteMessage($messageId) {

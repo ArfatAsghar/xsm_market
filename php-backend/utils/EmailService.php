@@ -138,6 +138,64 @@ class EmailService {
             return false;
         }
     }
+
+    // Send ban notification email
+    public function sendBanEmail($email, $username, $reason, $duration, $banExpires) {
+        try {
+            $isPermanent = ($duration === 'permanent' || !$banExpires);
+            $subject = 'Account Status Update - XSM Market';
+            
+            $durationText = $isPermanent 
+                ? 'Permanently Banned' 
+                : 'Temporarily Suspended until ' . date('F j, Y g:i A T', strtotime($banExpires));
+
+            $reasonText = !empty($reason) ? htmlspecialchars($reason) : 'Violation of platform terms and conditions.';
+
+            $htmlBody = '
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"></head>
+            <body style="font-family: Arial, sans-serif; background-color: #121212; color: #ffffff; padding: 20px;">
+              <div style="max-width: 600px; margin: 0 auto; background-color: #1e1e1e; border-radius: 12px; padding: 30px; border: 1px solid #333;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                  <h1 style="color: #ffd000; margin: 0; font-size: 24px;">XSM Market</h1>
+                  <p style="color: #888; font-size: 13px; margin-top: 4px;">Account Status Notification</p>
+                </div>
+                
+                <h2 style="color: #ef4444; font-size: 18px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+                  Account Restriction Notice
+                </h2>
+                
+                <p>Hello <strong>' . htmlspecialchars($username) . '</strong>,</p>
+                
+                <p>This email is to notify you that your account on <strong>XSM Market</strong> has been restricted.</p>
+                
+                <div style="background-color: #2a1515; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                  <p style="margin: 0 0 8px 0; font-size: 14px; color: #fff;"><strong>Restriction Type:</strong> <span style="color: #f87171;">' . htmlspecialchars($durationText) . '</span></p>
+                  <p style="margin: 0; font-size: 14px; color: #fff;"><strong>Reason:</strong> ' . $reasonText . '</p>
+                </div>
+                
+                ' . ($isPermanent ? 
+                  '<p style="color: #bbb; font-size: 13px;">Since your ban is permanent, access to buying, selling, and marketplace transactions has been revoked.</p>' : 
+                  '<p style="color: #bbb; font-size: 13px;">Your account access will automatically be restored on <strong>' . date('F j, Y g:i A T', strtotime($banExpires)) . '</strong>.</p>'
+                ) . '
+                
+                <p style="color: #bbb; font-size: 13px;">If you believe this action was taken in error or wish to submit an appeal, you may contact platform administrators using the support chat.</p>
+                
+                <hr style="border: none; border-top: 1px solid #333; margin: 25px 0;">
+                <p style="color: #666; font-size: 11px; text-align: center;">&copy; ' . date('Y') . ' XSM Market. All rights reserved.</p>
+              </div>
+            </body>
+            </html>';
+
+            $textBody = "Hello $username,\n\nYour XSM Market account status has been updated.\n\nRestriction Type: $durationText\nReason: $reasonText\n\nIf you have any questions or wish to appeal, please contact Support through the platform chat.\n\nBest regards,\nXSM Market Team";
+
+            return $this->sendEmail($email, $subject, $htmlBody, $textBody);
+        } catch (Exception $e) {
+            error_log('Failed to send ban email: ' . $e->getMessage());
+            return false;
+        }
+    }
     
     // Send email change verification - new method for email change functionality
     public function sendEmailChangeVerification($newEmail, $otp, $username, $verificationToken) {
@@ -267,7 +325,221 @@ class EmailService {
             return false;
         }
     }
-    
+
+    // ─── NEW MESSAGE NOTIFICATION EMAIL ────────────────────────────────────────
+    // Sent to recipient when someone sends them a personal chat message
+    public function sendNewMessageEmail($toEmail, $toUsername, $senderName, $preview, $chatLink = '/chat') {
+        try {
+            $subject = "💬 New message from $senderName — XSM Market";
+            $previewEscaped = htmlspecialchars(mb_strimwidth($preview, 0, 120, '…'));
+            $htmlBody = $this->getBaseEmailTemplate(
+                "New Message",
+                "💬",
+                "You have a new message!",
+                "Hi <strong>$toUsername</strong>,<br><br>
+                <strong>$senderName</strong> sent you a message on XSM Market:",
+                "<div style=\"background:#1a1a1a;border-left:3px solid #ffd000;padding:14px 18px;border-radius:6px;margin:16px 0;color:#d1d5db;font-style:italic;font-size:14px;\">
+                    \"$previewEscaped\"
+                </div>",
+                "Open Inbox",
+                "https://xsmmarket.com$chatLink",
+                "Reply promptly to keep the conversation going."
+            );
+            $textBody = "Hi $toUsername,\n\n$senderName sent you a message:\n\"$preview\"\n\nOpen your inbox: https://xsmmarket.com$chatLink\n\nBest regards,\nXSM Market Team";
+            return $this->sendEmail($toEmail, $subject, $htmlBody, $textBody);
+        } catch (Exception $e) {
+            error_log('Failed to send new message email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // ─── ADMIN / AGENT MESSAGE EMAIL ───────────────────────────────────────────
+    // Sent to user when admin/manager sends a message from the Admin Dashboard
+    public function sendAdminMessageEmail($toEmail, $toUsername, $agentName, $preview) {
+        try {
+            $subject = "📬 Message from XSM Market Support — $agentName";
+            $previewEscaped = htmlspecialchars(mb_strimwidth($preview, 0, 120, '…'));
+            $htmlBody = $this->getBaseEmailTemplate(
+                "Support Message",
+                "📬",
+                "A message from our support team",
+                "Hi <strong>$toUsername</strong>,<br><br>
+                <strong>$agentName</strong> from XSM Market has sent you a message:",
+                "<div style=\"background:#1a1a1a;border-left:3px solid #ffd000;padding:14px 18px;border-radius:6px;margin:16px 0;color:#d1d5db;font-size:14px;\">
+                    \"$previewEscaped\"
+                </div>",
+                "View in Inbox",
+                "https://xsmmarket.com/chat",
+                "This is an official message from the XSM Market support team."
+            );
+            $textBody = "Hi $toUsername,\n\n$agentName from XSM Market Support sent you a message:\n\"$preview\"\n\nView it here: https://xsmmarket.com/chat\n\nBest regards,\nXSM Market Team";
+            return $this->sendEmail($toEmail, $subject, $htmlBody, $textBody);
+        } catch (Exception $e) {
+            error_log('Failed to send admin message email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // ─── DEAL STAGE EMAIL ──────────────────────────────────────────────────────
+    // Sent to buyer/seller at each of the 11 deal stages
+    public function sendDealStageEmail($toEmail, $toUsername, $dealStage, $txnId, $channelTitle, $role = 'buyer') {
+        try {
+            $roleLabel = $role === 'seller' ? 'Seller' : 'Buyer';
+            $txnIdEscaped = htmlspecialchars($txnId);
+            $channelEscaped = htmlspecialchars($channelTitle);
+
+            $stageInfo = $this->getDealStageInfo($dealStage, $role);
+            if (!$stageInfo) return false; // Unknown stage, skip
+
+            $subject = "🤝 Deal Update [{$txnIdEscaped}]: {$stageInfo['title']} — XSM Market";
+
+            $txnBadge = "<div style=\"display:inline-block;background:#ffd000;color:#000;font-weight:700;font-size:12px;padding:4px 12px;border-radius:20px;margin-bottom:16px;letter-spacing:0.5px;\">
+                Transaction ID: {$txnIdEscaped}
+            </div>";
+
+            $htmlBody = $this->getBaseEmailTemplate(
+                "Deal Update",
+                $stageInfo['emoji'],
+                $stageInfo['title'],
+                "Hi <strong>$toUsername</strong> ($roleLabel),<br><br>
+                Your deal for <strong>$channelEscaped</strong> has been updated.",
+                "$txnBadge
+                <div style=\"background:#1a1a1a;border-left:3px solid #ffd000;padding:14px 18px;border-radius:6px;margin:16px 0;color:#d1d5db;font-size:14px;\">
+                    {$stageInfo['description']}
+                </div>",
+                "View Deal",
+                "https://xsmmarket.com/" . ($role === 'seller' ? 'seller-deals' : 'my-deals'),
+                "Keep an eye on your deal progress in your dashboard."
+            );
+            $textBody = "Hi $toUsername,\n\nDeal Update [{$txnIdEscaped}] — {$stageInfo['title']}\n\nChannel: $channelTitle\n{$stageInfo['descriptionText']}\n\nView your deal: https://xsmmarket.com/" . ($role === 'seller' ? 'seller-deals' : 'my-deals') . "\n\nBest regards,\nXSM Market Team";
+            return $this->sendEmail($toEmail, $subject, $htmlBody, $textBody);
+        } catch (Exception $e) {
+            error_log('Failed to send deal stage email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // Helper: Returns title, emoji, description for each deal stage
+    private function getDealStageInfo($stage, $role = 'buyer') {
+        $stages = [
+            'pending' => [
+                'emoji' => '🆕',
+                'title' => 'New Deal Request',
+                'description' => 'A new deal request has been submitted. Both parties must review and agree to the terms before the deal proceeds.',
+                'descriptionText' => 'A new deal request has been submitted. Both parties must agree to terms before proceeding.'
+            ],
+            'terms_agreed' => [
+                'emoji' => '✅',
+                'title' => 'Both Parties Agreed to Terms',
+                'description' => 'Great news! Both buyer and seller have agreed to the deal terms. The next step is initiating the payment process.',
+                'descriptionText' => 'Both buyer and seller have agreed to the deal terms. Awaiting payment initiation.'
+            ],
+            'payment_pending' => [
+                'emoji' => '⏳',
+                'title' => 'Payment Processing Initiated',
+                'description' => 'The payment process has been initiated. The buyer is in the process of completing the transaction fee payment.',
+                'descriptionText' => 'Payment processing has been initiated. The buyer is completing the transaction fee.'
+            ],
+            'fee_paid' => [
+                'emoji' => '💳',
+                'title' => 'Transaction Fee Paid',
+                'description' => 'The transaction fee has been successfully paid. The agent email will be sent to the seller to provide account access credentials.',
+                'descriptionText' => 'The transaction fee has been paid. Agent access will be coordinated next.'
+            ],
+            'agent_access_pending' => [
+                'emoji' => '📧',
+                'title' => 'Agent Email Sent to Seller',
+                'description' => 'The XSM Market agent email has been sent to the seller. The seller should provide account access credentials to this email.',
+                'descriptionText' => 'Agent email has been sent. The seller should provide account access to the agent email.'
+            ],
+            'agent_access_confirmed' => [
+                'emoji' => '🔑',
+                'title' => 'Account Access Confirmed',
+                'description' => 'Account access has been confirmed by the buyer. The deal is now progressing to the next stage.',
+                'descriptionText' => 'Account access has been confirmed. The deal is progressing.'
+            ],
+            'waiting_promotion_timer' => [
+                'emoji' => '⏱️',
+                'title' => 'Promotion Timer Running',
+                'description' => 'The account is being verified during the promotion period. Please wait for the timer to complete before the next step.',
+                'descriptionText' => 'The account is in the promotion verification period. Please wait.'
+            ],
+            'promotion_timer_complete' => [
+                'emoji' => '🎯',
+                'title' => 'Promotion Period Complete',
+                'description' => 'The promotion verification period has completed successfully! The buyer can now proceed with the payment to the seller.',
+                'descriptionText' => 'The promotion period has ended. The buyer can now proceed with payment to seller.'
+            ],
+            'buyer_paid_seller' => [
+                'emoji' => '💰',
+                'title' => 'Payment Sent to Seller',
+                'description' => 'The buyer has made payment to the seller. The seller should confirm receipt of the payment to complete the transaction.',
+                'descriptionText' => 'Payment has been sent to the seller. The seller must confirm receipt.'
+            ],
+            'seller_confirmed_payment' => [
+                'emoji' => '👍',
+                'title' => 'Seller Confirmed Payment Receipt',
+                'description' => 'The seller has confirmed receiving the payment. The admin will now review and complete the transaction.',
+                'descriptionText' => 'Seller has confirmed payment receipt. Admin review is pending.'
+            ],
+            'payment_confirmed' => [
+                'emoji' => '🏆',
+                'title' => 'Transaction Confirmed by Admin',
+                'description' => 'The XSM Market admin has confirmed the transaction. The deal is now being finalized.',
+                'descriptionText' => 'Admin has confirmed the transaction. Finalizing deal.'
+            ],
+            'completed' => [
+                'emoji' => '🎉',
+                'title' => 'Transaction Completed!',
+                'description' => 'Congratulations! The deal has been completed successfully. Thank you for using XSM Market. We hope to see you again!',
+                'descriptionText' => 'The deal has been completed successfully! Thank you for using XSM Market.'
+            ],
+        ];
+        return $stages[$stage] ?? null;
+    }
+
+    // ─── BASE EMAIL TEMPLATE ──────────────────────────────────────────────────
+    // Shared premium branded template for all XSM Market emails
+    private function getBaseEmailTemplate($type, $emoji, $heading, $intro, $bodyContent, $ctaText, $ctaUrl, $footer = '') {
+        return "<!DOCTYPE html>
+<html lang=\"en\">
+<head>
+<meta charset=\"UTF-8\">
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+<title>$heading — XSM Market</title>
+</head>
+<body style=\"margin:0;padding:0;background-color:#0a0a0a;font-family:'Segoe UI',Helvetica,Arial,sans-serif;\">
+<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#0a0a0a;padding:40px 20px;\">
+<tr><td align=\"center\">
+<table width=\"580\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:580px;width:100%;background:#111111;border-radius:16px;overflow:hidden;border:1px solid rgba(255,208,0,0.15);box-shadow:0 20px 60px rgba(0,0,0,0.8);\">
+  <!-- Header -->
+  <tr><td style=\"background:linear-gradient(135deg,#1a1500 0%,#0a0a0a 50%,#1a1500 100%);padding:32px 40px;text-align:center;border-bottom:1px solid rgba(255,208,0,0.2);\">
+    <div style=\"font-size:40px;margin-bottom:12px;\">$emoji</div>
+    <img src=\"https://xsmmarket.com/images/logo.png\" alt=\"XSM Market\" style=\"height:36px;max-width:160px;object-fit:contain;\" onerror=\"this.style.display='none'\">
+    <div style=\"color:#ffd000;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-top:8px;\">$type</div>
+  </td></tr>
+  <!-- Body -->
+  <tr><td style=\"padding:36px 40px;\">
+    <h1 style=\"color:#ffffff;font-size:22px;font-weight:700;margin:0 0 20px 0;line-height:1.3;\">$heading</h1>
+    <p style=\"color:#a0a0a0;font-size:15px;line-height:1.7;margin:0 0 20px 0;\">$intro</p>
+    $bodyContent
+    <div style=\"text-align:center;margin:32px 0 24px;\">
+      <a href=\"$ctaUrl\" style=\"display:inline-block;background:#ffd000;color:#000000;font-weight:700;font-size:15px;padding:14px 36px;border-radius:8px;text-decoration:none;letter-spacing:0.3px;\">$ctaText →</a>
+    </div>
+    " . ($footer ? "<p style=\"color:#555555;font-size:13px;line-height:1.6;margin:0;\">$footer</p>" : "") . "
+  </td></tr>
+  <!-- Footer -->
+  <tr><td style=\"background:#0d0d0d;padding:20px 40px;border-top:1px solid rgba(255,255,255,0.06);text-align:center;\">
+    <p style=\"color:#3d3d3d;font-size:12px;margin:0 0 6px;\">© 2025 XSM Market. All rights reserved.</p>
+    <p style=\"color:#2d2d2d;font-size:11px;margin:0;\">You received this email because of account activity on XSM Market.</p>
+  </td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>";
+    }
+
     // Core email sending function - made public for use by other controllers
     public function sendEmail($to, $subject, $htmlBody, $textBody = '') {
         try {
@@ -1297,5 +1569,27 @@ class EmailService {
     </div>
 </body>
 </html>";
+    }
+
+    // Req 25: Send Important Account Update Email
+    public function sendAccountUpdateEmail($toEmail, $toUsername, $updateTitle, $updateDetails) {
+        try {
+            $subject = "📢 Important Account Update: $updateTitle";
+            $htmlBody = $this->getBaseEmailTemplate(
+                "Account Update",
+                "📢",
+                $updateTitle,
+                "Hi <strong>$toUsername</strong>,<br><br>" . htmlspecialchars($updateDetails),
+                "",
+                "Log In to Account",
+                "https://xsmmarket.com/profile",
+                "Review your account details in your dashboard."
+            );
+            $textBody = "Hi $toUsername,\n\nAccount Update: $updateTitle\n\n$updateDetails\n\nLog in: https://xsmmarket.com/profile\n\nBest regards,\nXSM Market Team";
+            return $this->sendEmail($toEmail, $subject, $htmlBody, $textBody);
+        } catch (Exception $e) {
+            error_log("Failed to send account update email: " . $e->getMessage());
+            return false;
+        }
     }
 }

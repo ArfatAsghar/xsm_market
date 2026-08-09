@@ -69,7 +69,7 @@ class Message {
         $pdo = Database::getConnection();
         $stmt = $pdo->prepare("
             UPDATE messages 
-            SET status = 'delivered'
+            SET status = 'delivered', deliveredAt = IFNULL(deliveredAt, NOW())
             WHERE chatId = ? AND senderId != ? AND status = 'sent'
         ");
         $stmt->execute([$chatId, $recipientId]);

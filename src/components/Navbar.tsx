@@ -5,8 +5,8 @@ import {
   FaFileAlt, FaCrown, FaTachometerAlt, FaBars, FaTimes,
   FaChevronDown, FaEnvelope, FaCheck
 } from 'react-icons/fa';
-import { Shield } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
+import { useNotifications } from '@/context/NotificationContext';
 import { logout, API_URL } from '@/services/auth';
 import { isCurrentUserAdmin } from '@/utils/adminConfig';
 import VipSubscriptionModal from './VipSubscriptionModal';
@@ -28,9 +28,9 @@ const Navbar: React.FC = () => {
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [showVipModal, setShowVipModal] = useState(false);
   const { isLoggedIn, setIsLoggedIn, user, setUser } = useAuth();
+  const { inAppNotifications, unreadInAppCount, markRead, markAllRead } = useNotifications();
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
-  const [notifications, setNotifications] = useState<Array<{ id: number; text: string; read: boolean; time: string }>>([]);
   const notifRef = useRef<HTMLDivElement>(null);
 
   // Fetch unread messages
@@ -60,18 +60,6 @@ const Navbar: React.FC = () => {
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, []);
-
-  // Build notification list from unread count
-  useEffect(() => {
-    if (!isLoggedIn) { setNotifications([]); return; }
-    const list: typeof notifications = [];
-    if (unreadCount > 0)
-      list.push({ id: 1, text: `You have ${unreadCount} unread message${unreadCount > 1 ? 's' : ''}`, read: false, time: 'Just now' });
-    setNotifications(list);
-  }, [unreadCount, isLoggedIn]);
-
-  const unreadNotifCount = notifications.filter(n => !n.read).length;
-  const markAllRead = () => setNotifications(prev => prev.map(n => ({ ...n, read: true })));
 
   const navigateTo = (path: string) => {
     navigate(path === 'home' ? '/' : path);
@@ -195,14 +183,14 @@ const Navbar: React.FC = () => {
                     title="Notifications"
                   >
                     <FaBell className="text-[16px]" />
-                    {unreadNotifCount > 0 && (
+                    {unreadInAppCount > 0 && (
                       <span className="absolute top-[7px] right-[7px] w-[8px] h-[8px] bg-red-500 rounded-full border-[1.5px] border-[#0a0a0a] animate-pulse" />
                     )}
                   </button>
 
                   {showNotifications && (
                     <div
-                      className="absolute right-0 top-full mt-3 w-[300px] rounded-xl overflow-hidden z-50"
+                      className="absolute right-0 top-full mt-3 w-[320px] rounded-xl overflow-hidden z-50"
                       style={{
                         background: 'linear-gradient(145deg, #111111, #0d0d0d)',
                         border: '1px solid rgba(255,255,255,0.07)',
@@ -214,42 +202,54 @@ const Navbar: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <FaBell className="text-xsm-yellow text-sm" />
                           <span className="text-sm font-bold text-white tracking-wide">Notifications</span>
-                          {unreadNotifCount > 0 && (
+                          {unreadInAppCount > 0 && (
                             <span className="bg-xsm-yellow text-black text-[10px] font-extrabold px-1.5 py-0.5 rounded-full">
-                              {unreadNotifCount}
+                              {unreadInAppCount}
                             </span>
                           )}
                         </div>
-                        {unreadNotifCount > 0 && (
-                          <button onClick={markAllRead} className="text-xs text-gray-500 hover:text-xsm-yellow transition-colors flex items-center gap-1">
+                        {unreadInAppCount > 0 && (
+                          <button onClick={() => markAllRead()} className="text-xs text-gray-500 hover:text-xsm-yellow transition-colors flex items-center gap-1">
                             <FaCheck className="text-[10px]" /> All read
                           </button>
                         )}
                       </div>
 
                       {/* Items */}
-                      <div className="max-h-60 overflow-y-auto">
-                        {notifications.length === 0 ? (
+                      <div className="max-h-72 overflow-y-auto">
+                        {inAppNotifications.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-10 gap-2">
                             <FaBell className="text-3xl text-gray-700" />
                             <p className="text-gray-500 text-sm">You're all caught up!</p>
                           </div>
                         ) : (
-                          notifications.map(n => (
+                          inAppNotifications.map(n => (
                             <button
                               key={n.id}
-                              onClick={() => { navigateTo('/chat'); setShowNotifications(false); }}
-                              className="flex items-start gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-white/[0.04]"
+                              onClick={() => {
+                                markRead(n.id);
+                                if (n.link) navigateTo(n.link);
+                                else navigateTo('/chat');
+                                setShowNotifications(false);
+                              }}
+                              className={`flex items-start gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-white/[0.04] ${!n.isRead ? 'bg-xsm-yellow/[0.03]' : ''}`}
                               style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
                             >
-                              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${!n.read ? 'bg-xsm-yellow/15' : 'bg-white/5'}`}>
-                                <FaEnvelope className={`text-sm ${!n.read ? 'text-xsm-yellow' : 'text-gray-500'}`} />
+                              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${!n.isRead ? 'bg-xsm-yellow/15' : 'bg-white/5'}`}>
+                                {n.type === 'deal' ? (
+                                  <FaTag className={`text-xs ${!n.isRead ? 'text-xsm-yellow' : 'text-gray-500'}`} />
+                                ) : n.type === 'admin_message' ? (
+                                  <FaEnvelope className={`text-xs ${!n.isRead ? 'text-amber-400' : 'text-gray-500'}`} />
+                                ) : (
+                                  <FaEnvelope className={`text-xs ${!n.isRead ? 'text-xsm-yellow' : 'text-gray-500'}`} />
+                                )}
                               </div>
-                              <div className="flex-1">
-                                <p className={`text-sm leading-snug ${!n.read ? 'text-white font-medium' : 'text-gray-400'}`}>{n.text}</p>
-                                <p className="text-[11px] text-gray-600 mt-0.5">{n.time}</p>
+                              <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-semibold ${!n.isRead ? 'text-xsm-yellow' : 'text-gray-300'}`}>{n.title}</p>
+                                <p className={`text-xs leading-snug truncate ${!n.isRead ? 'text-white font-medium' : 'text-gray-400'}`}>{n.message}</p>
+                                <p className="text-[10px] text-gray-600 mt-0.5">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                               </div>
-                              {!n.read && <span className="w-2 h-2 bg-xsm-yellow rounded-full mt-1.5 flex-shrink-0" />}
+                              {!n.isRead && <span className="w-2 h-2 bg-xsm-yellow rounded-full mt-1.5 flex-shrink-0" />}
                             </button>
                           ))
                         )}

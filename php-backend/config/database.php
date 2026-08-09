@@ -45,11 +45,15 @@ class Database {
                 self::$connection->exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci");
                 self::$connection->exec("SET time_zone = '+00:00'");
                 
-                // Run auto-migrations / schema updates
-                self::runSchemaUpdates(self::$connection);
+                // Run auto-migrations — wrapped so schema errors never crash the API
+                try {
+                    self::runSchemaUpdates(self::$connection);
+                } catch (Throwable $schemaErr) {
+                    error_log('⚠️ Schema update warning (non-fatal, API continues): ' . $schemaErr->getMessage());
+                }
                 
                 error_log('✅ Database connection established successfully');
-            } catch (PDOException $e) {
+            } catch (Throwable $e) {
                 error_log('❌ Database connection failed: ' . $e->getMessage());
                 throw new Exception('Database connection failed: ' . $e->getMessage());
             }
@@ -58,159 +62,155 @@ class Database {
         return self::$connection;
     }
     
-    private static function runSchemaUpdates($pdo) {
+    // Helper: safely check if a table exists
+    private static function tableExists($pdo, $table) {
         try {
-            // Check & add support_requested, support_requested_at to chats table
-            $chatsColumns = $pdo->query("SHOW COLUMNS FROM chats")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('support_requested', $chatsColumns)) {
-                $pdo->exec("ALTER TABLE chats ADD COLUMN support_requested TINYINT(1) DEFAULT 0");
-                error_log("Added 'support_requested' column to chats table");
-            }
-            if (!in_array('support_requested_at', $chatsColumns)) {
-                $pdo->exec("ALTER TABLE chats ADD COLUMN support_requested_at DATETIME NULL");
-                error_log("Added 'support_requested_at' column to chats table");
-            }
-
-            // Check & add transaction_id to deals table
-            $dealsColumns = $pdo->query("SHOW COLUMNS FROM deals")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('transaction_id', $dealsColumns)) {
-                $pdo->exec("ALTER TABLE deals ADD COLUMN transaction_id VARCHAR(50) NULL");
-                error_log("Added 'transaction_id' column to deals table");
-            }
-
-            // Check & add preferredPaymentMethods to ads table
-            if (!in_array('preferredPaymentMethods', $dealsColumns)) {
-                $adsColumns = $pdo->query("SHOW COLUMNS FROM ads")->fetchAll(PDO::FETCH_COLUMN);
-                if (!in_array('preferredPaymentMethods', $adsColumns)) {
-                    $pdo->exec("ALTER TABLE ads ADD COLUMN preferredPaymentMethods TEXT NULL");
-                    error_log("Added 'preferredPaymentMethods' column to ads table");
-                }
-            }
-
-            // Backfill & normalize any deals missing or using legacy prefixes to TXN0001 format
-            $pdo->exec("
-                UPDATE deals 
-                SET transaction_id = CONCAT('TXN', LPAD(CAST(REPLACE(REPLACE(REPLACE(transaction_id, 'TXN-', ''), 'TXN', ''), 'XSM', '') AS UNSIGNED), 4, '0'))
-                WHERE transaction_id IS NOT NULL AND transaction_id != '' AND transaction_id NOT LIKE 'TXN%';
-
-                UPDATE deals 
-                SET transaction_id = CONCAT('TXN', LPAD(id, 4, '0')) 
-                WHERE transaction_id IS NULL OR transaction_id = '' OR transaction_id = '0';
-            ");
-
-            // Check & add banExpires to users table
-            $usersColumns = $pdo->query("SHOW COLUMNS FROM users")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('banExpires', $usersColumns)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN banExpires DATETIME NULL DEFAULT NULL");
-                error_log("Added 'banExpires' column to users table");
-            }
-
-            // Check & add role to users table
-            if (!in_array('role', $usersColumns)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN role VARCHAR(20) DEFAULT 'user'");
-                error_log("Added 'role' column to users table");
-                // Update existing admins to have admin role
-                $pdo->exec("UPDATE users SET role = 'admin' WHERE isAdmin = 1");
-            }
-
-            // Check & add lastSeenAt and isOnline to users table
-            if (!in_array('lastSeenAt', $usersColumns)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN lastSeenAt DATETIME NULL DEFAULT NULL");
-                error_log("Added 'lastSeenAt' column to users table");
-            }
-            if (!in_array('isOnline', $usersColumns)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN isOnline TINYINT(1) DEFAULT 0");
-                error_log("Added 'isOnline' column to users table");
-            }
-
-            // Check & add vipUntil column to users table
-            if (!in_array('vipUntil', $usersColumns)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN vipUntil DATETIME NULL DEFAULT NULL");
-                error_log("Added 'vipUntil' column to users table");
-            }
-
-            // Check & add displayName column to users table (for admin display name system)
-            if (!in_array('displayName', $usersColumns)) {
-                $pdo->exec("ALTER TABLE users ADD COLUMN displayName VARCHAR(100) NULL DEFAULT NULL");
-                error_log("Added 'displayName' column to users table");
-            }
-
-            // Check & add listing ban columns to ads table
-            $adsColumns = $pdo->query("SHOW COLUMNS FROM ads")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('isBanned', $adsColumns)) {
-                $pdo->exec("ALTER TABLE ads ADD COLUMN isBanned TINYINT(1) DEFAULT 0");
-                error_log("Added 'isBanned' column to ads table");
-            }
-            if (!in_array('banReason', $adsColumns)) {
-                $pdo->exec("ALTER TABLE ads ADD COLUMN banReason VARCHAR(500) NULL DEFAULT NULL");
-                error_log("Added 'banReason' column to ads table");
-            }
-            if (!in_array('bannedAt', $adsColumns)) {
-                $pdo->exec("ALTER TABLE ads ADD COLUMN bannedAt DATETIME NULL DEFAULT NULL");
-                error_log("Added 'bannedAt' column to ads table");
-            }
-            if (!in_array('bannedBy', $adsColumns)) {
-                $pdo->exec("ALTER TABLE ads ADD COLUMN bannedBy INT NULL DEFAULT NULL");
-                error_log("Added 'bannedBy' column to ads table");
-            }
-            if (!in_array('verificationCode', $adsColumns)) {
-                $pdo->exec("ALTER TABLE ads ADD COLUMN verificationCode VARCHAR(50) NULL DEFAULT NULL");
-                error_log("Added 'verificationCode' column to ads table");
-            }
-
-            // Check & add message status column for tick system (Revision 14)
-            $messagesColumns = $pdo->query("SHOW COLUMNS FROM messages")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('status', $messagesColumns)) {
-                $pdo->exec("ALTER TABLE messages ADD COLUMN status ENUM('sent','delivered','read','agent_viewed') NOT NULL DEFAULT 'sent'");
-                error_log("Added 'status' column to messages table");
-            }
-            if (!in_array('readAt', $messagesColumns)) {
-                $pdo->exec("ALTER TABLE messages ADD COLUMN readAt DATETIME NULL DEFAULT NULL");
-                error_log("Added 'readAt' column to messages table");
-            }
-            // Staff display name: when sent from Admin Dashboard, store custom display name (e.g. "Lancelot", "Lion Slot")
-            if (!in_array('staffDisplayName', $messagesColumns)) {
-                $pdo->exec("ALTER TABLE messages ADD COLUMN staffDisplayName VARCHAR(100) NULL DEFAULT NULL");
-                error_log("Added 'staffDisplayName' column to messages table");
-            }
-            // Flag distinguishing Admin Dashboard messages from personal chat messages
-            if (!in_array('isStaffMessage', $messagesColumns)) {
-                $pdo->exec("ALTER TABLE messages ADD COLUMN isStaffMessage TINYINT(1) NOT NULL DEFAULT 0");
-                error_log("Added 'isStaffMessage' column to messages table");
-            }
-
-            // Check & add unread_count tracking to chats (Revision 7)
-            $chatsColumns = $pdo->query("SHOW COLUMNS FROM chats")->fetchAll(PDO::FETCH_COLUMN);
-            if (!in_array('unread_count', $chatsColumns)) {
-                $pdo->exec("ALTER TABLE chats ADD COLUMN unread_count INT DEFAULT 0");
-                error_log("Added 'unread_count' column to chats table");
-            }
-
-            // Create vip_purchases table if missing
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS vip_purchases (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    user_id INT NOT NULL,
-                    months INT NOT NULL DEFAULT 1,
-                    amount DECIMAL(10, 2) NOT NULL DEFAULT 10.00,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ");
-
-            // Create website_updates table if missing
-            $pdo->exec("
-                CREATE TABLE IF NOT EXISTS website_updates (
-                    id INT AUTO_INCREMENT PRIMARY KEY,
-                    title VARCHAR(255) NOT NULL,
-                    description TEXT NOT NULL,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            ");
+            $r = $pdo->query("SHOW TABLES LIKE " . $pdo->quote($table));
+            return $r && $r->rowCount() > 0;
         } catch (Throwable $e) {
-            error_log('Schema update failed: ' . $e->getMessage());
+            return false;
         }
     }
-    
+
+    // Helper: safely get columns for a table
+    private static function getColumns($pdo, $table) {
+        try {
+            return $pdo->query("SHOW COLUMNS FROM `$table`")->fetchAll(PDO::FETCH_COLUMN);
+        } catch (Throwable $e) {
+            error_log("getColumns($table) failed: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    // Helper: safely add a column if it doesn't exist
+    private static function addColumnIfMissing($pdo, $table, $column, $definition) {
+        try {
+            $cols = self::getColumns($pdo, $table);
+            if (!in_array($column, $cols)) {
+                $pdo->exec("ALTER TABLE `$table` ADD COLUMN $column $definition");
+                error_log("Added '$column' column to $table table");
+            }
+        } catch (Throwable $e) {
+            error_log("addColumnIfMissing($table, $column) failed: " . $e->getMessage());
+        }
+    }
+
+    private static function runSchemaUpdates($pdo) {
+        // Each block is independently wrapped — one failure never stops the rest
+
+        // ── chats table ──────────────────────────────────────────────────────────
+        if (self::tableExists($pdo, 'chats')) {
+            self::addColumnIfMissing($pdo, 'chats', 'support_requested', 'TINYINT(1) DEFAULT 0');
+            self::addColumnIfMissing($pdo, 'chats', 'support_requested_at', 'DATETIME NULL');
+            self::addColumnIfMissing($pdo, 'chats', 'unread_count', 'INT DEFAULT 0');
+        }
+
+        // ── deals table ──────────────────────────────────────────────────────────
+        if (self::tableExists($pdo, 'deals')) {
+            self::addColumnIfMissing($pdo, 'deals', 'transaction_id', 'VARCHAR(50) NULL');
+
+            // Backfill TXN IDs — two separate exec() calls (PDO doesn't support multi-statement)
+            try {
+                $pdo->exec("UPDATE deals SET transaction_id = CONCAT('TXN', LPAD(CAST(REPLACE(REPLACE(REPLACE(transaction_id, 'TXN-', ''), 'TXN', ''), 'XSM', '') AS UNSIGNED), 4, '0')) WHERE transaction_id IS NOT NULL AND transaction_id != '' AND transaction_id NOT LIKE 'TXN%'");
+                $pdo->exec("UPDATE deals SET transaction_id = CONCAT('TXN', LPAD(id, 4, '0')) WHERE transaction_id IS NULL OR transaction_id = '' OR transaction_id = '0'");
+            } catch (Throwable $e) {
+                error_log('TXN backfill warning: ' . $e->getMessage());
+            }
+        }
+
+        // ── ads table ────────────────────────────────────────────────────────────
+        if (self::tableExists($pdo, 'ads')) {
+            self::addColumnIfMissing($pdo, 'ads', 'preferredPaymentMethods', 'TEXT NULL');
+            self::addColumnIfMissing($pdo, 'ads', 'isBanned', 'TINYINT(1) DEFAULT 0');
+            self::addColumnIfMissing($pdo, 'ads', 'banReason', 'VARCHAR(500) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'ads', 'bannedAt', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'ads', 'bannedBy', 'INT NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'ads', 'verificationCode', 'VARCHAR(50) NULL DEFAULT NULL');
+        }
+
+        // ── users table ──────────────────────────────────────────────────────────
+        if (self::tableExists($pdo, 'users')) {
+            self::addColumnIfMissing($pdo, 'users', 'isBanned', 'TINYINT(1) DEFAULT 0');
+            self::addColumnIfMissing($pdo, 'users', 'banReason', 'VARCHAR(500) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'bannedAt', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'bannedBy', 'INT NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'banExpires', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'role', "VARCHAR(20) DEFAULT 'user'");
+            self::addColumnIfMissing($pdo, 'users', 'lastSeenAt', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'isOnline', 'TINYINT(1) DEFAULT 0');
+            self::addColumnIfMissing($pdo, 'users', 'lastSeen', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'vipUntil', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'displayName', 'VARCHAR(100) NULL DEFAULT NULL');
+
+            // Set admin role for existing admins
+            try {
+                $pdo->exec("UPDATE users SET role = 'admin' WHERE isAdmin = 1 AND (role IS NULL OR role = 'user')");
+            } catch (Throwable $e) {
+                error_log('Admin role backfill warning: ' . $e->getMessage());
+            }
+        }
+
+        // ── messages table ───────────────────────────────────────────────────────
+        if (self::tableExists($pdo, 'messages')) {
+            self::addColumnIfMissing($pdo, 'messages', 'status', "ENUM('sent','delivered','read','agent_viewed') NOT NULL DEFAULT 'sent'");
+            self::addColumnIfMissing($pdo, 'messages', 'readAt', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'messages', 'deliveredAt', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'messages', 'staffDisplayName', 'VARCHAR(100) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'messages', 'isStaffMessage', 'TINYINT(1) NOT NULL DEFAULT 0');
+        }
+
+        // ── vip_purchases table ──────────────────────────────────────────────────
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS vip_purchases (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                months INT NOT NULL DEFAULT 1,
+                amount DECIMAL(10, 2) NOT NULL DEFAULT 10.00,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+        } catch (Throwable $e) {
+            error_log('vip_purchases create warning: ' . $e->getMessage());
+        }
+
+        // ── website_updates table ────────────────────────────────────────────────
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS website_updates (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                title VARCHAR(255) NOT NULL,
+                description TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )");
+            // Seed defaults if empty
+            $count = $pdo->query("SELECT COUNT(*) FROM website_updates")->fetchColumn();
+            if ($count == 0) {
+                $pdo->exec("INSERT INTO website_updates (title, description) VALUES
+                    ('🚀 Welcome to XSM Market', 'Experience secure social media account trading with 100% verified escrow protection.'),
+                    ('⚡ Real-Time Notifications Active', 'Receive instant deal stage updates, in-app audio alerts, and direct message notifications.')");
+            }
+        } catch (Throwable $e) {
+            error_log('website_updates create/seed warning: ' . $e->getMessage());
+        }
+
+        // ── notifications table ──────────────────────────────────────────────────
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS notifications (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                userId INT NOT NULL,
+                type ENUM('message','admin_message','deal','announcement','system') NOT NULL DEFAULT 'system',
+                title VARCHAR(255) NOT NULL,
+                message TEXT NOT NULL,
+                link VARCHAR(500) NULL DEFAULT NULL,
+                isRead TINYINT(1) NOT NULL DEFAULT 0,
+                createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_userId (userId),
+                INDEX idx_isRead (isRead),
+                INDEX idx_createdAt (createdAt)
+            )");
+        } catch (Throwable $e) {
+            error_log('notifications create warning: ' . $e->getMessage());
+        }
+    }
+
     public static function testConnection() {
         try {
             $pdo = self::getConnection();

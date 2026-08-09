@@ -10,6 +10,53 @@ error_log("Request method: " . ($method ?? 'undefined'));
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../utils/jwt.php';
 require_once __DIR__ . '/../utils/SystemUser.php';
+require_once __DIR__ . '/../utils/EmailService.php';
+
+// Helper function to trigger both in-app notification & email for deal stage updates
+function triggerDealNotificationAndEmail($deal_id, $stage) {
+    try {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("
+            SELECT d.*, 
+                   b.username as buyer_username, b.email as buyer_email_actual,
+                   s.username as seller_username, s.email as seller_email_actual
+            FROM deals d
+            LEFT JOIN users b ON d.buyer_id = b.id
+            LEFT JOIN users s ON d.seller_id = s.id
+            WHERE d.id = ?
+        ");
+        $stmt->execute([$deal_id]);
+        $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+        if (!$deal) return;
+
+        $txnId = !empty($deal['transaction_id']) ? $deal['transaction_id'] : ('TXN' . str_pad($deal['id'], max(4, strlen((string)$deal['id'])), '0', STR_PAD_LEFT));
+        $title = $deal['channel_title'] ?? 'Listing';
+        $buyerId = (int)$deal['buyer_id'];
+        $sellerId = (int)$deal['seller_id'];
+
+        $buyerEmail = $deal['buyer_email_actual'] ?: $deal['buyer_email'];
+        $sellerEmail = $deal['seller_email_actual'] ?: $deal['seller_email'];
+
+        // 1. In-App Notifications
+        if (function_exists('createNotification')) {
+            createNotification($buyerId, 'deal', "Deal Update [$txnId]", "Stage update: $stage for $title", '/my-deals');
+            createNotification($sellerId, 'deal', "Deal Update [$txnId]", "Stage update: $stage for $title", '/seller-deals');
+        }
+
+        // 2. Email Notifications
+        if (class_exists('EmailService')) {
+            $emailService = new EmailService();
+            if ($buyerEmail) {
+                $emailService->sendDealStageEmail($buyerEmail, $deal['buyer_username'] ?? 'Buyer', $stage, $txnId, $title, 'buyer');
+            }
+            if ($sellerEmail) {
+                $emailService->sendDealStageEmail($sellerEmail, $deal['seller_username'] ?? 'Seller', $stage, $txnId, $title, 'seller');
+            }
+        }
+    } catch (Exception $e) {
+        error_log("Failed to trigger deal notification/email for deal $deal_id: " . $e->getMessage());
+    }
+}
 
 // Function to get current user from JWT token
 function getCurrentUser() {
@@ -109,7 +156,10 @@ function createDeal($data) {
         ");
         $max_row  = $max_stmt->fetch(PDO::FETCH_ASSOC);
         $next_seq = ((int)($max_row['max_seq'] ?? 0)) + 1;
-        $transaction_id = 'TXN' . str_pad($next_seq, 4, '0', STR_PAD_LEFT);
+        // Dynamic zero-padding: minimum 4 digits, grows automatically with sequence
+        // TXN0001 → TXN0010 → TXN0100 → TXN1000 → TXN10000 → TXN100000
+        $pad_length = max(4, strlen((string)$next_seq));
+        $transaction_id = 'TXN' . str_pad($next_seq, $pad_length, '0', STR_PAD_LEFT);
         
         // Insert deal
         $stmt = $pdo->prepare("
@@ -219,6 +269,9 @@ function createDeal($data) {
         
         // Commit transaction
         $pdo->commit();
+
+        // Trigger in-app notification & email for deal creation
+        triggerDealNotificationAndEmail($deal_id, 'pending');
         
         return [
             'success' => true,
@@ -388,6 +441,8 @@ try {
             $stmt->execute([$deal_id, $currentUser['userId']]);
             
             $pdo->commit();
+            
+            triggerDealNotificationAndEmail($deal_id, 'terms_agreed');
             
             http_response_code(200);
             echo json_encode([
@@ -692,6 +747,8 @@ try {
                 
                 $pdo->commit();
                 
+                triggerDealNotificationAndEmail($deal_id, 'payment_pending');
+                
                 http_response_code(200);
                 echo json_encode([
                     'success' => true, 
@@ -789,6 +846,8 @@ try {
                 }
                 
                 $pdo->commit();
+                
+                triggerDealNotificationAndEmail($deal_id, 'agent_access_pending');
                 
                 http_response_code(200);
                 echo json_encode([
@@ -984,6 +1043,8 @@ try {
             }
             
             $pdo->commit();
+            
+            triggerDealNotificationAndEmail($deal_id, $new_status);
             
             http_response_code(200);
             echo json_encode([
@@ -1411,6 +1472,8 @@ try {
             
             $pdo->commit();
             
+            triggerDealNotificationAndEmail($deal_id, 'buyer_paid_seller');
+            
             http_response_code(200);
             echo json_encode([
                 'success' => true, 
@@ -1684,6 +1747,8 @@ try {
             
             $pdo->commit();
             
+            triggerDealNotificationAndEmail($deal_id, 'seller_confirmed_payment');
+            
             http_response_code(200);
             echo json_encode([
                 'success' => true, 
@@ -1887,6 +1952,8 @@ try {
             }
             
             $pdo->commit();
+            
+            triggerDealNotificationAndEmail($deal_id, 'payment_confirmed');
             
             http_response_code(200);
             echo json_encode([

@@ -6,9 +6,10 @@
   "description": "XSM Market - Complete Full-Stack Application",
   "scripts": {
     "setup-local": "node scripts/setup-local.js",
-    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run dev:socket\"",
     "dev:frontend": "vite",
     "dev:backend": "php -S localhost:5000 -t php-backend php-backend/index.php",
+    "dev:socket": "node socket-server.js",
     "build": "vite build",
     "preview": "vite preview",
     "db:setup": "cd backend && npm run setup-db",

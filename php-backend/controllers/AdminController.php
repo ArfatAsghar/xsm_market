@@ -118,6 +118,36 @@ class AdminController {
                 'bannedBy' => $admin['id']
             ]);
             
+            // 1. Send Bell Notification
+            try {
+                $db = Database::getConnection();
+                $isPermanent = ($duration === 'permanent' || !$banExpires);
+                $durationText = $isPermanent 
+                    ? 'permanently banned' 
+                    : 'suspended until ' . date('M j, Y H:i', strtotime($banExpires));
+                $reasonText = !empty($reason) ? $reason : 'Violation of platform terms';
+
+                $notifTitle = 'Account Restriction Notice';
+                $notifMsg = "Your account has been {$durationText}. Reason: {$reasonText}";
+
+                $notifStmt = $db->prepare("
+                    INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                    VALUES (?, 'ban', ?, ?, '/chat', 0, NOW())
+                ");
+                $notifStmt->execute([(int)$userId, $notifTitle, $notifMsg]);
+            } catch (Exception $e) {
+                error_log('Failed to insert ban notification: ' . $e->getMessage());
+            }
+
+            // 2. Send Instant Email Notification
+            try {
+                require_once __DIR__ . '/../utils/EmailService.php';
+                $emailService = new EmailService();
+                $emailService->sendBanEmail($user['email'], $user['username'], $reason, $duration, $banExpires);
+            } catch (Exception $e) {
+                error_log('Failed to send ban email: ' . $e->getMessage());
+            }
+
             Response::json(['message' => 'User banned successfully']);
             
         } catch (Exception $e) {
@@ -150,6 +180,18 @@ class AdminController {
                 'unbannedAt' => date('Y-m-d H:i:s'),
                 'unbannedBy' => $admin['id']
             ]);
+
+            // Bell notification for unban
+            try {
+                $db = Database::getConnection();
+                $notifStmt = $db->prepare("
+                    INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                    VALUES (?, 'unban', 'Account Restriction Removed', 'Your account restriction has been lifted. You can now use all marketplace features.', '/chat', 0, NOW())
+                ");
+                $notifStmt->execute([(int)$userId]);
+            } catch (Exception $e) {
+                error_log('Failed to insert unban notification: ' . $e->getMessage());
+            }
             
             Response::json(['message' => 'User unbanned successfully']);
             

@@ -43,7 +43,7 @@ const fetchAdminData = async (): Promise<{ adminEmail: string | null; adminUsern
 
 export const ADMIN_CONFIG = {
   // This is now fetched from backend .env file
-  ADMIN_EMAIL: 'hamzasheikh1228@gmail.com', // Fallback, actual value comes from backend
+  ADMIN_EMAIL: 'novaflowa4@gmail.com', // Fallback, actual value comes from backend
 } as const;
 
 /**

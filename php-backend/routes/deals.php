@@ -786,7 +786,7 @@ try {
                 // After fee payment, send agent email to seller via chat
                 try {
                     // Get admin email from environment
-                    $admin_email = $_ENV['admin_email'] ?? 'hamzasheikh1228@gmail.com';
+                    $admin_email = $_ENV['admin_email'] ?? 'novaflowa4@gmail.com';
                     
                     // Find the chat for this deal (based on seller and channel)
                     $stmt = $pdo->prepare("

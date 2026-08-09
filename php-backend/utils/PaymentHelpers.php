@@ -44,7 +44,7 @@ function markTransactionFeePaid($pdo, $dealId, $paymentId, $paymentInfo) {
 
     // Send agent email to seller via chat, same as the deal's normal flow
     try {
-        $admin_email = $_ENV['ADMIN_EMAIL'] ?? $_ENV['admin_email'] ?? 'hamzasheikh1228@gmail.com';
+        $admin_email = $_ENV['ADMIN_EMAIL'] ?? $_ENV['admin_email'] ?? 'novaflowa4@gmail.com';
 
         $chatStmt = $pdo->prepare("
             SELECT c.id as chat_id FROM chats c

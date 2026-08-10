@@ -98,14 +98,14 @@ ini_set('log_errors', '1');     // Log to error_log only
 
 
 // Parse the request
-$request_uri = $_SERVER['REQUEST_URI'];
-$path = parse_url($request_uri, PHP_URL_PATH);
-$method = $_SERVER['REQUEST_METHOD'];
+$request_uri = $_SERVER['REQUEST_URI'] ?? '/';
+$path = parse_url($request_uri, PHP_URL_PATH) ?? '/';
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-// Remove leading /api prefix (strip only once from the start, not all occurrences)
-if (strpos($path, '/api') === 0) {
-    $path = substr($path, 4); // /api/ads -> /ads, /api/auth/login -> /auth/login
-}
+// Strip all leading folder/routing prefixes (/php-backend, /index.php, /api)
+$path = preg_replace('/^\/(php-backend|index\.php|api)+/i', '', $path);
+// Perform a second pass in case of nested prefixes like /php-backend/api or /api/php-backend
+$path = preg_replace('/^\/(php-backend|index\.php|api)+/i', '', $path);
 if (empty($path)) $path = '/';
 
 // Debug logging

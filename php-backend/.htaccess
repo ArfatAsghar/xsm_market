@@ -5,8 +5,5 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Route /api/* requests to api/index.php
-RewriteRule ^api/ api/index.php [QSA,L]
-
-# React SPA - everything else loads index.html
-RewriteRule ^ index.html [L]
+# Route all requests inside php-backend to index.php
+RewriteRule ^ index.php [QSA,L]

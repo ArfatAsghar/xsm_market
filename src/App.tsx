@@ -7,6 +7,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { FaTag } from 'react-icons/fa';
 import { useTokenManager } from '@/hooks/useTokenManager';
 import { useAuth } from '@/context/useAuth';
 import ErrorBoundary from './components/ErrorBoundary';
@@ -186,26 +187,40 @@ const AppContent: React.FC = () => {
 
       </ErrorBoundary>
 
-      {/* Footer - Aligned layout per Revision 32 */}
+      {/* Footer - Aligned length & styling with header */}
       <footer className="bg-xsm-black border-t border-xsm-medium-gray/30 py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-[1280px] mx-auto px-5 sm:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            {/* Logo and Begin Selling Button (left aligned, indented from left) */}
-            <div className="flex items-center gap-5 pl-2 sm:pl-4">
-              <img 
-                src="/images/logo.png" 
-                alt="XSM Market Logo" 
-                className="h-10 md:h-11 object-contain drop-shadow-[0_0_4px_rgba(255,208,0,0.5)]"
-              />
+            {/* Logo and Sell Button (left aligned, matching header logo & styling) */}
+            <div className="flex items-center gap-5">
+              <button onClick={() => { navigate('/'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+                <img 
+                  src="/images/logo.png" 
+                  alt="XSM Market Logo" 
+                  className="h-9 object-contain relative z-10 transition-all duration-300"
+                  style={{ filter: 'drop-shadow(0 0 6px rgba(255,208,0,0.35))' }}
+                />
+              </button>
               <button
-                onClick={() => {navigate('/sell'); window.scrollTo({ top: 0, behavior: 'smooth' });}}
-                className="bg-xsm-yellow text-black px-4 py-2 text-sm font-semibold rounded hover:bg-yellow-500 transition-colors shadow-sm"
+                onClick={() => {
+                  if (!isLoggedIn) {
+                    navigate('/login');
+                    return;
+                  }
+                  navigate('/sell');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="relative group inline-flex items-center gap-2 px-4 py-1.5 text-[13.5px] font-extrabold tracking-wide text-black rounded-xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-[0_0_12px_rgba(255,208,0,0.4)] hover:shadow-[0_0_20px_rgba(255,208,0,0.75)] cursor-pointer border border-yellow-300/30"
+                style={{
+                  background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%)',
+                }}
               >
-                Begin Selling
+                <FaTag className="text-xs transition-transform duration-300 group-hover:rotate-12" />
+                <span>Sell</span>
               </button>
             </div>
             
-            {/* Navigation Links (vertically aligned with logo row) */}
+            {/* Navigation Links (About Us, Contact, Terms of Service, Privacy Policy) */}
             <div className="flex flex-wrap justify-center items-center gap-6 text-sm font-medium text-xsm-light-gray">
               <button onClick={() => {navigate('/about'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">About Us</button>
               <button onClick={() => {navigate('/contact'); window.scrollTo({ top: 0, behavior: 'smooth' });}} className="hover:text-xsm-yellow transition-colors">Contact</button>

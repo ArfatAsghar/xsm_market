@@ -177,9 +177,26 @@ const Navbar: React.FC = () => {
 
             {/* ── CENTER: Desktop Nav Links ── */}
             <div className="hidden md:flex items-center gap-7">
+              {/* Sell (most left) */}
+              <button
+                onClick={() => {
+                  if (!isLoggedIn) { setShowAuthWidget(true); return; }
+                  navigateTo('/sell');
+                }}
+                className="relative group inline-flex items-center gap-2 px-4 py-1.5 text-[13.5px] font-extrabold tracking-wide text-black rounded-xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-[0_0_12px_rgba(255,208,0,0.4)] hover:shadow-[0_0_20px_rgba(255,208,0,0.75)] cursor-pointer border border-yellow-300/30"
+                style={{
+                  background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%)',
+                }}
+              >
+                <FaTag className="text-xs transition-transform duration-300 group-hover:rotate-12" />
+                <span>Sell</span>
+              </button>
+
+              {/* Marketplace (middle) */}
               <NavLink path="/" icon={<FaStore />} label="Marketplace" />
+
+              {/* Inbox (most right) */}
               <NavLink path="/chat" icon={<FaInbox />} label="Inbox" badge={unreadCount} requireAuth />
-              <NavLink path="/sell" icon={<FaTag />} label="Sell" requireAuth />
             </div>
 
             {/* ── RIGHT: Actions ── */}
@@ -516,9 +533,9 @@ const Navbar: React.FC = () => {
 
               {/* Mobile nav items */}
               {[
+                { path: '/sell', icon: <FaTag />, label: 'Sell', requireAuth: true },
                 { path: '/', icon: <FaStore />, label: 'Marketplace' },
                 { path: '/chat', icon: <FaInbox />, label: 'Inbox', badge: unreadCount, requireAuth: true },
-                { path: '/sell', icon: <FaTag />, label: 'Sell', requireAuth: true },
               ].map(item => (
                 <button
                   key={item.path}

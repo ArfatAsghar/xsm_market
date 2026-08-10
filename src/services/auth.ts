@@ -12,6 +12,7 @@ const USER_KEY = 'userData';
 interface User {
   id: string;
   username: string;
+  displayName?: string;
   fullName?: string;
   email: string;
   profilePicture?: string;

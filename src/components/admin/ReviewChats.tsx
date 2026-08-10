@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { getAllChats, adminSendMessage, adminDeleteMessage, adminDeleteChat, resolveSupportChat } from '@/services/admin';
 import {
   Send, Trash2, MessageSquare, AlertTriangle, CheckCircle,
-  Plus, Edit, Clipboard, Sparkles, Search, ExternalLink, Shield,
-  Lock, Eye, UserCheck, RefreshCw, X, Check
+  Plus, Clipboard, Sparkles, Search, Shield,
+  Lock, UserCheck, RefreshCw, X
 } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 
@@ -89,10 +89,9 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
   const [newMessage, setNewMessage] = useState('');
   const [isSending, setIsSending] = useState(false);
 
-  // Staff Display Name state (Manager defaults to "Website Agent" or custom, Admin defaults to custom/displayName)
-  const defaultDisplayName = (currentUser as any)?.displayName || (isCurrentUserManager ? 'Website Agent' : 'Support Agent');
-  const [staffDisplayName, setStaffDisplayName] = useState<string>(defaultDisplayName);
-  const [isEditingDisplayName, setIsEditingDisplayName] = useState(false);
+  // Staff Display Name — locked to admin-set displayName (or username fallback)
+  const effectiveStaffName = (currentUser as any)?.displayName || (currentUser as any)?.username || 'Staff';
+  const [sendAsStaff, setSendAsStaff] = useState<boolean>(true);
 
   // Custom in-app dialogs (no browser alert/confirm)
   const [confirmModal, setConfirmModal] = useState<{
@@ -181,10 +180,12 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
         const formattedMessages = Array.isArray(messages) ? messages.map((m: any) => ({
           id: String(m.id),
           content: m.content,
-          sender: m.staffDisplayName || m.sender?.displayName || m.sender?.username || 'User',
+          sender: m.isStaffMessage
+            ? (m.staffDisplayName || m.sender?.displayName || m.sender?.username || 'Official Agent')
+            : (m.sender?.displayName || m.sender?.username || 'User'),
           senderId: m.senderId,
-          isStaffMessage: Boolean(m.isStaffMessage || m.sender?.isAdmin || m.staffDisplayName),
-          staffDisplayName: m.staffDisplayName || m.sender?.displayName,
+          isStaffMessage: Boolean(m.isStaffMessage),
+          staffDisplayName: m.isStaffMessage ? (m.staffDisplayName || m.sender?.displayName || 'Official Agent') : undefined,
           timestamp: m.createdAt
         })) : [];
         setSelectedChat(prev => prev && prev.id === chat.id ? { ...prev, messages: formattedMessages } : prev);
@@ -204,15 +205,19 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
 
     try {
       setIsSending(true);
-      const res = await adminSendMessage(selectedChat.id, newMessage.trim(), staffDisplayName);
+      const res = await adminSendMessage(selectedChat.id, newMessage.trim(), effectiveStaffName, sendAsStaff);
+
+      const senderName = sendAsStaff
+        ? (res.staffDisplayName || effectiveStaffName)
+        : ((currentUser as any)?.displayName || currentUser?.username || 'User');
 
       const formattedMessage: Message = {
         id: String(res.id),
         content: res.content,
-        sender: res.staffDisplayName || staffDisplayName,
+        sender: senderName,
         senderId: Number(currentUser?.id),
-        isStaffMessage: true,
-        staffDisplayName: res.staffDisplayName || staffDisplayName,
+        isStaffMessage: sendAsStaff,
+        staffDisplayName: sendAsStaff ? (res.staffDisplayName || effectiveStaffName) : undefined,
         timestamp: res.createdAt || new Date().toISOString()
       };
 
@@ -400,7 +405,7 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
 
   return (
     <>
-      <div className="flex flex-col h-[calc(100vh-12rem)]">
+      <div className="flex flex-col h-auto min-h-[680px]">
         {/* Control Panel Header */}
         <div className="bg-xsm-dark-gray rounded-xl border border-xsm-medium-gray p-4 mb-4 flex-shrink-0">
           <div className="flex flex-wrap gap-4 items-center justify-between">
@@ -555,15 +560,6 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => navigate(`/chat?chatId=${selectedChat.id}`)}
-                    className="px-3 py-1.5 text-xs bg-xsm-yellow text-black hover:bg-yellow-400 rounded flex items-center gap-1.5 transition-colors font-semibold shadow-md"
-                    title="Open this conversation in personal chat"
-                  >
-                    <ExternalLink className="w-3.5 h-3.5" />
-                    Full Chat
-                  </button>
-
                   {/* Resolve Button — Triggers In-App Popup */}
                   {!isCurrentUserViewer && selectedChat.support_requested && (
                     <button
@@ -598,9 +594,9 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
               <div className="flex-1 flex gap-0 overflow-hidden min-h-0">
                 {/* Messages Column */}
                 <div className="flex-1 flex flex-col min-h-0 p-4 bg-xsm-black/30">
-                  <div className="flex-1 space-y-3 overflow-y-auto pr-2 mb-4">
+                  <div className="flex-1 space-y-3 overflow-y-auto pr-2 mb-4 h-[420px] min-h-[350px]">
                     {(selectedChat.messages || []).map((message) => {
-                      const isStaff = message.isStaffMessage || message.sender === 'Admin' || message.staffDisplayName;
+                      const isStaff = Boolean(message.isStaffMessage || message.staffDisplayName);
 
                       // Map participant index to color palette for user messages
                       const participantIdx = (selectedChat.participants || []).findIndex(
@@ -612,7 +608,7 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
 
                       if (isStaff) {
                         // Staff/Admin Dashboard message style
-                        const displayName = message.staffDisplayName || message.sender || (isCurrentUserManager ? 'Website Agent' : 'Support Agent');
+                        const displayName = message.staffDisplayName || message.sender || 'Staff';
                         return (
                           <div key={message.id} className="flex justify-end w-full my-2">
                             <div className="max-w-md bg-gradient-to-br from-teal-950/80 via-gray-900 to-gray-900 border border-teal-500/40 rounded-2xl rounded-tr-sm p-3.5 shadow-lg text-white">
@@ -620,9 +616,6 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
                                 <div className="flex items-center gap-1.5">
                                   <Shield className="w-3.5 h-3.5 text-teal-400" />
                                   <span className="text-xs font-bold text-teal-300">{displayName}</span>
-                                  <span className="bg-teal-500/20 text-teal-300 border border-teal-400/40 text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase">
-                                    Official Agent
-                                  </span>
                                 </div>
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-[10px] text-teal-400/60">{formatDate(message.timestamp)}</span>
@@ -686,39 +679,39 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
                     </div>
                   ) : (
                     <div className="border-t border-xsm-medium-gray pt-3 flex-shrink-0 bg-xsm-black/40 p-3 rounded-lg border border-xsm-medium-gray/60">
-                      {/* Send-As Header with Editable Display Name */}
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2 text-xs">
-                          <span className="text-gray-400">Sending as:</span>
-                          {isEditingDisplayName ? (
-                            <div className="flex items-center gap-1">
-                              <input
-                                type="text"
-                                value={staffDisplayName}
-                                onChange={(e) => setStaffDisplayName(e.target.value)}
-                                className="bg-xsm-black border border-xsm-yellow rounded px-2 py-0.5 text-xs text-xsm-yellow focus:outline-none w-36"
-                                placeholder="Display Name"
-                              />
-                              <button
-                                onClick={() => setIsEditingDisplayName(false)}
-                                className="p-1 text-green-400 hover:text-green-300"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-1.5 bg-teal-950/40 border border-teal-500/40 text-teal-300 px-2 py-0.5 rounded font-bold">
-                              <Shield className="w-3 h-3 text-teal-400" />
-                              <span>{staffDisplayName}</span>
-                              <button
-                                onClick={() => setIsEditingDisplayName(true)}
-                                className="ml-1 text-teal-400/70 hover:text-teal-200"
-                                title="Change display name for this session"
-                              >
-                                <Edit className="w-3 h-3" />
-                              </button>
-                            </div>
-                          )}
+                      {/* Send-As Header with Editable Display Name & Mode Toggle */}
+                      <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+                        <div className="flex items-center gap-3 text-xs">
+                          {/* Send Mode Toggle Pill */}
+                          <div className="flex items-center gap-1 bg-xsm-black p-1 rounded-lg border border-xsm-medium-gray/50">
+                            <span className="text-gray-400 font-medium px-1">Mode:</span>
+                            <button
+                              type="button"
+                              onClick={() => setSendAsStaff(true)}
+                              className={`px-2.5 py-0.5 rounded font-bold text-xs flex items-center gap-1 transition-all ${
+                                sendAsStaff
+                                  ? 'bg-teal-600 text-white shadow'
+                                  : 'text-gray-400 hover:text-white'
+                              }`}
+                            >
+                              <Shield className="w-3 h-3" />
+                              Official Staff
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setSendAsStaff(false)}
+                              className={`px-2.5 py-0.5 rounded font-bold text-xs flex items-center gap-1 transition-all ${
+                                !sendAsStaff
+                                  ? 'bg-xsm-yellow text-black shadow'
+                                  : 'text-gray-400 hover:text-white'
+                              }`}
+                            >
+                              <UserCheck className="w-3 h-3" />
+                              Normal User (@{(currentUser as any)?.username || 'User'})
+                            </button>
+                          </div>
+
+
                         </div>
 
                         <button
@@ -741,7 +734,7 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
                           value={newMessage}
                           onChange={(e) => setNewMessage(e.target.value)}
                           onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                          placeholder={`Type response as ${staffDisplayName}...`}
+                          placeholder={sendAsStaff ? `Type response as ${effectiveStaffName}...` : `Type message as @${(currentUser as any)?.username || 'User'}...`}
                           className="flex-1 bg-xsm-black border border-xsm-medium-gray rounded-lg px-4 py-2.5 focus:outline-none focus:border-xsm-yellow text-white text-sm"
                           disabled={isSending}
                         />

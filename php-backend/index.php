@@ -222,8 +222,24 @@ try {
     elseif (strpos($path, '/updates') === 0) {
         handleUpdatesRoutes($path, $method);
     }
+    // Cron / background unread message reminders trigger
+    elseif ($path === '/cron/unread-reminders') {
+        require_once __DIR__ . '/controllers/ChatController.php';
+        $sent = ChatController::processUnreadMessageReminders();
+        Response::success(['message' => "Unread message reminders processed", 'sentCount' => $sent]);
+    }
     else {
         Response::error('Route not found', 404);
+    }
+
+    // Periodically process unread message reminders in background (10% sample chance per API call)
+    if (mt_rand(1, 10) === 1) {
+        try {
+            require_once __DIR__ . '/controllers/ChatController.php';
+            ChatController::processUnreadMessageReminders();
+        } catch (Throwable $e) {
+            error_log('Background unread reminder error: ' . $e->getMessage());
+        }
     }
 } catch (Exception $e) {
     error_log('API Error: ' . $e->getMessage());
@@ -248,6 +264,21 @@ function handleUpdatesRoutes($path, $method) {
         $stmt = $pdo->prepare("INSERT INTO website_updates (title, description) VALUES (?, ?)");
         $stmt->execute([$title, $description]);
         $id = $pdo->lastInsertId();
+
+        // Broadcast announcement email to active users
+        try {
+            $userStmt = $pdo->query("SELECT email, username FROM users WHERE isEmailVerified = 1 AND isBanned = 0");
+            $activeUsers = $userStmt->fetchAll(PDO::FETCH_ASSOC);
+            $emailService = new EmailService();
+            foreach ($activeUsers as $u) {
+                if (!empty($u['email'])) {
+                    $emailService->sendAnnouncementEmail($u['email'], $u['username'], $title, $description);
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('Announcement email broadcast error: ' . $e->getMessage());
+        }
+
         Response::success(['message' => 'Website update published successfully', 'id' => $id]);
     } else {
         Response::error('Method not allowed', 405);
@@ -286,6 +317,10 @@ function handleAuthRoutes($controller, $path, $method) {
             break;
         case $path === '/auth/verify-reset-token' && $method === 'POST':
             $controller->verifyResetToken();
+            break;
+        // Ban status check – polled every 15 s by the frontend to reflect ban immediately
+        case $path === '/auth/ban-status' && $method === 'GET':
+            $controller->getBanStatus();
             break;
         default:
             Response::error('Auth route not found', 404);

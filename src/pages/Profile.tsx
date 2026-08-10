@@ -737,7 +737,9 @@ const Profile: React.FC<ProfileProps> = () => {
                   <button
                     onClick={() => {
                       setShowSettings(true);
-                      setActiveSettingsTab('username');
+                      // Managers cannot change username — open Email tab by default for them
+                      const defaultTab = (user as any)?.role === 'manager' ? 'email' : 'username';
+                      setActiveSettingsTab(defaultTab);
                       setSettingsForm({
                         username: profile.username,
                         email: '',
@@ -855,6 +857,8 @@ const Profile: React.FC<ProfileProps> = () => {
 
             {/* Tab Navigation */}
             <div className="flex space-x-1 mb-4 bg-xsm-black/50 rounded-lg p-1">
+              {/* Username Tab — hidden for managers, assigned by admin only */}
+              {(user as any)?.role !== 'manager' && (
               <button
                 onClick={() => {
                   setActiveSettingsTab('username');
@@ -868,6 +872,7 @@ const Profile: React.FC<ProfileProps> = () => {
               >
                 Username
               </button>
+              )}
               <button
                 onClick={() => {
                  setActiveSettingsTab('email');

@@ -397,6 +397,7 @@ class AuthController {
                 'user' => [
                     'id' => (int)$user['id'],
                     'username' => $user['username'],
+                    'displayName' => $user['displayName'] ?? null,
                     'email' => $user['email'],
                     'fullName' => $user['fullName'],
                     'profilePicture' => $user['profilePicture'],
@@ -490,6 +491,7 @@ class AuthController {
                 'user' => [
                     'id' => (int)$user['id'],
                     'username' => $user['username'],
+                    'displayName' => $user['displayName'] ?? null,
                     'email' => $user['email'],
                     'fullName' => $user['fullName'],
                     'profilePicture' => $user['profilePicture'],
@@ -674,6 +676,7 @@ class AuthController {
                 'user' => [
                     'id' => (int)$user['id'],
                     'username' => $user['username'],
+                    'displayName' => $user['displayName'] ?? null,
                     'email' => $user['email'],
                     'fullName' => $user['fullName'],
                     'profilePicture' => $user['profilePicture'],
@@ -965,6 +968,64 @@ class AuthController {
         } catch (Exception $e) {
             error_log('Verify token error: ' . $e->getMessage());
             Response::error('Invalid token', 401);
+        }
+    }
+
+    // ── Ban-status endpoint ────────────────────────────────────────────────
+    // GET /auth/ban-status  – polled by the frontend every 15 s
+    // Returns the current user's ban fields so the UI updates immediately.
+    public function getBanStatus() {
+        try {
+            $user = AuthMiddleware::authenticate();
+            if (!$user) {
+                Response::error('Unauthorized', 401);
+                return;
+            }
+
+            // Re-read from DB so we always get the freshest state
+            $userId = $user['id'];
+            $stmt = $this->db->prepare(
+                "SELECT isBanned, banReason, banExpires, bannedAt FROM users WHERE id = ? LIMIT 1"
+            );
+            $stmt->execute([$userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$row) {
+                Response::error('User not found', 404);
+                return;
+            }
+
+            // Auto-lift expired temporary bans
+            if ($row['isBanned'] && !empty($row['banExpires']) && strtotime($row['banExpires']) <= time()) {
+                $this->db->prepare(
+                    "UPDATE users SET isBanned=0, banReason=NULL, banExpires=NULL, bannedAt=NULL, unbannedAt=NOW() WHERE id=?"
+                )->execute([$userId]);
+                $row['isBanned'] = 0;
+                $row['banReason'] = null;
+                $row['banExpires'] = null;
+                $row['bannedAt'] = null;
+
+                // Send email notifying user that ban duration completed
+                try {
+                    if (!empty($user['email'])) {
+                        $emailService = new EmailService();
+                        $emailService->sendBanExpiredEmail($user['email'], $user['username']);
+                    }
+                } catch (Throwable $e) {
+                    error_log('Ban expired email error: ' . $e->getMessage());
+                }
+            }
+
+            Response::json([
+                'isBanned'   => (bool)$row['isBanned'],
+                'banReason'  => $row['banReason']  ?? null,
+                'banExpires' => $row['banExpires']  ?? null,
+                'bannedAt'   => $row['bannedAt']    ?? null,
+            ]);
+
+        } catch (Exception $e) {
+            error_log('getBanStatus error: ' . $e->getMessage());
+            Response::error('Server error', 500);
         }
     }
 }

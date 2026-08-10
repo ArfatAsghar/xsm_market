@@ -19,7 +19,7 @@ interface NotificationState extends NotificationProps {
 export interface InAppNotification {
   id: number;
   userId: number;
-  type: 'message' | 'admin_message' | 'deal' | 'announcement' | 'system';
+  type: 'message' | 'admin_message' | 'deal' | 'announcement' | 'system' | 'ban' | 'unban';
   title: string;
   message: string;
   link?: string;
@@ -193,11 +193,35 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               playPingSound();
               newlyReceived.forEach(n => {
                 seenNotifIdsRef.current.add(n.id);
+
+                // Ban/unban: update localStorage so Navbar ban badge appears instantly
+                if (n.type === 'ban' || n.type === 'unban') {
+                  try {
+                    const raw = localStorage.getItem('userData');
+                    if (raw) {
+                      const u = JSON.parse(raw);
+                      if (n.type === 'ban') {
+                        u.isBanned = true;
+                        u.banReason = n.message;
+                      } else {
+                        u.isBanned = false;
+                        u.banReason = null;
+                        u.banExpires = null;
+                        u.bannedAt = null;
+                      }
+                      localStorage.setItem('userData', JSON.stringify(u));
+                      // Trigger AuthContext storage listener
+                      window.dispatchEvent(new Event('storage'));
+                    }
+                  } catch {/* silent */}
+                }
+
                 addNotification({
-                  type: 'info',
-                  title: n.title || 'New Message Received',
+                  type: n.type === 'ban' ? 'error' : n.type === 'unban' ? 'success' : 'info',
+                  title: n.title || 'New Notification',
                   message: n.message,
-                  duration: 6000
+                  duration: n.type === 'ban' || n.type === 'unban' ? 10000 : 6000,
+                  autoClose: true
                 });
               });
             }

@@ -34,43 +34,22 @@ class ChatController {
             $user = $this->authMiddleware->authenticate();
             $userId = (int)$user['id'];
 
-            $adminEmail = getenv('ADMIN_EMAIL');
-            $isAdmin = ($adminEmail && strtolower($user['email']) === strtolower($adminEmail)) || !empty($user['isAdmin']) || in_array($user['role'] ?? '', ['admin', 'manager', 'viewer']);
-
-            if ($isAdmin) {
-                $stmt = $this->db->prepare("
-                    SELECT DISTINCT c.*,
-                           a.id as ad_id, a.title as ad_title, a.price as ad_price,
-                           m.content as last_message_content, m.createdAt as last_message_time,
-                           sender.id as last_sender_id, sender.username as last_sender_username,
-                           (SELECT COUNT(*) FROM messages um WHERE um.chatId = c.id AND um.senderId != ? AND um.isRead = 0) as unread_count
-                    FROM chats c
-                    LEFT JOIN ads a ON c.adId = a.id
-                    LEFT JOIN messages m ON c.id = m.chatId
-                    LEFT JOIN users sender ON m.senderId = sender.id
-                    LEFT JOIN messages m2 ON c.id = m2.chatId AND m.createdAt < m2.createdAt
-                    WHERE m2.id IS NULL
-                    ORDER BY c.lastMessageTime DESC, c.updatedAt DESC, c.createdAt DESC
-                ");
-                $stmt->execute([$userId]);
-            } else {
-                $stmt = $this->db->prepare("
-                    SELECT DISTINCT c.*,
-                           a.id as ad_id, a.title as ad_title, a.price as ad_price,
-                           m.content as last_message_content, m.createdAt as last_message_time,
-                           sender.id as last_sender_id, sender.username as last_sender_username,
-                           (SELECT COUNT(*) FROM messages um WHERE um.chatId = c.id AND um.senderId != ? AND um.isRead = 0) as unread_count
-                    FROM chats c
-                    INNER JOIN chat_participants cp ON c.id = cp.chatId
-                    LEFT JOIN ads a ON c.adId = a.id
-                    LEFT JOIN messages m ON c.id = m.chatId
-                    LEFT JOIN users sender ON m.senderId = sender.id
-                    LEFT JOIN messages m2 ON c.id = m2.chatId AND m.createdAt < m2.createdAt
-                    WHERE cp.userId = ? AND cp.isActive = 1 AND m2.id IS NULL
-                    ORDER BY c.lastMessageTime DESC, c.updatedAt DESC, c.createdAt DESC
-                ");
-                $stmt->execute([$userId, $userId]);
-            }
+            $stmt = $this->db->prepare("
+                SELECT DISTINCT c.*,
+                       a.id as ad_id, a.title as ad_title, a.price as ad_price,
+                       m.content as last_message_content, m.createdAt as last_message_time,
+                       sender.id as last_sender_id, sender.username as last_sender_username,
+                       (SELECT COUNT(*) FROM messages um WHERE um.chatId = c.id AND um.senderId != ? AND um.isRead = 0) as unread_count
+                FROM chats c
+                INNER JOIN chat_participants cp ON c.id = cp.chatId
+                LEFT JOIN ads a ON c.adId = a.id
+                LEFT JOIN messages m ON c.id = m.chatId
+                LEFT JOIN users sender ON m.senderId = sender.id
+                LEFT JOIN messages m2 ON c.id = m2.chatId AND m.createdAt < m2.createdAt
+                WHERE cp.userId = ? AND cp.isActive = 1 AND m2.id IS NULL
+                ORDER BY c.lastMessageTime DESC, c.updatedAt DESC, c.createdAt DESC
+            ");
+            $stmt->execute([$userId, $userId]);
             $chats = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
             $result = [];
@@ -361,6 +340,8 @@ class ChatController {
                     'fileSize' => $msg['fileSize'] ? (int)$msg['fileSize'] : null,
                     'thumbnail' => $msg['thumbnail'],
                     'isRead' => (bool)$msg['isRead'],
+                    'isStaffMessage' => !empty($msg['isStaffMessage']),
+                    'staffDisplayName' => $msg['staffDisplayName'] ?? null,
                     'status' => $msg['status'] ?? ($msg['isRead'] ? 'read' : 'sent'),
                     'deliveredAt' => $msg['deliveredAt'] ?? null,
                     'readAt' => $msg['readAt'] ?? null,
@@ -913,6 +894,8 @@ class ChatController {
 
             $input = json_decode(file_get_contents('php://input'), true);
             $content = trim($input['content'] ?? '');
+            $staffDisplayName = isset($input['staffDisplayName']) ? trim((string)$input['staffDisplayName']) : null;
+            $sendAsStaff = isset($input['sendAsStaff']) ? (bool)$input['sendAsStaff'] : true;
 
             if (empty($content)) {
                 http_response_code(400);
@@ -929,11 +912,23 @@ class ChatController {
                 return;
             }
 
+            // Fetch sender's latest displayName and username from DB
+            $userStmt = $this->db->prepare("SELECT username, displayName FROM users WHERE id = ? LIMIT 1");
+            $userStmt->execute([(int)$currentUser['id']]);
+            $userDb = $userStmt->fetch(PDO::FETCH_ASSOC);
+
+            $effectiveDisplayName = !empty($userDb['displayName'])
+                ? $userDb['displayName']
+                : (!empty($staffDisplayName) ? $staffDisplayName : ($userDb['username'] ?? 'Admin'));
+
+            $isStaffVal = $sendAsStaff ? 1 : 0;
+            $staffNameVal = $sendAsStaff ? $effectiveDisplayName : null;
+
             $stmt = $this->db->prepare("
-                INSERT INTO messages (content, senderId, chatId, messageType, createdAt, updatedAt)
-                VALUES (?, ?, ?, 'text', NOW(), NOW())
+                INSERT INTO messages (content, senderId, chatId, messageType, isStaffMessage, staffDisplayName, createdAt, updatedAt)
+                VALUES (?, ?, ?, 'text', ?, ?, NOW(), NOW())
             ");
-            $stmt->execute([$content, (int)$currentUser['id'], $chatId]);
+            $stmt->execute([$content, (int)$currentUser['id'], $chatId, $isStaffVal, $staffNameVal]);
             $messageId = $this->db->lastInsertId();
 
             $stmt = $this->db->prepare("
@@ -943,7 +938,7 @@ class ChatController {
             $stmt->execute([$content, $chatId]);
 
             $stmt = $this->db->prepare("
-                SELECT m.*, u.username as sender_username
+                SELECT m.*, u.username as sender_username, u.displayName as sender_displayName
                 FROM messages m
                 LEFT JOIN users u ON m.senderId = u.id
                 WHERE m.id = ?
@@ -951,10 +946,17 @@ class ChatController {
             $stmt->execute([$messageId]);
             $message = $stmt->fetch(PDO::FETCH_ASSOC);
 
+            $senderName = $sendAsStaff
+                ? $staffNameVal
+                : (!empty($message['sender_displayName']) ? $message['sender_displayName'] : $message['sender_username']);
+
             $result = [
                 'id' => (int)$message['id'],
                 'content' => $message['content'],
-                'sender' => 'Admin',
+                'senderId' => (int)$currentUser['id'],
+                'sender' => $senderName,
+                'isStaffMessage' => (bool)$isStaffVal,
+                'staffDisplayName' => $sendAsStaff ? $staffNameVal : null,
                 'timestamp' => $message['createdAt']
             ];
 
@@ -1446,6 +1448,64 @@ class ChatController {
         } catch (Exception $e) {
             http_response_code(500);
             echo json_encode(['message' => $e->getMessage()]);
+        }
+    }
+
+    // Process unread message reminders for messages unread >= 3 hours (max 2 emails/day, i.e. 12h cooldown)
+    public static function processUnreadMessageReminders() {
+        try {
+            $pdo = Database::getConnection();
+            
+            // Find users who have unread messages >= 3 hours and haven't received reminder in last 12 hours
+            $stmt = $pdo->query("
+                SELECT u.id, u.username, u.email, COUNT(m.id) as unreadCount, MAX(m.senderId) as lastSenderId
+                FROM users u
+                INNER JOIN chat_participants cp ON u.id = cp.userId AND cp.isActive = 1
+                INNER JOIN messages m ON cp.chatId = m.chatId AND m.senderId != u.id AND m.isRead = 0
+                WHERE u.isBanned = 0
+                  AND u.isEmailVerified = 1
+                  AND TIMESTAMPDIFF(HOUR, m.createdAt, NOW()) >= 3
+                  AND (u.lastUnreadReminderAt IS NULL OR TIMESTAMPDIFF(HOUR, u.lastUnreadReminderAt, NOW()) >= 12)
+                GROUP BY u.id, u.username, u.email
+            ");
+            
+            $pendingUsers = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if (empty($pendingUsers)) return 0;
+            
+            $emailService = new EmailService();
+            $sentCount = 0;
+            
+            foreach ($pendingUsers as $usr) {
+                if (empty($usr['email'])) continue;
+                
+                // Get sender username for the latest unread message
+                $latestSenderName = '';
+                if (!empty($usr['lastSenderId'])) {
+                    $sStmt = $pdo->prepare("SELECT username, displayName FROM users WHERE id = ? LIMIT 1");
+                    $sStmt->execute([(int)$usr['lastSenderId']]);
+                    $sender = $sStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($sender) {
+                        $latestSenderName = $sender['displayName'] ?: $sender['username'];
+                    }
+                }
+                
+                $sent = $emailService->sendUnreadMessagesReminderEmail(
+                    $usr['email'],
+                    $usr['username'],
+                    (int)$usr['unreadCount'],
+                    $latestSenderName
+                );
+                
+                if ($sent) {
+                    $uStmt = $pdo->prepare("UPDATE users SET lastUnreadReminderAt = NOW() WHERE id = ?");
+                    $uStmt->execute([(int)$usr['id']]);
+                    $sentCount++;
+                }
+            }
+            return $sentCount;
+        } catch (Throwable $e) {
+            error_log('Error processing unread message reminders: ' . $e->getMessage());
+            return 0;
         }
     }
 }

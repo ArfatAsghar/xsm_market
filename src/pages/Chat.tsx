@@ -1336,7 +1336,7 @@ const Chat: React.FC = () => {
                           );
                         }
 
-                        const isSenderAdmin = !!message.sender?.isAdmin || (message as any)?.isStaffMessage || Boolean((message as any)?.staffDisplayName) || ['admin', 'manager', 'agent'].includes((message.sender as any)?.role ?? '');
+                        const isSenderAdmin = Boolean((message as any)?.isStaffMessage || (message as any)?.staffDisplayName);
                         const senderRole = (message.sender as any)?.role ?? '';
 
                         // --- Display name logic (never show raw username for staff) ---
@@ -1530,6 +1530,10 @@ const Chat: React.FC = () => {
                   {/* Message Input or Restriction Notice */}
                     {Boolean((user as any)?.isBanned) && !(
                     selectedChat?.type === 'support' ||
+                    selectedChat?.name === 'Website Agent' ||
+                    (selectedChat as any)?.title === 'Website Agent' ||
+                    getChatDisplayName(selectedChat) === 'Website Agent' ||
+                    selectedChat?.otherParticipants?.some(p => (p as any)?.isAdmin || (p as any)?.isStaff || ['admin', 'manager', 'agent'].includes((p as any)?.role || '')) ||
                     selectedChat?.participants?.some(p => (p.user as any)?.isAdmin || ['admin', 'manager', 'agent'].includes((p.user as any)?.role || ''))
                   ) ? (
                       (() => {

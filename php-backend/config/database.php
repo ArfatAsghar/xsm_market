@@ -141,6 +141,7 @@ class Database {
             self::addColumnIfMissing($pdo, 'users', 'lastSeen', 'DATETIME NULL DEFAULT NULL');
             self::addColumnIfMissing($pdo, 'users', 'vipUntil', 'DATETIME NULL DEFAULT NULL');
             self::addColumnIfMissing($pdo, 'users', 'displayName', 'VARCHAR(100) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'lastUnreadReminderAt', 'DATETIME NULL DEFAULT NULL');
 
             // Set admin role for existing admins
             try {

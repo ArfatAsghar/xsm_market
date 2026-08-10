@@ -196,6 +196,163 @@ class EmailService {
             return false;
         }
     }
+
+    // Send unban notification email
+    public function sendUnbanEmail($email, $username) {
+        try {
+            $subject = 'Account Restored - XSM Market';
+
+            $htmlBody = '
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"></head>
+            <body style="font-family: Arial, sans-serif; background-color: #121212; color: #ffffff; padding: 20px;">
+              <div style="max-width: 600px; margin: 0 auto; background-color: #1e1e1e; border-radius: 12px; padding: 30px; border: 1px solid #333;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                  <h1 style="color: #ffd000; margin: 0; font-size: 24px;">XSM Market</h1>
+                  <p style="color: #888; font-size: 13px; margin-top: 4px;">Account Status Notification</p>
+                </div>
+                
+                <h2 style="color: #10b981; font-size: 18px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+                  Account Restored
+                </h2>
+                
+                <p>Hello <strong>' . htmlspecialchars($username) . '</strong>,</p>
+                
+                <p>Great news! Your account restrictions on <strong>XSM Market</strong> have been lifted by platform administrators.</p>
+                
+                <div style="background-color: #132a1e; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                  <p style="margin: 0; font-size: 14px; color: #fff;"><strong>Status:</strong> <span style="color: #34d399;">Active / Unrestricted</span></p>
+                </div>
+                
+                <p style="color: #bbb; font-size: 13px;">You now have full access to buying, selling, messaging, and marketplace features.</p>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="https://xsmmarket.com/login" style="background-color: #ffd000; color: #000; font-weight: bold; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Log In to Account</a>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid #333; margin: 25px 0;">
+                <p style="color: #666; font-size: 11px; text-align: center;">&copy; ' . date('Y') . ' XSM Market. All rights reserved.</p>
+              </div>
+            </body>
+            </html>';
+
+            $textBody = "Hello $username,\n\nYour XSM Market account restrictions have been lifted!\n\nFull access has been restored to your account.\n\nLog in: https://xsmmarket.com/login\n\nBest regards,\nXSM Market Team";
+
+            return $this->sendEmail($email, $subject, $htmlBody, $textBody);
+        } catch (Exception $e) {
+            error_log('Failed to send unban email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // Send ban duration completed (auto-lifted) email
+    public function sendBanExpiredEmail($email, $username) {
+        try {
+            $subject = 'Ban Duration Completed — Account Restored — XSM Market';
+
+            $htmlBody = '
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="utf-8"></head>
+            <body style="font-family: Arial, sans-serif; background-color: #121212; color: #ffffff; padding: 20px;">
+              <div style="max-width: 600px; margin: 0 auto; background-color: #1e1e1e; border-radius: 12px; padding: 30px; border: 1px solid #333;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                  <h1 style="color: #ffd000; margin: 0; font-size: 24px;">XSM Market</h1>
+                  <p style="color: #888; font-size: 13px; margin-top: 4px;">Account Status Notification</p>
+                </div>
+                
+                <h2 style="color: #10b981; font-size: 18px; border-bottom: 1px solid #333; padding-bottom: 10px;">
+                  Ban Period Completed
+                </h2>
+                
+                <p>Hello <strong>' . htmlspecialchars($username) . '</strong>,</p>
+                
+                <p>Your temporary suspension duration on <strong>XSM Market</strong> has completed, and your account has been automatically restored to good standing.</p>
+                
+                <div style="background-color: #132a1e; border-left: 4px solid #10b981; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                  <p style="margin: 0; font-size: 14px; color: #fff;"><strong>Status:</strong> <span style="color: #34d399;">Restored / Active</span></p>
+                </div>
+                
+                <p style="color: #bbb; font-size: 13px;">All restrictions on trading, messaging, and marketplace features have been automatically removed.</p>
+                
+                <div style="text-align: center; margin-top: 25px;">
+                  <a href="https://xsmmarket.com/login" style="background-color: #ffd000; color: #000; font-weight: bold; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">Log In to Account</a>
+                </div>
+
+                <hr style="border: none; border-top: 1px solid #333; margin: 25px 0;">
+                <p style="color: #666; font-size: 11px; text-align: center;">&copy; ' . date('Y') . ' XSM Market. All rights reserved.</p>
+              </div>
+            </body>
+            </html>';
+
+            $textBody = "Hello $username,\n\nYour temporary suspension period on XSM Market has completed, and your account has been automatically restored.\n\nLog in: https://xsmmarket.com/login\n\nBest regards,\nXSM Market Team";
+
+            return $this->sendEmail($email, $subject, $htmlBody, $textBody);
+        } catch (Exception $e) {
+            error_log('Failed to send ban expired email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // Send announcement email to user
+    public function sendAnnouncementEmail($email, $username, $title, $content) {
+        try {
+            $subject = "📢 Announcement: " . $title . " — XSM Market";
+            $titleEscaped = htmlspecialchars($title);
+            $contentEscaped = nl2br(htmlspecialchars($content));
+
+            $htmlBody = $this->getBaseEmailTemplate(
+                "Official Announcement",
+                "📢",
+                $titleEscaped,
+                "Hi <strong>" . htmlspecialchars($username) . "</strong>,<br><br>
+                A new announcement has been published on XSM Market:",
+                "<div style=\"background:#1a1a1a;border-left:3px solid #ffd000;padding:16px 20px;border-radius:6px;margin:16px 0;color:#e5e7eb;font-size:14px;line-height:1.6;\">
+                    $contentEscaped
+                </div>",
+                "View Announcements",
+                "https://xsmmarket.com/announcements",
+                "Stay updated with the latest news and updates from XSM Market."
+            );
+
+            $textBody = "Hi $username,\n\nNew Announcement: $title\n\n$content\n\nView on XSM Market: https://xsmmarket.com/announcements\n\nBest regards,\nXSM Market Team";
+
+            return $this->sendEmail($email, $subject, $htmlBody, $textBody);
+        } catch (Exception $e) {
+            error_log('Failed to send announcement email: ' . $e->getMessage());
+            return false;
+        }
+    }
+
+    // Send unread messages reminder email (sent max 2x/day for messages unread >= 3h)
+    public function sendUnreadMessagesReminderEmail($email, $username, $unreadCount, $latestSender = '') {
+        try {
+            $subject = "📬 You have " . (int)$unreadCount . " unread message(s) on XSM Market";
+            $senderInfo = !empty($latestSender) ? " including messages from <strong>" . htmlspecialchars($latestSender) . "</strong>" : "";
+
+            $htmlBody = $this->getBaseEmailTemplate(
+                "Unread Messages Reminder",
+                "📬",
+                "You have unread messages waiting for you",
+                "Hi <strong>" . htmlspecialchars($username) . "</strong>,<br><br>
+                You have <strong>" . (int)$unreadCount . " unread message(s)</strong> waiting in your XSM Market Inbox{$senderInfo}.",
+                "<div style=\"background:#1a1a1a;border-left:3px solid #ffd000;padding:16px 20px;border-radius:6px;margin:16px 0;color:#e5e7eb;font-size:14px;\">
+                    Don't keep your buyers or sellers waiting! Log in to reply and continue your transactions.
+                </div>",
+                "Open Inbox",
+                "https://xsmmarket.com/chat",
+                "You are receiving this reminder because you have unread messages that have been waiting for over 3 hours."
+            );
+
+            $textBody = "Hi $username,\n\nYou have $unreadCount unread message(s) waiting in your XSM Market Inbox.\n\nOpen your inbox: https://xsmmarket.com/chat\n\nBest regards,\nXSM Market Team";
+
+            return $this->sendEmail($email, $subject, $htmlBody, $textBody);
+        } catch (Exception $e) {
+            error_log('Failed to send unread messages reminder email: ' . $e->getMessage());
+            return false;
+        }
+    }
     
     // Send email change verification - new method for email change functionality
     public function sendEmailChangeVerification($newEmail, $otp, $username, $verificationToken) {

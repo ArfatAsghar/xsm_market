@@ -192,6 +192,16 @@ class AdminController {
             } catch (Exception $e) {
                 error_log('Failed to insert unban notification: ' . $e->getMessage());
             }
+
+            // Send unban email notification
+            try {
+                if (!empty($user['email'])) {
+                    $emailService = new \EmailService();
+                    $emailService->sendUnbanEmail($user['email'], $user['username']);
+                }
+            } catch (Exception $e) {
+                error_log('Failed to send unban email: ' . $e->getMessage());
+            }
             
             Response::json(['message' => 'User unbanned successfully']);
             

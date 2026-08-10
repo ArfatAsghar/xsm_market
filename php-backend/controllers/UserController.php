@@ -27,7 +27,7 @@ class UserController {
             $user = AuthMiddleware::authenticate();
             
             $stmt = Database::getConnection()->prepare("
-                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, createdAt, vipUntil
+                SELECT id, username, displayName, email, profilePicture, description, isEmailVerified, authProvider, role, createdAt, vipUntil
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
@@ -45,6 +45,7 @@ class UserController {
                 'user' => [
                     'id' => (int)$userData['id'],
                     'username' => $userData['username'],
+                    'displayName' => $userData['displayName'] ?? null,
                     'email' => $userData['email'],
                     'profilePicture' => $userData['profilePicture'],
                     'description' => $userData['description'],
@@ -66,6 +67,13 @@ class UserController {
     public function updateUsername() {
         try {
             $user = AuthMiddleware::authenticate();
+
+            // Managers cannot change their own username — only admin can assign it
+            if (isset($user['role']) && $user['role'] === 'manager') {
+                Response::error('Managers cannot change their username. Contact admin.', 403);
+                return;
+            }
+
             $input = json_decode(file_get_contents('php://input'), true);
             $username = $input['username'] ?? null;
             
@@ -199,6 +207,12 @@ class UserController {
             $stmt->execute([$user['id']]);
             $currentUser = $stmt->fetch(PDO::FETCH_ASSOC);
             
+            // Managers cannot change their own username — only admin can assign it
+            if ($username !== null && isset($user['role']) && $user['role'] === 'manager') {
+                // Silently ignore username change attempt for managers (just skip it)
+                $username = null;
+            }
+
             // Update username if provided and different
             if ($username !== null && $username !== $currentUser['username']) {
                 // Validation
@@ -249,7 +263,7 @@ class UserController {
             
             // Get updated user data
             $stmt = $pdo->prepare("
-                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil 
+                SELECT id, username, displayName, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil 
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
@@ -262,6 +276,7 @@ class UserController {
                 'user' => [
                     'id' => (int)$userData['id'],
                     'username' => $userData['username'],
+                    'displayName' => $userData['displayName'] ?? null,
                     'email' => $userData['email'],
                     'profilePicture' => $userData['profilePicture'],
                     'description' => $userData['description'],

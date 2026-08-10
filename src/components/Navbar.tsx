@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   FaStore, FaInbox, FaTag, FaBell, FaUser, FaSignOutAlt,
   FaFileAlt, FaCrown, FaTachometerAlt, FaBars, FaTimes,
-  FaChevronDown, FaEnvelope, FaCheck
+  FaChevronDown, FaEnvelope, FaCheck, FaBan, FaCheckCircle
 } from 'react-icons/fa';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
@@ -32,6 +32,18 @@ const Navbar: React.FC = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+
+  // Helper: format remaining ban duration
+  const formatBanDuration = (banExpires: string | null | undefined): string => {
+    if (!banExpires) return 'permanent';
+    const ms = new Date(banExpires).getTime() - Date.now();
+    if (ms <= 0) return 'expired';
+    const days = Math.floor(ms / 86400000);
+    const hours = Math.floor((ms % 86400000) / 3600000);
+    if (days > 0) return `${days}d ${hours}h remaining`;
+    const mins = Math.floor((ms % 3600000) / 60000);
+    return `${hours}h ${mins}m remaining`;
+  };
 
   // Fetch unread messages
   useEffect(() => {
@@ -215,6 +227,29 @@ const Navbar: React.FC = () => {
                         )}
                       </div>
 
+                      {/* Account Restricted Banner if Banned */}
+                      {(user as any)?.isBanned && (
+                        <div className="p-3.5 bg-gradient-to-r from-red-950/90 to-neutral-900 border-b border-red-500/40 text-left">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="w-5 h-5 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                              <FaBan className="text-red-400 text-xs" />
+                            </div>
+                            <span className="text-xs font-bold text-red-300 uppercase tracking-wide">Account Restricted</span>
+                          </div>
+                          {(user as any)?.banReason && (
+                            <p className="text-xs text-red-200/90 leading-snug font-medium mb-1">
+                              Reason: {(user as any).banReason}
+                            </p>
+                          )}
+                          <p className="text-xs font-semibold text-red-400">
+                            ⏳ Ban Duration: {formatBanDuration((user as any)?.banExpires)}
+                          </p>
+                          <p className="text-[11px] text-gray-400 mt-1">
+                            Messaging restricted. You may only contact Website Agent / Admin.
+                          </p>
+                        </div>
+                      )}
+
                       {/* Items */}
                       <div className="max-h-72 overflow-y-auto">
                         {inAppNotifications.length === 0 ? (
@@ -235,8 +270,16 @@ const Navbar: React.FC = () => {
                               className={`flex items-start gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-white/[0.04] ${!n.isRead ? 'bg-xsm-yellow/[0.03]' : ''}`}
                               style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
                             >
-                              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${!n.isRead ? 'bg-xsm-yellow/15' : 'bg-white/5'}`}>
-                                {n.type === 'deal' ? (
+                              <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                n.type === 'ban' ? 'bg-red-500/20' :
+                                n.type === 'unban' ? 'bg-emerald-500/20' :
+                                !n.isRead ? 'bg-xsm-yellow/15' : 'bg-white/5'
+                              }`}>
+                                {n.type === 'ban' ? (
+                                  <FaBan className="text-xs text-red-400" />
+                                ) : n.type === 'unban' ? (
+                                  <FaCheckCircle className="text-xs text-emerald-400" />
+                                ) : n.type === 'deal' ? (
                                   <FaTag className={`text-xs ${!n.isRead ? 'text-xsm-yellow' : 'text-gray-500'}`} />
                                 ) : n.type === 'admin_message' ? (
                                   <FaEnvelope className={`text-xs ${!n.isRead ? 'text-amber-400' : 'text-gray-500'}`} />
@@ -245,7 +288,11 @@ const Navbar: React.FC = () => {
                                 )}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className={`text-xs font-semibold ${!n.isRead ? 'text-xsm-yellow' : 'text-gray-300'}`}>{n.title}</p>
+                                <p className={`text-xs font-semibold ${
+                                  n.type === 'ban' ? 'text-red-400' :
+                                  n.type === 'unban' ? 'text-emerald-400' :
+                                  !n.isRead ? 'text-xsm-yellow' : 'text-gray-300'
+                                }`}>{n.title}</p>
                                 <p className={`text-xs leading-snug truncate ${!n.isRead ? 'text-white font-medium' : 'text-gray-400'}`}>{n.message}</p>
                                 <p className="text-[10px] text-gray-600 mt-0.5">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                               </div>
@@ -275,24 +322,41 @@ const Navbar: React.FC = () => {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button className="flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all duration-200 hover:bg-white/[0.05] border border-transparent hover:border-white/[0.08] group focus:outline-none">
-                      {/* Avatar */}
-                      <div
-                        className={`w-[30px] h-[30px] rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center ${
-                          (user as any)?.isVip
-                            ? 'ring-[1.5px] ring-xsm-yellow bg-gradient-to-tr from-yellow-500 to-amber-600'
-                            : 'bg-xsm-yellow'
-                        }`}
-                      >
-                        {user?.profilePicture
-                          ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
-                          : <FaUser className="text-black text-[11px]" />
-                        }
+                      {/* Avatar with ban badge overlay */}
+                      <div className="relative flex-shrink-0">
+                        <div
+                          className={`w-[30px] h-[30px] rounded-full overflow-hidden flex items-center justify-center ${
+                            (user as any)?.isBanned
+                              ? 'ring-[1.5px] ring-red-500'
+                              : (user as any)?.isVip
+                              ? 'ring-[1.5px] ring-xsm-yellow bg-gradient-to-tr from-yellow-500 to-amber-600'
+                              : 'bg-xsm-yellow'
+                          }`}
+                        >
+                          {user?.profilePicture
+                            ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
+                            : <FaUser className="text-black text-[11px]" />
+                          }
+                        </div>
+                        {/* Ban badge */}
+                        {(user as any)?.isBanned && (
+                          <span
+                            className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-red-600 rounded-full border-[1.5px] border-[#0a0a0a] flex items-center justify-center"
+                            title="Account Banned"
+                          >
+                            <FaBan className="text-[7px] text-white" />
+                          </span>
+                        )}
                       </div>
                       <div className="flex flex-col items-start leading-tight">
                         <span className="text-[12.5px] font-bold text-white group-hover:text-xsm-yellow transition-colors">
                           {user?.username || 'Account'}
                         </span>
-                        {(user as any)?.isVip && (
+                        {(user as any)?.isBanned ? (
+                          <span className="text-[10px] text-red-400 flex items-center gap-0.5 font-medium">
+                            <FaBan className="text-[8px]" /> Banned
+                          </span>
+                        ) : (user as any)?.isVip && (
                           <span className="text-[10px] text-yellow-400 flex items-center gap-0.5 font-medium">
                             <FaCrown className="text-[8px]" /> VIP
                           </span>
@@ -420,15 +484,32 @@ const Navbar: React.FC = () => {
             <div className="px-4 py-4 space-y-1">
               {isLoggedIn && (
                 <div className="flex items-center gap-3 px-2 py-3 mb-2 border-b" style={{ borderColor: 'rgba(255,255,255,0.07)' }}>
-                  <div className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${(user as any)?.isVip ? 'ring-2 ring-xsm-yellow bg-gradient-to-tr from-yellow-500 to-amber-600' : 'bg-xsm-yellow'}`}>
-                    {user?.profilePicture
-                      ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
-                      : <FaUser className="text-black text-sm" />
-                    }
+                  {/* Mobile avatar with ban badge */}
+                  <div className="relative flex-shrink-0">
+                    <div className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center ${
+                      (user as any)?.isBanned
+                        ? 'ring-2 ring-red-500'
+                        : (user as any)?.isVip
+                        ? 'ring-2 ring-xsm-yellow bg-gradient-to-tr from-yellow-500 to-amber-600'
+                        : 'bg-xsm-yellow'
+                    }`}>
+                      {user?.profilePicture
+                        ? <img src={user.profilePicture} alt="" className="w-full h-full object-cover" />
+                        : <FaUser className="text-black text-sm" />
+                      }
+                    </div>
+                    {(user as any)?.isBanned && (
+                      <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-red-600 rounded-full border-2 border-[#0d0d0d] flex items-center justify-center">
+                        <FaBan className="text-[8px] text-white" />
+                      </span>
+                    )}
                   </div>
                   <div>
                     <p className="text-white text-sm font-bold">{user?.username}</p>
-                    {(user as any)?.isVip && <p className="text-yellow-400 text-xs flex items-center gap-1"><FaCrown className="text-[9px]" /> VIP Member</p>}
+                    {(user as any)?.isBanned
+                      ? <p className="text-red-400 text-xs flex items-center gap-1"><FaBan className="text-[9px]" /> Banned · {formatBanDuration((user as any)?.banExpires)}</p>
+                      : (user as any)?.isVip && <p className="text-yellow-400 text-xs flex items-center gap-1"><FaCrown className="text-[9px]" /> VIP Member</p>
+                    }
                   </div>
                 </div>
               )}

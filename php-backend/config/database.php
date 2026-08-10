@@ -197,7 +197,7 @@ class Database {
             $pdo->exec("CREATE TABLE IF NOT EXISTS notifications (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 userId INT NOT NULL,
-                type ENUM('message','admin_message','deal','announcement','system') NOT NULL DEFAULT 'system',
+                type VARCHAR(50) NOT NULL DEFAULT 'system',
                 title VARCHAR(255) NOT NULL,
                 message TEXT NOT NULL,
                 link VARCHAR(500) NULL DEFAULT NULL,
@@ -207,6 +207,7 @@ class Database {
                 INDEX idx_isRead (isRead),
                 INDEX idx_createdAt (createdAt)
             )");
+            $pdo->exec("ALTER TABLE notifications MODIFY COLUMN type VARCHAR(50) NOT NULL DEFAULT 'system'");
         } catch (Throwable $e) {
             error_log('notifications create warning: ' . $e->getMessage());
         }

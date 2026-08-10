@@ -228,6 +228,10 @@ try {
         $sent = ChatController::processUnreadMessageReminders();
         Response::success(['message' => "Unread message reminders processed", 'sentCount' => $sent]);
     }
+    // In-app notifications bell routes
+    elseif (strpos($path, '/notifications') === 0) {
+        handleNotificationsRoutes($path, $method);
+    }
     else {
         Response::error('Route not found', 404);
     }
@@ -282,6 +286,69 @@ function handleUpdatesRoutes($path, $method) {
         Response::success(['message' => 'Website update published successfully', 'id' => $id]);
     } else {
         Response::error('Method not allowed', 405);
+    }
+}
+
+// ── In-app Notification Bell Routes ─────────────────────────────────────────
+function handleNotificationsRoutes($path, $method) {
+    try {
+        $user = AuthMiddleware::authenticate();
+        $userId = (int)$user['id'];
+        $pdo = Database::getConnection();
+
+        if ($path === '/notifications' && $method === 'GET') {
+            // Fetch up to 50 most recent notifications for this user
+            $stmt = $pdo->prepare("
+                SELECT id, type, title, message, link, isRead, createdAt
+                FROM notifications
+                WHERE userId = ?
+                ORDER BY createdAt DESC
+                LIMIT 50
+            ");
+            $stmt->execute([$userId]);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $formatted = array_map(function($r) {
+                return [
+                    'id'        => (int)$r['id'],
+                    'type'      => $r['type'],
+                    'title'     => $r['title'],
+                    'message'   => $r['message'],
+                    'link'      => $r['link'],
+                    'isRead'    => (bool)$r['isRead'],
+                    'createdAt' => $r['createdAt']
+                ];
+            }, $rows);
+
+            $unreadStmt = $pdo->prepare("SELECT COUNT(*) FROM notifications WHERE userId = ? AND isRead = 0");
+            $unreadStmt->execute([$userId]);
+            $unreadCount = (int)$unreadStmt->fetchColumn();
+
+            Response::json([
+                'success'       => true,
+                'notifications' => $formatted,
+                'unreadCount'   => $unreadCount
+            ]);
+
+        } elseif ($path === '/notifications/mark-read' && $method === 'POST') {
+            $input = json_decode(file_get_contents('php://input'), true);
+            $id = (int)($input['id'] ?? 0);
+            if ($id > 0) {
+                $stmt = $pdo->prepare("UPDATE notifications SET isRead = 1 WHERE id = ? AND userId = ?");
+                $stmt->execute([$id, $userId]);
+            }
+            Response::json(['success' => true]);
+
+        } elseif ($path === '/notifications/mark-all-read' && $method === 'POST') {
+            $stmt = $pdo->prepare("UPDATE notifications SET isRead = 1 WHERE userId = ?");
+            $stmt->execute([$userId]);
+            Response::json(['success' => true]);
+
+        } else {
+            Response::error('Not found', 404);
+        }
+    } catch (Exception $e) {
+        Response::error('Notification error: ' . $e->getMessage(), 500);
     }
 }
 

@@ -40,6 +40,31 @@ class UserController {
 
             $vipUntil = $userData['vipUntil'];
             $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
+
+            // If VIP has expired, send a one-time in-app bell notification
+            if (!$isVip && !empty($vipUntil)) {
+                try {
+                    $pdo = Database::getConnection();
+                    // Only insert if we haven't already notified for this expiration
+                    $nCheck = $pdo->prepare("
+                        SELECT id FROM notifications
+                        WHERE userId = ? AND type = 'vip' AND title LIKE '%Expired%'
+                        AND createdAt >= ?
+                        LIMIT 1
+                    ");
+                    $nCheck->execute([(int)$userData['id'], $vipUntil]);
+                    if (!$nCheck->fetch()) {
+                        $pdo->prepare("
+                            INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                            VALUES (?, 'vip', 'VIP Membership Expired 👑',
+                                    'Your VIP membership period has finished. You can renew your VIP badge anytime from your profile!',
+                                    '/profile', 0, NOW())
+                        ")->execute([(int)$userData['id']]);
+                    }
+                } catch (Throwable $e) {
+                    error_log('VIP expiry notification error: ' . $e->getMessage());
+                }
+            }
             
             Response::json([
                 'user' => [
@@ -1097,6 +1122,18 @@ public function getUserByUsername($username) {
                 $logStmt->execute([$user['id'], $months, $price]);
             } catch (Exception $logEx) {
                 error_log("Failed to log vip_purchases: " . $logEx->getMessage());
+            }
+
+            // In-app bell notification for VIP purchase
+            try {
+                $pdo->prepare("
+                    INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                    VALUES (?, 'vip', 'VIP Status Activated 👑',
+                            'Congratulations! Your VIP membership has been activated for {$months} month(s) until {$newVipUntil}. Enjoy your exclusive VIP badge and perks!',
+                            '/profile', 0, NOW())
+                ")->execute([(int)$user['id']]);
+            } catch (Throwable $notifEx) {
+                error_log('VIP purchase notification error: ' . $notifEx->getMessage());
             }
 
             Response::json([

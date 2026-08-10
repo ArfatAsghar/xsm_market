@@ -244,6 +244,29 @@ class AdminController {
             $update = $pdo->prepare("UPDATE users SET vipUntil = ? WHERE id = ?");
             $update->execute([$newVipUntil, $userId]);
 
+            // In-app bell notification for VIP status change
+            try {
+                if (!$isCurrentlyVip) {
+                    // VIP granted
+                    $pdo->prepare("
+                        INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                        VALUES (?, 'vip', 'VIP Status Activated 👑',
+                                'Congratulations! Your VIP membership has been activated for 30 days. Enjoy your exclusive VIP badge and perks!',
+                                '/profile', 0, NOW())
+                    ")->execute([(int)$userId]);
+                } else {
+                    // VIP removed by admin
+                    $pdo->prepare("
+                        INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                        VALUES (?, 'vip', 'VIP Status Updated 👑',
+                                'Your VIP status has been updated by an administrator. Visit your profile for more details.',
+                                '/profile', 0, NOW())
+                    ")->execute([(int)$userId]);
+                }
+            } catch (Throwable $notifEx) {
+                error_log('VIP notification insert error: ' . $notifEx->getMessage());
+            }
+
             Response::json([
                 'success' => true,
                 'message' => $message,

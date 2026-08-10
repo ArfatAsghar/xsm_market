@@ -34,13 +34,48 @@ function triggerDealNotificationAndEmail($deal_id, $stage) {
         $buyerId = (int)$deal['buyer_id'];
         $sellerId = (int)$deal['seller_id'];
 
-        $buyerEmail = $deal['buyer_email_actual'] ?: $deal['buyer_email'];
-        $sellerEmail = $deal['seller_email_actual'] ?: $deal['seller_email'];
+        $buyerEmail  = $deal['buyer_email_actual']  ?: ($deal['buyer_email']  ?? '');
+        $sellerEmail = $deal['seller_email_actual'] ?: ($deal['seller_email'] ?? '');
 
-        // 1. In-App Notifications
-        if (function_exists('createNotification')) {
-            createNotification($buyerId, 'deal', "Deal Update [$txnId]", "Stage update: $stage for $title", '/my-deals');
-            createNotification($sellerId, 'deal', "Deal Update [$txnId]", "Stage update: $stage for $title", '/seller-deals');
+        // 1. In-App Bell Notifications (direct DB insert)
+        $isCompleted = in_array($stage, ['completed', 'payment_confirmed', 'deal_completed']);
+        if ($isCompleted) {
+            $notifTitle   = "Deal Completed! \xF0\x9F\x8E\x89";
+            $notifMsgBuyer  = "Your deal for '$title' ($txnId) has been completed successfully! The payment has been confirmed.";
+            $notifMsgSeller = "Your deal for '$title' ($txnId) has been completed successfully! Payment confirmation received.";
+            $buyerLink  = '/my-deals';
+            $sellerLink = '/seller-deals';
+        } else {
+            // Human-readable stage labels
+            $stageLabels = [
+                'pending'                  => 'Deal Started',
+                'terms_agreed'             => 'Terms Agreed',
+                'payment_pending'          => 'Payment Pending',
+                'agent_access_pending'     => 'Agent Access Pending',
+                'buyer_paid_seller'        => 'Buyer Payment Confirmed',
+                'seller_confirmed_payment' => 'Seller Confirmed Payment',
+            ];
+            $stageLabel   = $stageLabels[$stage] ?? ucwords(str_replace('_', ' ', $stage));
+            $notifTitle   = "Deal Update \xF0\x9F\x94\x94";
+            $notifMsgBuyer  = "[$stageLabel] Your deal for '$title' ($txnId) has been updated.";
+            $notifMsgSeller = "[$stageLabel] Your deal for '$title' ($txnId) has been updated.";
+            $buyerLink  = '/my-deals';
+            $sellerLink = '/seller-deals';
+        }
+
+        try {
+            $insStmt = $pdo->prepare("
+                INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                VALUES (?, 'deal', ?, ?, ?, 0, NOW())
+            ");
+            if ($buyerId > 0) {
+                $insStmt->execute([$buyerId, $notifTitle, $notifMsgBuyer, $buyerLink]);
+            }
+            if ($sellerId > 0 && $sellerId !== $buyerId) {
+                $insStmt->execute([$sellerId, $notifTitle, $notifMsgSeller, $sellerLink]);
+            }
+        } catch (Throwable $ne) {
+            error_log("Deal notification insert error for deal $deal_id: " . $ne->getMessage());
         }
 
         // 2. Email Notifications

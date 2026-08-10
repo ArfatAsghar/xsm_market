@@ -381,6 +381,17 @@ class AuthController {
                         $user['isBanned'] = 0;
                         $user['banExpires'] = null;
                         $user['banReason'] = null;
+                        // In-app bell notification: temporary ban completed
+                        try {
+                            $this->db->prepare("
+                                INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                                VALUES (?, 'unban', 'Ban Period Completed 🔓',
+                                        'Your temporary suspension period has completed and account restrictions have been automatically removed. Welcome back!',
+                                        '/chat', 0, NOW())
+                            ")->execute([(int)$user['id']]);
+                        } catch (Throwable $ne) {
+                            error_log('Auto-unban notification error: ' . $ne->getMessage());
+                        }
                     }
                 }
             }
@@ -662,6 +673,17 @@ class AuthController {
                         $user['isBanned'] = 0;
                         $user['banExpires'] = null;
                         $user['banReason'] = null;
+                        // In-app bell notification: temporary ban completed
+                        try {
+                            $this->db->prepare("
+                                INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                                VALUES (?, 'unban', 'Ban Period Completed 🔓',
+                                        'Your temporary suspension period has completed and account restrictions have been automatically removed. Welcome back!',
+                                        '/chat', 0, NOW())
+                            ")->execute([(int)$user['id']]);
+                        } catch (Throwable $ne) {
+                            error_log('Auto-unban notification error: ' . $ne->getMessage());
+                        }
                     }
                 }
             }
@@ -1013,6 +1035,18 @@ class AuthController {
                     }
                 } catch (Throwable $e) {
                     error_log('Ban expired email error: ' . $e->getMessage());
+                }
+
+                // In-app bell notification: temporary ban period completed
+                try {
+                    $this->db->prepare("
+                        INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                        VALUES (?, 'unban', 'Ban Period Completed 🔓',
+                                'Your temporary suspension period has completed and account restrictions have been automatically removed. Welcome back!',
+                                '/chat', 0, NOW())
+                    ")->execute([$userId]);
+                } catch (Throwable $ne) {
+                    error_log('Auto-unban notification error: ' . $ne->getMessage());
                 }
             }
 

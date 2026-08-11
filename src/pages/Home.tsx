@@ -627,6 +627,13 @@ const Home: React.FC<HomeProps> = () => {
           </div>
         </div>
       )}
+
+      {/* Tagline Banner */}
+      <div className="w-full bg-black py-10 px-4 mt-2">
+        <p className="text-white text-xl sm:text-2xl md:text-3xl font-black text-center tracking-tight leading-snug max-w-3xl mx-auto">
+          XSM-Market is a versatile platform for secure social media account transactions
+        </p>
+      </div>
     </>
   );
 };

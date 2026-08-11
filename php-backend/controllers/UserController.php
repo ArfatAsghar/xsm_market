@@ -21,6 +21,55 @@ class UserController {
         return $stmt->rowCount() === 0;
     }
     
+    // Calculate dynamic average response time for a user based on chat reply history
+    public static function calculateAverageResponseTime($userId) {
+        try {
+            $pdo = Database::getConnection();
+            $stmt = $pdo->prepare("
+                SELECT AVG(diff_seconds) as avg_seconds, COUNT(*) as total_replies
+                FROM (
+                    SELECT TIMESTAMPDIFF(SECOND, m1.createdAt, m2.createdAt) as diff_seconds
+                    FROM messages m1
+                    JOIN messages m2 ON m1.chatId = m2.chatId 
+                        AND m2.id = (
+                            SELECT MIN(id) 
+                            FROM messages 
+                            WHERE chatId = m1.chatId 
+                              AND id > m1.id 
+                              AND senderId = ?
+                        )
+                    WHERE m1.senderId != ?
+                      AND TIMESTAMPDIFF(SECOND, m1.createdAt, m2.createdAt) >= 0
+                      AND TIMESTAMPDIFF(SECOND, m1.createdAt, m2.createdAt) <= 604800
+                ) response_times
+            ");
+            $stmt->execute([(int)$userId, (int)$userId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            if (!$row || $row['avg_seconds'] === null || (int)$row['total_replies'] === 0) {
+                return "Usually replies within a few hours";
+            }
+            
+            $avgSec = (float)$row['avg_seconds'];
+            
+            if ($avgSec < 120) {
+                return "Usually replies in a few minutes";
+            } elseif ($avgSec < 3600) {
+                $mins = max(1, (int)round($avgSec / 60));
+                return "Usually replies in {$mins} " . ($mins === 1 ? "minute" : "minutes");
+            } elseif ($avgSec < 86400) {
+                $hours = max(1, (int)round($avgSec / 3600));
+                return "Usually replies in {$hours} " . ($hours === 1 ? "hour" : "hours");
+            } else {
+                $days = max(1, (int)round($avgSec / 86400));
+                return "Usually replies in {$days} " . ($days === 1 ? "day" : "days");
+            }
+        } catch (Throwable $e) {
+            error_log('Error calculating response time: ' . $e->getMessage());
+            return "Usually replies within a few hours";
+        }
+    }
+
     // Get user profile
     public function getProfile() {
         try {
@@ -40,12 +89,12 @@ class UserController {
 
             $vipUntil = $userData['vipUntil'];
             $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
+            $avgResponseTime = self::calculateAverageResponseTime($userData['id']);
 
             // If VIP has expired, send a one-time in-app bell notification
             if (!$isVip && !empty($vipUntil)) {
                 try {
                     $pdo = Database::getConnection();
-                    // Only insert if we haven't already notified for this expiration
                     $nCheck = $pdo->prepare("
                         SELECT id FROM notifications
                         WHERE userId = ? AND type = 'vip' AND title LIKE '%Expired%'
@@ -79,7 +128,8 @@ class UserController {
                     'role' => $userData['role'] ?? 'user',
                     'createdAt' => $userData['createdAt'],
                     'vipUntil' => $vipUntil,
-                    'isVip' => $isVip
+                    'isVip' => $isVip,
+                    'averageResponseTime' => $avgResponseTime
                 ]
             ]);
         } catch (Exception $e) {
@@ -1032,6 +1082,7 @@ public function getUserByUsername($username) {
         // Compute VIP status
         $vipUntil = $userData['vipUntil'] ?? null;
         $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
+        $avgResponseTime = self::calculateAverageResponseTime($userData['id']);
 
         // Get active listing count for this user
         $adCount = 0;
@@ -1065,7 +1116,8 @@ public function getUserByUsername($username) {
             'isEmailVerified' => (bool)$userData['isEmailVerified'],
             'adCount' => $adCount,
             'vipUntil' => $vipUntil,
-            'isVip' => $isVip
+            'isVip' => $isVip,
+            'averageResponseTime' => $avgResponseTime
         ];
 
         Response::json([

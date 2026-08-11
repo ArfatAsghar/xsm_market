@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User as UserIcon, Edit, LogOut, Save, X, Camera, Pin, Crown, Settings, Eye, EyeOff } from 'lucide-react';
+import { User as UserIcon, Edit, LogOut, Save, X, Camera, Pin, Crown, Settings, Eye, EyeOff, Clock } from 'lucide-react';
 import VerificationSection from '@/components/VerificationSection';
 import UserAdList from '@/components/UserAdList';
 import DualEmailVerificationModal from '@/components/DualEmailVerificationModal';
@@ -664,9 +664,15 @@ const Profile: React.FC<ProfileProps> = () => {
                 {formatJoinDate(profile.joinDate)}
               </p>
               
-              <div className="text-xs text-green-400 flex items-center justify-center gap-1 mb-4">
+              <div className="text-xs text-green-400 flex items-center justify-center gap-1 mb-3">
                 <div className="w-2 h-2 bg-green-400 rounded-full"></div>
                 <span>Active now</span>
+              </div>
+
+              {/* Dynamic Average Response Time Badge */}
+              <div className="mb-4 inline-flex items-center gap-1.5 bg-xsm-yellow/10 border border-xsm-yellow/30 px-3 py-1.5 rounded-full text-xs font-semibold text-xsm-yellow">
+                <Clock className="w-3.5 h-3.5" />
+                <span>{(user as any)?.averageResponseTime || 'Usually replies within a few hours'}</span>
               </div>
 
               {/* VIP Membership status & CTA */}

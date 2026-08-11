@@ -745,7 +745,7 @@ const AdDetails: React.FC = () => {
                     {(() => {
                       const status = formatLastSeen(channel.seller.lastSeenAt);
                       return (
-                        <div className="flex items-center justify-center space-x-2">
+                        <div className="flex items-center justify-center space-x-2 mb-2">
                           <div className={`w-2.5 h-2.5 rounded-full ${status.status === 'online' ? 'bg-green-500' : 'bg-gray-500'}`}></div>
                           <span className={`text-sm ${status.status === 'online' ? 'text-green-400' : 'text-gray-400'}`}>
                             {status.text}
@@ -753,6 +753,12 @@ const AdDetails: React.FC = () => {
                         </div>
                       );
                     })()}
+
+                    {/* Seller Average Response Time */}
+                    <div className="inline-flex items-center gap-1.5 bg-xsm-yellow/10 border border-xsm-yellow/30 px-3 py-1.5 rounded-full text-xs font-semibold text-xsm-yellow mt-1">
+                      <Clock className="w-3.5 h-3.5" />
+                      <span>{channel.seller.averageResponseTime || 'Usually replies within a few hours'}</span>
+                    </div>
                   </div>
                 </div>
 

@@ -123,9 +123,10 @@ class Ad {
         if ($ad) {
             self::formatJsonFields($ad);
             
-            // Compute seller isVip
+            // Compute seller isVip and averageResponseTime
             $sellerVipUntil = $ad['seller_vipUntil'];
             $sellerIsVip = !empty($sellerVipUntil) && strtotime($sellerVipUntil) > time();
+            $sellerAvgResponseTime = UserController::calculateAverageResponseTime($ad['seller_id']);
 
             // Format seller data
             $ad['seller'] = [
@@ -135,7 +136,8 @@ class Ad {
                 'profilePicture' => $ad['seller_profilePicture'],
                 'lastSeenAt' => $ad['seller_lastSeenAt'],
                 'isVip' => $sellerIsVip,
-                'vipUntil' => $sellerVipUntil
+                'vipUntil' => $sellerVipUntil,
+                'averageResponseTime' => $sellerAvgResponseTime
             ];
             $ad['seller_isVip'] = $sellerIsVip;
             $ad['isVip'] = $sellerIsVip;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { User as UserIcon, Edit, Calendar, MessageCircle, Crown } from 'lucide-react';
+import { User as UserIcon, Edit, Calendar, MessageCircle, Crown, Clock } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import { getPublicProfile, API_URL } from '@/services/auth';
@@ -18,6 +18,7 @@ interface PublicUser {
   isEmailVerified?: boolean;
   isVip?: boolean;
   vipUntil?: string | null;
+  averageResponseTime?: string;
 }
 
 interface PreviousListing {
@@ -358,6 +359,15 @@ const PublicProfile: React.FC = () => {
                   <span className="text-xsm-light-gray">Active listings</span>
                   <span className="text-xsm-yellow font-bold">
                     {profileUser.adCount || 0}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-xsm-medium-gray/20">
+                  <span className="text-xsm-light-gray text-xs flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-xsm-yellow" /> Response time
+                  </span>
+                  <span className="text-xsm-yellow text-xs font-semibold bg-xsm-yellow/10 px-2.5 py-1 rounded-full border border-xsm-yellow/30">
+                    {profileUser.averageResponseTime || 'Usually replies within a few hours'}
                   </span>
                 </div>
               </div>

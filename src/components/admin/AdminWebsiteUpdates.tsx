@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Plus, Trash2, Send } from 'lucide-react';
+import { Bell, Plus, Trash2, Edit2, Send, Save, X } from 'lucide-react';
 import { useNotifications } from '@/context/NotificationContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'https://xsmmarket.com/api';
@@ -17,6 +17,13 @@ const AdminWebsiteUpdates: React.FC = () => {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [publishing, setPublishing] = useState(false);
+
+  // Edit state
+  const [editingItem, setEditingItem] = useState<UpdateItem | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const { showSuccess, showError } = useNotifications();
 
   useEffect(() => {
@@ -72,6 +79,45 @@ const AdminWebsiteUpdates: React.FC = () => {
     }
   };
 
+  const handleEditOpen = (item: UpdateItem) => {
+    setEditingItem(item);
+    setEditTitle(item.title);
+    setEditDescription(item.description);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingItem) return;
+    if (!editTitle.trim() || !editDescription.trim()) {
+      showError('Required', 'Title and description are required.');
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/updates/${editingItem.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ title: editTitle.trim(), description: editDescription.trim() })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showSuccess('Announcement Updated! ✏️', 'Changes saved successfully.');
+        setUpdates(prev => prev.map(u => u.id === editingItem.id ? { ...u, title: editTitle.trim(), description: editDescription.trim() } : u));
+        setEditingItem(null);
+      } else {
+        showError('Update Failed', data.message || 'Failed to update announcement');
+      }
+    } catch (err: any) {
+      showError('Error', err.message || 'Failed to save changes');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const handleDelete = async (id: number) => {
     if (!window.confirm('Delete this website update announcement?')) return;
 
@@ -84,8 +130,8 @@ const AdminWebsiteUpdates: React.FC = () => {
         }
       });
       const data = await res.json();
-      if (data.success) {
-        showSuccess('Deleted', 'Announcement removed successfully.');
+      if (res.ok && data.success) {
+        showSuccess('Deleted 🗑️', 'Announcement removed successfully.');
         setUpdates(prev => prev.filter(u => u.id !== id));
       } else {
         showError('Delete Failed', data.message || 'Failed to delete update');
@@ -175,18 +221,84 @@ const AdminWebsiteUpdates: React.FC = () => {
                   </div>
                   <p className="text-sm text-gray-300 leading-relaxed">{item.description}</p>
                 </div>
-                <button
-                  onClick={() => handleDelete(item.id)}
-                  className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
-                  title="Delete Announcement"
-                >
-                  <Trash2 className="w-5 h-5" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleEditOpen(item)}
+                    className="p-2 text-gray-400 hover:text-xsm-yellow hover:bg-xsm-yellow/10 rounded-lg transition-colors"
+                    title="Edit Announcement"
+                  >
+                    <Edit2 className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(item.id)}
+                    className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                    title="Delete Announcement"
+                  >
+                    <Trash2 className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Edit Announcement Modal */}
+      {editingItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-xsm-dark-gray w-full max-w-lg rounded-xl border border-xsm-yellow/40 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-xsm-medium-gray pb-3">
+              <h3 className="text-lg font-bold text-xsm-yellow flex items-center gap-2">
+                <Edit2 className="w-5 h-5" /> Edit Announcement
+              </h3>
+              <button
+                onClick={() => setEditingItem(null)}
+                className="text-gray-400 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-xsm-light-gray mb-1">Title</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={e => setEditTitle(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-xsm-black text-white rounded-lg border border-xsm-medium-gray focus:outline-none focus:border-xsm-yellow"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-xsm-light-gray mb-1">Details</label>
+                <textarea
+                  rows={4}
+                  value={editDescription}
+                  onChange={e => setEditDescription(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-xsm-black text-white rounded-lg border border-xsm-medium-gray focus:outline-none focus:border-xsm-yellow"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setEditingItem(null)}
+                className="px-4 py-2 text-sm font-semibold text-gray-300 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={savingEdit}
+                className="flex items-center gap-2 px-5 py-2 bg-xsm-yellow text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50"
+              >
+                <Save className="w-4 h-4" />
+                {savingEdit ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

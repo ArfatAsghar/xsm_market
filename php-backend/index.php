@@ -281,6 +281,15 @@ try {
 
 function handleUpdatesRoutes($path, $method) {
     $pdo = Database::getConnection();
+
+    // Extract announcement ID if present in path (e.g. /updates/12) or query params
+    $updateId = null;
+    if (preg_match('/^\/updates\/(\d+)$/', $path, $matches)) {
+        $updateId = (int)$matches[1];
+    } elseif (isset($_GET['id'])) {
+        $updateId = (int)$_GET['id'];
+    }
+
     if ($method === 'GET') {
         $stmt = $pdo->query("SELECT * FROM website_updates ORDER BY created_at DESC");
         $updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -313,6 +322,33 @@ function handleUpdatesRoutes($path, $method) {
         }
 
         Response::success(['message' => 'Website update published successfully', 'id' => $id]);
+    } elseif ($method === 'PUT') {
+        $user = AuthMiddleware::requireAdmin();
+        if (!$updateId) {
+            Response::error('Announcement ID is required for update', 400);
+            return;
+        }
+        $input = json_decode(file_get_contents('php://input'), true);
+        $title = trim($input['title'] ?? '');
+        $description = trim($input['description'] ?? '');
+        if (!$title || !$description) {
+            Response::error('Title and description are required', 400);
+            return;
+        }
+        $stmt = $pdo->prepare("UPDATE website_updates SET title = ?, description = ? WHERE id = ?");
+        $stmt->execute([$title, $description, $updateId]);
+
+        Response::success(['message' => 'Announcement updated successfully']);
+    } elseif ($method === 'DELETE') {
+        $user = AuthMiddleware::requireAdmin();
+        if (!$updateId) {
+            Response::error('Announcement ID is required for deletion', 400);
+            return;
+        }
+        $stmt = $pdo->prepare("DELETE FROM website_updates WHERE id = ?");
+        $stmt->execute([$updateId]);
+
+        Response::success(['message' => 'Announcement deleted successfully']);
     } else {
         Response::error('Method not allowed', 405);
     }

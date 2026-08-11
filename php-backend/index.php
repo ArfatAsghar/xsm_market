@@ -97,16 +97,45 @@ ini_set('display_errors', '0');  // MUST be 0: HTML errors corrupt JSON API resp
 ini_set('log_errors', '1');     // Log to error_log only
 
 
-// Parse the request
-$request_uri = $_SERVER['REQUEST_URI'] ?? '/';
-$path = parse_url($request_uri, PHP_URL_PATH) ?? '/';
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+// Robust request path detector — handles Apache rewrites, REDIRECT_URL, PATH_INFO & reverse proxies
+function getNormalizedPath() {
+    $candidates = [
+        $_SERVER['HTTP_X_ORIGINAL_URL'] ?? null,
+        $_SERVER['REDIRECT_URL'] ?? null,
+        $_SERVER['REQUEST_URI'] ?? null,
+        $_SERVER['PATH_INFO'] ?? null,
+    ];
 
-// Strip all leading folder/routing prefixes (/php-backend, /index.php, /api)
-$path = preg_replace('/^\/(php-backend|index\.php|api)+/i', '', $path);
-// Perform a second pass in case of nested prefixes like /php-backend/api or /api/php-backend
-$path = preg_replace('/^\/(php-backend|index\.php|api)+/i', '', $path);
-if (empty($path)) $path = '/';
+    $rawUri = '/';
+    foreach ($candidates as $cand) {
+        if (!empty($cand)) {
+            $parsed = parse_url($cand, PHP_URL_PATH);
+            // Skip if it's pointing to php-backend/index.php itself
+            if ($parsed && $parsed !== '/php-backend/index.php' && $parsed !== '/index.php') {
+                $rawUri = $parsed;
+                break;
+            }
+        }
+    }
+
+    if ($rawUri === '/' || $rawUri === '/php-backend/index.php' || $rawUri === '/index.php') {
+        $rawUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
+    }
+
+    // Strip all leading folder/routing prefixes (/php-backend, /index.php, /api)
+    $path = preg_replace('/^\/(php-backend|index\.php|api)+/i', '', $rawUri);
+    $path = preg_replace('/^\/(php-backend|index\.php|api)+/i', '', $path);
+
+    if (empty($path) || substr($path, 0, 1) !== '/') {
+        $path = '/' . $path;
+    }
+
+    return $path;
+}
+
+$path = getNormalizedPath();
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$request_uri = $_SERVER['REQUEST_URI'] ?? '/';
 
 // Debug logging
 error_log("Received request: $method $request_uri");

@@ -1,12 +1,13 @@
 RewriteEngine On
+RewriteBase /
 
 # Serve real files and directories directly (assets, images, favicons etc.)
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Route /api/* requests to api/index.php
-RewriteRule ^api/ api/index.php [QSA,L]
+# Route /api and /api/* requests to php-backend/index.php
+RewriteRule ^api/?(.*)$ php-backend/index.php [QSA,L]
 
 # React SPA - everything else loads index.html
 RewriteRule ^ index.html [L]

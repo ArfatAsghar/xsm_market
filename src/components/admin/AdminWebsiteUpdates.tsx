@@ -35,8 +35,11 @@ const AdminWebsiteUpdates: React.FC = () => {
       setLoading(true);
       const res = await fetch(`${API_URL}/updates`);
       const data = await res.json();
-      if (data.success && Array.isArray(data.updates)) {
+      // Response::success() returns raw data without a `success` field
+      if (Array.isArray(data.updates)) {
         setUpdates(data.updates);
+      } else if (Array.isArray(data)) {
+        setUpdates(data);
       }
     } catch (err: any) {
       console.error('Failed to fetch updates:', err);
@@ -114,7 +117,7 @@ const AdminWebsiteUpdates: React.FC = () => {
         body: JSON.stringify({ title: editTitle.trim(), description: editDescription.trim() })
       });
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok && (data.message?.includes('success') || data.message?.includes('updated') || !data.error)) {
         showSuccess('Announcement Updated! ✏️', 'Changes saved successfully.');
         setUpdates(prev => prev.map(u => u.id === editingItem.id ? { ...u, title: editTitle.trim(), description: editDescription.trim() } : u));
         setEditingItem(null);
@@ -141,7 +144,7 @@ const AdminWebsiteUpdates: React.FC = () => {
         }
       });
       const data = await res.json();
-      if (res.ok && data.success) {
+      if (res.ok && (data.message?.includes('success') || data.message?.includes('deleted') || !data.error)) {
         showSuccess('Deleted 🗑️', 'Announcement removed successfully.');
         setUpdates(prev => prev.filter(u => u.id !== id));
         notifyUpdatesChanged();

@@ -82,19 +82,37 @@ const Home: React.FC<HomeProps> = () => {
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
 
   useEffect(() => {
-    // For logged-in users: only show updates posted after their registration date
-    const sinceParam = user?.createdAt ? `?since=${encodeURIComponent(user.createdAt)}` : '';
-    fetch(`${API_URL}/updates${sinceParam}`)
-      .then(res => res.json())
-      .then(data => {
-        if (Array.isArray(data.updates)) {
-          setUpdates(data.updates);
-        } else if (Array.isArray(data)) {
-          setUpdates(data);
-        }
-      })
-      .catch(err => console.warn('Failed to fetch website updates:', err));
-  }, [user?.createdAt]);
+    const fetchUpdates = () => {
+      fetch(`${API_URL}/updates`)
+        .then(res => res.json())
+        .then(data => {
+          if (Array.isArray(data.updates)) {
+            setUpdates(data.updates);
+          } else if (Array.isArray(data)) {
+            setUpdates(data);
+          }
+        })
+        .catch(err => console.warn('Failed to fetch website updates:', err));
+    };
+
+    fetchUpdates();
+    const interval = setInterval(fetchUpdates, 6000);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('xsm_updates');
+      bc.onmessage = () => fetchUpdates();
+    } catch {}
+
+    const handleCustomEvent = () => fetchUpdates();
+    window.addEventListener('xsm_updates_changed', handleCustomEvent);
+
+    return () => {
+      clearInterval(interval);
+      if (bc) bc.close();
+      window.removeEventListener('xsm_updates_changed', handleCustomEvent);
+    };
+  }, []);
   
   // Category and type options
   const categories = [

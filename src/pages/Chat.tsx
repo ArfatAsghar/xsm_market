@@ -347,25 +347,45 @@ const Chat: React.FC = () => {
     }
   };
 
-  // Fetch announcements/website updates for Announcements channel
+  // Fetch announcements/website updates for Announcements channel with real-time sync
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (!token) return;
-    fetch(`${API_URL}/updates`, { headers: { Authorization: `Bearer ${token}` } })
-      .then(r => r.json())
-      .then(data => {
-        let list: Array<{id:number;title:string;description:string;created_at:string}> = [];
-        if (Array.isArray(data.updates)) list = data.updates;
-        else if (Array.isArray(data)) list = data;
-        setAnnouncements(list);
-        // Check if there are announcements newer than last seen
-        if (list.length > 0) {
-          const latestId = Math.max(...list.map(a => a.id));
-          const lastSeen = lastSeenAnnouncementIdRef.current;
-          setAnnouncementsUnread(latestId > lastSeen);
-        }
-      })
-      .catch(() => {});
+    const fetchAnnouncements = () => {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      fetch(`${API_URL}/updates`, { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json())
+        .then(data => {
+          let list: Array<{id:number;title:string;description:string;created_at:string}> = [];
+          if (Array.isArray(data.updates)) list = data.updates;
+          else if (Array.isArray(data)) list = data;
+          setAnnouncements(list);
+          // Check if there are announcements newer than last seen
+          if (list.length > 0) {
+            const latestId = Math.max(...list.map(a => a.id));
+            const lastSeen = lastSeenAnnouncementIdRef.current;
+            setAnnouncementsUnread(latestId > lastSeen);
+          }
+        })
+        .catch(() => {});
+    };
+
+    fetchAnnouncements();
+    const interval = setInterval(fetchAnnouncements, 6000);
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('xsm_updates');
+      bc.onmessage = () => fetchAnnouncements();
+    } catch {}
+
+    const handleCustomEvent = () => fetchAnnouncements();
+    window.addEventListener('xsm_updates_changed', handleCustomEvent);
+
+    return () => {
+      clearInterval(interval);
+      if (bc) bc.close();
+      window.removeEventListener('xsm_updates_changed', handleCustomEvent);
+    };
   }, []);
 
   // Fetch chats when component mounts

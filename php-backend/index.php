@@ -293,6 +293,17 @@ function handleUpdatesRoutes($path, $method) {
     if ($method === 'GET') {
         $stmt = $pdo->query("SELECT * FROM website_updates ORDER BY created_at DESC");
         $updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        if (empty($updates)) {
+            try {
+                $pdo->exec("INSERT INTO website_updates (title, description) VALUES
+                    ('🚀 Welcome to XSM Market', 'Experience secure social media account trading with 100% verified escrow protection.'),
+                    ('⚡ Real-Time Notifications Active', 'Receive instant deal stage updates, in-app audio alerts, and direct message notifications.')");
+                $stmt = $pdo->query("SELECT * FROM website_updates ORDER BY created_at DESC");
+                $updates = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Throwable $e) {
+                error_log('Auto-seed updates error: ' . $e->getMessage());
+            }
+        }
         Response::success(['updates' => $updates]);
     } elseif ($method === 'POST') {
         $user = AuthMiddleware::requireAdmin();

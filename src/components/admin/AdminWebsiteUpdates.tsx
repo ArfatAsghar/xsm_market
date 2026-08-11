@@ -45,6 +45,15 @@ const AdminWebsiteUpdates: React.FC = () => {
     }
   };
 
+  const notifyUpdatesChanged = () => {
+    try {
+      const bc = new BroadcastChannel('xsm_updates');
+      bc.postMessage({ type: 'UPDATES_CHANGED' });
+      bc.close();
+    } catch {}
+    window.dispatchEvent(new CustomEvent('xsm_updates_changed'));
+  };
+
   const handlePublish = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !description.trim()) {
@@ -69,6 +78,7 @@ const AdminWebsiteUpdates: React.FC = () => {
         setTitle('');
         setDescription('');
         fetchUpdates();
+        notifyUpdatesChanged();
       } else {
         showError('Publish Failed', data.message || 'Failed to publish update');
       }
@@ -108,6 +118,7 @@ const AdminWebsiteUpdates: React.FC = () => {
         showSuccess('Announcement Updated! ✏️', 'Changes saved successfully.');
         setUpdates(prev => prev.map(u => u.id === editingItem.id ? { ...u, title: editTitle.trim(), description: editDescription.trim() } : u));
         setEditingItem(null);
+        notifyUpdatesChanged();
       } else {
         showError('Update Failed', data.message || 'Failed to update announcement');
       }
@@ -133,6 +144,7 @@ const AdminWebsiteUpdates: React.FC = () => {
       if (res.ok && data.success) {
         showSuccess('Deleted 🗑️', 'Announcement removed successfully.');
         setUpdates(prev => prev.filter(u => u.id !== id));
+        notifyUpdatesChanged();
       } else {
         showError('Delete Failed', data.message || 'Failed to delete update');
       }

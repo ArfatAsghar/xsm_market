@@ -241,11 +241,26 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
     setActiveInstructionTab('youtube');
   };
 
+  const getModalWidthClass = () => {
+    switch (step) {
+      case 'fee-selection':
+        return 'max-w-md'; // 1st popup: reduced compact width
+      case 'payment-selection':
+        return 'max-w-2xl'; // 2nd popup: wider for payment grid & tabs
+      case 'email-confirmation':
+        return 'max-w-md'; // 3rd popup: reduced compact width
+      case 'terms-conditions':
+        return 'max-w-lg'; // 4th popup: compact width for terms
+      default:
+        return 'max-w-md';
+    }
+  };
+
   if (!isOpen && !successData) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-2">
-      <div className="bg-xsm-dark-gray rounded-xl max-w-3xl w-full flex flex-col" style={{ maxHeight: '95vh' }}>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-3">
+      <div className={`bg-xsm-dark-gray rounded-xl ${getModalWidthClass()} w-full flex flex-col transition-all duration-300 shadow-2xl border border-xsm-medium-gray/40`} style={{ maxHeight: '95vh' }}>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2.5 border-b border-xsm-gray flex-shrink-0">
           <h2 className="text-base font-bold text-white">Create a Deal</h2>
@@ -260,7 +275,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
           </button>
         </div>
 
-        <div className="p-3 overflow-y-auto flex-1">
+        <div className="p-3.5 overflow-y-auto flex-1 custom-scrollbar">
           {step === 'fee-selection' && (
             <>
               <div className="flex items-center justify-between mb-2">

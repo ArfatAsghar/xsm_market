@@ -106,3 +106,36 @@
   70%  { opacity: 1; transform: scale(1.05); }
   100% { opacity: 1; transform: scale(1); }
 }
+
+/* Custom Scrollbar Website Theme (Black & Yellow) */
+.custom-scrollbar::-webkit-scrollbar,
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track,
+::-webkit-scrollbar-track {
+  background: #121212;
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb {
+  background: #FFD700;
+  border-radius: 8px;
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover {
+  background: #E6C200;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+}
+
+/* Firefox scrollbar support */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #FFD700 #121212;
+}
+

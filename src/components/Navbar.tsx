@@ -99,8 +99,8 @@ const Navbar: React.FC = () => {
 
   // Nav link with animated underline
   const NavLink = ({
-    path, icon, label, badge, requireAuth = false
-  }: { path: string; icon: React.ReactNode; label: string; badge?: number; requireAuth?: boolean }) => {
+    path, icon, label, badge, requireAuth = false, isBigger = false
+  }: { path: string; icon: React.ReactNode; label: string; badge?: number; requireAuth?: boolean; isBigger?: boolean }) => {
     const active = isActive(path);
     return (
       <button
@@ -108,12 +108,18 @@ const Navbar: React.FC = () => {
           if (requireAuth && !isLoggedIn) { setShowAuthWidget(true); return; }
           navigateTo(path);
         }}
-        className={`relative group flex items-center gap-2 px-1 py-1 text-[13.5px] font-semibold tracking-wide transition-colors duration-200 ${
+        className={`relative group flex items-center gap-2 px-1 py-1 tracking-wide transition-colors duration-200 ${
+          isBigger 
+            ? 'text-[15.5px] font-bold' 
+            : 'text-[13.5px] font-semibold'
+        } ${
           active ? 'text-xsm-yellow' : 'text-gray-300 hover:text-white'
         }`}
         style={{ background: 'none', border: 'none' }}
       >
-        <span className={`text-base transition-transform duration-200 group-hover:scale-110 ${active ? 'text-xsm-yellow' : 'text-gray-400 group-hover:text-xsm-yellow'}`}>
+        <span className={`transition-transform duration-200 group-hover:scale-110 ${
+          isBigger ? 'text-[18px]' : 'text-base'
+        } ${active ? 'text-xsm-yellow' : 'text-gray-400 group-hover:text-xsm-yellow'}`}>
           {icon}
         </span>
         <span>{label}</span>
@@ -124,7 +130,7 @@ const Navbar: React.FC = () => {
         ) : null}
         {/* Animated underline */}
         <span
-          className={`absolute bottom-[-4px] left-0 h-[2px] bg-gradient-to-r from-xsm-yellow via-yellow-400 to-xsm-yellow rounded-full transition-all duration-300 ${
+          className={`absolute bottom-[-4px] left-0 h-[2.5px] bg-gradient-to-r from-xsm-yellow via-yellow-400 to-xsm-yellow rounded-full transition-all duration-300 ${
             active ? 'w-full opacity-100' : 'w-0 opacity-0 group-hover:w-full group-hover:opacity-100'
           }`}
         />
@@ -144,7 +150,6 @@ const Navbar: React.FC = () => {
           background: 'linear-gradient(135deg, rgba(10,10,10,0.98) 0%, rgba(18,18,18,0.98) 50%, rgba(10,10,10,0.98) 100%)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          boxShadow: '0 1px 40px rgba(0,0,0,0.6), 0 0 0 0.5px rgba(255,208,0,0.08), inset 0 1px 0 rgba(255,255,255,0.03)',
         }}
       >
         {/* Subtle yellow top accent line */}
@@ -154,29 +159,31 @@ const Navbar: React.FC = () => {
         />
 
         <div className="max-w-[1280px] mx-auto px-5 sm:px-8">
-          <div className="flex items-center justify-between h-[64px]">
+          <div className="grid grid-cols-2 md:grid-cols-3 items-center h-[64px]">
 
             {/* ── LEFT: Logo ── */}
-            <button
-              onClick={() => navigateTo('/')}
-              className="flex items-center gap-3 flex-shrink-0 group focus:outline-none"
-            >
-              <div className="relative">
-                <div
-                  className="absolute -inset-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
-                  style={{ background: 'radial-gradient(circle, rgba(255,208,0,0.18) 0%, transparent 70%)' }}
-                />
-                <img
-                  src="/images/logo.png"
-                  alt="XSM Market"
-                  className="h-9 object-contain relative z-10 transition-all duration-300"
-                  style={{ filter: 'drop-shadow(0 0 6px rgba(255,208,0,0.35))' }}
-                />
-              </div>
-            </button>
+            <div className="flex items-center justify-start">
+              <button
+                onClick={() => navigateTo('/')}
+                className="flex items-center gap-3 flex-shrink-0 group focus:outline-none"
+              >
+                <div className="relative">
+                  <div
+                    className="absolute -inset-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                    style={{ background: 'radial-gradient(circle, rgba(255,208,0,0.18) 0%, transparent 70%)' }}
+                  />
+                  <img
+                    src="/images/logo.png"
+                    alt="XSM Market"
+                    className="h-9 object-contain relative z-10 transition-all duration-300"
+                    style={{ filter: 'drop-shadow(0 0 6px rgba(255,208,0,0.35))' }}
+                  />
+                </div>
+              </button>
+            </div>
 
-            {/* ── CENTER: Desktop Nav Links ── */}
-            <div className="hidden md:flex items-center gap-7">
+            {/* ── CENTER: Desktop Nav Links (100% Centered via Grid) ── */}
+            <div className="hidden md:flex items-center justify-center gap-9 lg:gap-11">
               {/* Sell (most left) */}
               <button
                 onClick={() => {
@@ -192,15 +199,15 @@ const Navbar: React.FC = () => {
                 <span>Sell</span>
               </button>
 
-              {/* Marketplace (middle) */}
-              <NavLink path="/" icon={<FaStore />} label="Marketplace" />
+              {/* Marketplace (middle - bigger & bold) */}
+              <NavLink path="/" icon={<FaStore />} label="Marketplace" isBigger />
 
               {/* Inbox (most right) */}
               <NavLink path="/chat" icon={<FaInbox />} label="Inbox" badge={unreadCount} requireAuth />
             </div>
 
             {/* ── RIGHT: Actions ── */}
-            <div className="hidden md:flex items-center gap-2">
+            <div className="flex items-center justify-end gap-2">
 
               {/* Notification Bell */}
               {isLoggedIn && (

@@ -511,7 +511,11 @@ class AuthController {
                     'role' => $user['role'] ?? 'user',
                     'authProvider' => $user['authProvider'],
                     'vipUntil' => $user['vipUntil'] ?? null,
-                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time()
+                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time(),
+                    'isBanned' => (bool)($user['isBanned'] ?? false),
+                    'banReason' => $user['banReason'] ?? null,
+                    'banExpires' => $user['banExpires'] ?? null,
+                    'bannedAt' => $user['bannedAt'] ?? null
                 ]
             ]);
             
@@ -983,7 +987,11 @@ class AuthController {
                     'isEmailVerified' => (bool)$user['isEmailVerified'],
                     'authProvider' => $user['authProvider'],
                     'vipUntil' => $user['vipUntil'] ?? null,
-                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time()
+                    'isVip' => !empty($user['vipUntil']) && strtotime($user['vipUntil']) > time(),
+                    'isBanned' => (bool)($user['isBanned'] ?? false),
+                    'banReason' => $user['banReason'] ?? null,
+                    'banExpires' => $user['banExpires'] ?? null,
+                    'bannedAt' => $user['bannedAt'] ?? null
                 ]
             ]);
             

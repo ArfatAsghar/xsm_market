@@ -21,6 +21,10 @@ interface User {
   isEmailVerified?: boolean;
   isAdmin?: boolean;
   role?: 'admin' | 'manager' | 'viewer' | 'user';
+  isBanned?: boolean | number;
+  banReason?: string | null;
+  banExpires?: string | null;
+  bannedAt?: string | null;
 }
 
 // Token management interface

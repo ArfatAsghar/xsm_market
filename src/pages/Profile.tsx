@@ -196,8 +196,15 @@ const Profile: React.FC<ProfileProps> = () => {
           const freshProfile = await getProfile();
           console.log('✅ Fresh profile data:', freshProfile);
           
-          // Update the user context with fresh data
-          setUser({
+          setUser(prev => prev ? {
+            ...prev,
+            ...freshProfile,
+            id: String(freshProfile.id),
+            isBanned: freshProfile.isBanned ?? prev?.isBanned,
+            banReason: freshProfile.banReason ?? prev?.banReason,
+            banExpires: freshProfile.banExpires ?? prev?.banExpires,
+            bannedAt: freshProfile.bannedAt ?? prev?.bannedAt,
+          } : {
             ...freshProfile,
             id: String(freshProfile.id),
           });

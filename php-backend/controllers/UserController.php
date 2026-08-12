@@ -71,12 +71,13 @@ class UserController {
     }
 
     // Get user profile
+    // Get user profile
     public function getProfile() {
         try {
             $user = AuthMiddleware::authenticate();
             
             $stmt = Database::getConnection()->prepare("
-                SELECT id, username, displayName, email, profilePicture, description, isEmailVerified, authProvider, role, createdAt, vipUntil
+                SELECT id, username, displayName, email, profilePicture, description, isEmailVerified, authProvider, role, createdAt, vipUntil, isBanned, banReason, banExpires, bannedAt
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
@@ -129,7 +130,11 @@ class UserController {
                     'createdAt' => $userData['createdAt'],
                     'vipUntil' => $vipUntil,
                     'isVip' => $isVip,
-                    'averageResponseTime' => $avgResponseTime
+                    'averageResponseTime' => $avgResponseTime,
+                    'isBanned' => (bool)($userData['isBanned'] ?? false),
+                    'banReason' => $userData['banReason'] ?? null,
+                    'banExpires' => $userData['banExpires'] ?? null,
+                    'bannedAt' => $userData['bannedAt'] ?? null
                 ]
             ]);
         } catch (Exception $e) {
@@ -182,7 +187,7 @@ class UserController {
             
             // Get updated user data
             $stmt = $pdo->prepare("
-                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil 
+                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil, isBanned, banReason, banExpires, bannedAt
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
@@ -204,7 +209,11 @@ class UserController {
                     'authProvider' => $userData['authProvider'],
                     'role' => $userData['role'] ?? 'user',
                     'vipUntil' => $vipUntil,
-                    'isVip' => $isVip
+                    'isVip' => $isVip,
+                    'isBanned' => (bool)($userData['isBanned'] ?? false),
+                    'banReason' => $userData['banReason'] ?? null,
+                    'banExpires' => $userData['banExpires'] ?? null,
+                    'bannedAt' => $userData['bannedAt'] ?? null
                 ]
             ]);
         } catch (Exception $e) {
@@ -230,7 +239,7 @@ class UserController {
             
             // Get updated user data
             $stmt = $pdo->prepare("
-                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil 
+                SELECT id, username, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil, isBanned, banReason, banExpires, bannedAt
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
@@ -252,7 +261,11 @@ class UserController {
                     'authProvider' => $userData['authProvider'],
                     'role' => $userData['role'] ?? 'user',
                     'vipUntil' => $vipUntil,
-                    'isVip' => $isVip
+                    'isVip' => $isVip,
+                    'isBanned' => (bool)($userData['isBanned'] ?? false),
+                    'banReason' => $userData['banReason'] ?? null,
+                    'banExpires' => $userData['banExpires'] ?? null,
+                    'bannedAt' => $userData['bannedAt'] ?? null
                 ]
             ]);
         } catch (Exception $e) {
@@ -338,7 +351,7 @@ class UserController {
             
             // Get updated user data
             $stmt = $pdo->prepare("
-                SELECT id, username, displayName, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil 
+                SELECT id, username, displayName, email, profilePicture, description, isEmailVerified, authProvider, role, vipUntil, isBanned, banReason, banExpires, bannedAt
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
@@ -359,7 +372,11 @@ class UserController {
                     'authProvider' => $userData['authProvider'],
                     'role' => $userData['role'] ?? 'user',
                     'vipUntil' => $vipUntil,
-                    'isVip' => $isVip
+                    'isVip' => $isVip,
+                    'isBanned' => (bool)($userData['isBanned'] ?? false),
+                    'banReason' => $userData['banReason'] ?? null,
+                    'banExpires' => $userData['banExpires'] ?? null,
+                    'bannedAt' => $userData['bannedAt'] ?? null
                 ]
             ]);
         } catch (Exception $e) {

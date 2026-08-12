@@ -1064,9 +1064,7 @@ const Chat: React.FC = () => {
                         <h4 className="text-xsm-yellow font-bold text-sm">Announcements Channel</h4>
                         {announcementsUnread ? (
                           <span className="text-[10px] bg-amber-500 text-black font-black px-2 py-0.5 rounded-full shadow animate-pulse">NEW</span>
-                        ) : (
-                          <span className="text-[10px] bg-xsm-medium-gray text-gray-300 font-bold px-2 py-0.5 rounded-full">{announcements.length || 2}</span>
-                        )}
+                        ) : null}
                       </div>
                       <p className="text-xs text-gray-400 truncate">Official XSM Market updates &amp; news</p>
                     </div>

@@ -28,7 +28,7 @@ const Navbar: React.FC = () => {
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [showVipModal, setShowVipModal] = useState(false);
   const { isLoggedIn, setIsLoggedIn, user, setUser } = useAuth();
-  const { inAppNotifications, unreadInAppCount, markRead, markAllRead } = useNotifications();
+  const { inAppNotifications, unreadInAppCount, unreadBellCount, markRead, markAllRead } = useNotifications();
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
@@ -219,7 +219,7 @@ const Navbar: React.FC = () => {
                     title="Notifications"
                   >
                     <FaBell className="text-[16px]" />
-                    {unreadInAppCount > 0 && (
+                    {unreadBellCount > 0 && (
                       <span className="absolute top-[7px] right-[7px] w-[8px] h-[8px] bg-red-500 rounded-full border-[1.5px] border-[#0a0a0a] animate-pulse" />
                     )}
                   </button>
@@ -238,9 +238,9 @@ const Navbar: React.FC = () => {
                         <div className="flex items-center gap-2">
                           <FaBell className="text-xsm-yellow text-sm" />
                           <span className="text-sm font-bold text-white tracking-wide">Notifications</span>
-                          {unreadInAppCount > 0 && (
+                          {unreadBellCount > 0 && (
                             <span className="bg-xsm-yellow text-black text-[10px] font-extrabold px-1.5 py-0.5 rounded-full">
-                              {unreadInAppCount}
+                              {unreadBellCount}
                             </span>
                           )}
                         </div>
@@ -274,21 +274,21 @@ const Navbar: React.FC = () => {
                         </div>
                       )}
 
-                      {/* Items */}
+                      {/* Items — only ban/unban/deal, no messages */}
                       <div className="max-h-72 overflow-y-auto">
-                        {inAppNotifications.length === 0 ? (
+                        {inAppNotifications.filter(n => ['ban', 'unban', 'deal'].includes(n.type)).length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-10 gap-2">
                             <FaBell className="text-3xl text-gray-700" />
                             <p className="text-gray-500 text-sm">You're all caught up!</p>
                           </div>
                         ) : (
-                          inAppNotifications.map(n => (
+                          inAppNotifications.filter(n => ['ban', 'unban', 'deal'].includes(n.type)).map(n => (
                             <button
                               key={n.id}
                               onClick={() => {
                                 markRead(n.id);
                                 if (n.link) navigateTo(n.link);
-                                else navigateTo('/chat');
+                                else navigateTo('/notifications');
                                 setShowNotifications(false);
                               }}
                               className={`flex items-start gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-white/[0.04] ${!n.isRead ? 'bg-xsm-yellow/[0.03]' : ''}`}
@@ -303,12 +303,8 @@ const Navbar: React.FC = () => {
                                   <FaBan className="text-xs text-red-400" />
                                 ) : n.type === 'unban' ? (
                                   <FaCheckCircle className="text-xs text-emerald-400" />
-                                ) : n.type === 'deal' ? (
-                                  <FaTag className={`text-xs ${!n.isRead ? 'text-xsm-yellow' : 'text-gray-500'}`} />
-                                ) : n.type === 'admin_message' ? (
-                                  <FaEnvelope className={`text-xs ${!n.isRead ? 'text-amber-400' : 'text-gray-500'}`} />
                                 ) : (
-                                  <FaEnvelope className={`text-xs ${!n.isRead ? 'text-xsm-yellow' : 'text-gray-500'}`} />
+                                  <FaTag className={`text-xs ${!n.isRead ? 'text-xsm-yellow' : 'text-gray-500'}`} />
                                 )}
                               </div>
                               <div className="flex-1 min-w-0">
@@ -327,11 +323,11 @@ const Navbar: React.FC = () => {
                       </div>
 
                       <button
-                        onClick={() => { navigateTo('/chat'); setShowNotifications(false); }}
+                        onClick={() => { navigateTo('/notifications'); setShowNotifications(false); }}
                         className="block w-full px-4 py-2.5 text-xs font-semibold text-xsm-yellow hover:text-yellow-400 text-center transition-colors"
                         style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
                       >
-                        Open Inbox →
+                        See All Notifications →
                       </button>
                     </div>
                   )}

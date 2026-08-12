@@ -80,16 +80,22 @@ const Home: React.FC<HomeProps> = () => {
 
   const [updates, setUpdates] = useState<any[]>([]);
   const [showUpdatesModal, setShowUpdatesModal] = useState(false);
+  const [hasNewUpdates, setHasNewUpdates] = useState(false);
 
   useEffect(() => {
     const fetchUpdates = () => {
       fetch(`${API_URL}/updates`)
         .then(res => res.json())
         .then(data => {
-          if (Array.isArray(data.updates)) {
-            setUpdates(data.updates);
-          } else if (Array.isArray(data)) {
-            setUpdates(data);
+          let list: any[] = [];
+          if (Array.isArray(data.updates)) list = data.updates;
+          else if (Array.isArray(data)) list = data;
+          setUpdates(list);
+          // Mark NEW if there are announcements newer than last seen
+          if (list.length > 0) {
+            const latestId = Math.max(...list.map((u: any) => u.id));
+            const lastSeen = parseInt(localStorage.getItem('xsm_home_lastSeenUpdateId') || '0', 10);
+            setHasNewUpdates(latestId > lastSeen);
           }
         })
         .catch(err => console.warn('Failed to fetch website updates:', err));
@@ -289,13 +295,27 @@ const Home: React.FC<HomeProps> = () => {
             {/* Website Update Scrolling Ticker — Revision 28+ */}
             {updates.length > 0 && (
               <div 
-                onClick={() => setShowUpdatesModal(true)}
+                onClick={() => {
+                  setShowUpdatesModal(true);
+                  // Mark all as seen when user clicks the ticker
+                  if (updates.length > 0) {
+                    const latestId = Math.max(...updates.map((u: any) => u.id));
+                    localStorage.setItem('xsm_home_lastSeenUpdateId', String(latestId));
+                    setHasNewUpdates(false);
+                  }
+                }}
                 className="bg-gradient-to-r from-amber-950/80 via-xsm-black to-amber-950/80 border border-xsm-yellow/40 rounded-xl px-4 py-2 flex items-center gap-3 cursor-pointer hover:border-xsm-yellow transition-all shadow-md group mb-3.5 overflow-hidden"
               >
                 <div className="flex items-center gap-1.5 bg-xsm-yellow text-black text-xs font-bold px-2.5 py-1 rounded-full shrink-0 uppercase tracking-wider shadow">
                   <Bell className="w-3.5 h-3.5" />
                   <span>Updates</span>
                 </div>
+                {/* NEW badge — only when there are unseen announcements */}
+                {hasNewUpdates && (
+                  <span className="text-[10px] bg-amber-500 text-black font-black px-2 py-0.5 rounded-full shadow animate-pulse shrink-0 uppercase tracking-wide">
+                    NEW
+                  </span>
+                )}
                 {/* Scrolling ticker content */}
                 <div className="overflow-hidden flex-1 relative">
                   <div 
@@ -314,7 +334,7 @@ const Home: React.FC<HomeProps> = () => {
                   </div>
                 </div>
                 <span className="text-xs text-xsm-yellow font-semibold underline shrink-0 hidden sm:inline">
-                  View All ({updates.length}) →
+                  View All →
                 </span>
               </div>
             )}

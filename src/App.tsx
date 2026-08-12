@@ -34,6 +34,7 @@ import Contact from './pages/Contact';
 import SellerDeals from './components/SellerDeals';
 import BuyerDeals from './components/BuyerDeals';
 import AdDetails from './pages/AdDetails';
+import Notifications from './pages/Notifications';
 import { getBanData, handleBanResponse, BanData, clearBanData, API_URL } from '@/services/auth';
 
 // Inner component that has access to AuthContext
@@ -178,6 +179,7 @@ const AppContent: React.FC = () => {
               } 
             />
             {/* 404 page */}
+            <Route path="/notifications" element={<Notifications />} />
             <Route path="/404" element={<NotFound />} />
             {/* Catch-all route for potential usernames - this must be last before the final 404 */}
             <Route path="/:possibleUsername" element={<UsernameRedirect />} />

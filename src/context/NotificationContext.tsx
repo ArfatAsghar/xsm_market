@@ -31,6 +31,7 @@ interface NotificationContextType {
   notifications: NotificationState[];
   inAppNotifications: InAppNotification[];
   unreadInAppCount: number;
+  unreadBellCount: number; // only ban/unban/deal — excludes messages
   showSuccess: (title: string, message?: string, options?: Partial<NotificationProps>) => string;
   showError: (title: string, message?: string, options?: Partial<NotificationProps>) => string;
   showWarning: (title: string, message?: string, options?: Partial<NotificationProps>) => string;
@@ -160,6 +161,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [notifications, setNotifications] = useState<NotificationState[]>([]);
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>([]);
   const [unreadInAppCount, setUnreadInAppCount] = useState(0);
+  const [unreadBellCount, setUnreadBellCount] = useState(0); // ban/unban/deal only
   const prevUnreadRef = useRef<number>(0);
   const seenNotifIdsRef = useRef<Set<number>>(new Set());
   const isInitialFetchRef = useRef<boolean>(true);
@@ -182,6 +184,9 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           setInAppNotifications(list);
           const count = typeof data.unreadCount === 'number' ? data.unreadCount : 0;
           setUnreadInAppCount(count);
+          // Bell only counts ban/unban/deal (not messages)
+          const bellCount = list.filter(n => !n.isRead && ['ban', 'unban', 'deal'].includes(n.type)).length;
+          setUnreadBellCount(bellCount);
 
           // Track new unread notifications and pop up toast notification
           if (isInitialFetchRef.current) {
@@ -257,6 +262,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       );
       setUnreadInAppCount(prev => Math.max(0, prev - 1));
       prevUnreadRef.current = Math.max(0, prevUnreadRef.current - 1);
+      // Recalculate bell count after marking read
+      setUnreadBellCount(prev => Math.max(0, prev - 1));
     } catch (e) {
       // Silent catch
     }
@@ -274,6 +281,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       });
       setInAppNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
       setUnreadInAppCount(0);
+      setUnreadBellCount(0);
       prevUnreadRef.current = 0;
     } catch (e) {
       // Silent catch
@@ -320,6 +328,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     notifications,
     inAppNotifications,
     unreadInAppCount,
+    unreadBellCount,
     showSuccess,
     showError,
     showWarning,

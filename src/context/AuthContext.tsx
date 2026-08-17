@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { isAuthenticated, getCurrentUser } from '../services/auth';
+import { isAuthenticated, getCurrentUser, SellerMetrics } from '../services/auth';
 
 const API_URL = import.meta.env.VITE_API_URL || '/api';
 
@@ -14,6 +14,7 @@ export interface User {
   authProvider?: string;
   isEmailVerified?: boolean;
   isAdmin?: boolean;
+  sellerMetrics?: SellerMetrics;
   // Ban fields
   isBanned?: boolean | number;
   banReason?: string | null;
@@ -25,7 +26,7 @@ export interface AuthContextType {
   isLoggedIn: boolean;
   setIsLoggedIn: React.Dispatch<React.SetStateAction<boolean>>;
   user: User | null;
-  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  setUser: (userOrUpdater: User | null | ((prev: User | null) => User | null)) => void;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -41,7 +42,50 @@ export const useAuth = (): AuthContextType => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(isAuthenticated());
-  const [user, setUser] = useState<User | null>(getCurrentUser());
+  const [user, _setUserRaw] = useState<User | null>(getCurrentUser());
+
+  // Wrapped setUser: always keeps localStorage.userData in sync with React state.
+  // This prevents Profile.tsx (or any other caller) from updating React state
+  // without also persisting the change — which was causing the "ban disappears
+  // on profile open" bug.
+  const setUser = React.useCallback(
+    (userOrUpdater: User | null | ((prev: User | null) => User | null)) => {
+      _setUserRaw(prev => {
+        const next =
+          typeof userOrUpdater === 'function' ? userOrUpdater(prev) : userOrUpdater;
+        if (next === null) {
+          localStorage.removeItem('userData');
+        } else {
+          // Preserve ban fields from prev when the incoming value omits them.
+          // This is the critical guard: if updatedUser from the API somehow
+          // lacks ban fields, we fall back to what was already persisted.
+          const prevBanFields =
+            prev && prev.isBanned !== undefined
+              ? {
+                  isBanned: prev.isBanned,
+                  banReason: prev.banReason,
+                  banExpires: prev.banExpires,
+                  bannedAt: prev.bannedAt,
+                }
+              : {};
+          const merged = {
+            ...prevBanFields,
+            ...next,
+            // If the incoming value explicitly has isBanned (not undefined), use it.
+            // Otherwise fall back to preserved prev ban state.
+            isBanned: next.isBanned !== undefined ? next.isBanned : prev?.isBanned,
+            banReason: next.banReason !== undefined ? next.banReason : prev?.banReason,
+            banExpires: next.banExpires !== undefined ? next.banExpires : prev?.banExpires,
+            bannedAt: next.bannedAt !== undefined ? next.bannedAt : prev?.bannedAt,
+          };
+          localStorage.setItem('userData', JSON.stringify(merged));
+          return merged;
+        }
+        return next;
+      });
+    },
+    []
+  );
 
   // Check for authentication on mount and when localStorage changes
   useEffect(() => {
@@ -103,7 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => clearInterval(iv);
   }, [isLoggedIn]);
 
-  const value = {
+  const value: AuthContextType = {
     isLoggedIn,
     setIsLoggedIn,
     user,

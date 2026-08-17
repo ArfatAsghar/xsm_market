@@ -108,6 +108,9 @@ class Database {
         // ── deals table ──────────────────────────────────────────────────────────
         if (self::tableExists($pdo, 'deals')) {
             self::addColumnIfMissing($pdo, 'deals', 'transaction_id', 'VARCHAR(50) NULL');
+            self::addColumnIfMissing($pdo, 'deals', 'rating', "VARCHAR(20) DEFAULT 'none'");
+            self::addColumnIfMissing($pdo, 'deals', 'review_comment', 'TEXT NULL');
+            self::addColumnIfMissing($pdo, 'deals', 'reviewed_at', 'DATETIME NULL');
 
             // Backfill TXN IDs — two separate exec() calls (PDO doesn't support multi-statement)
             try {

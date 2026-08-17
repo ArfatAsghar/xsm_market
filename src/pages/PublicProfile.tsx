@@ -3,9 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { User as UserIcon, Edit, Calendar, MessageCircle, Crown, Clock } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
-import { getPublicProfile, API_URL } from '@/services/auth';
+import { getPublicProfile, API_URL, SellerMetrics } from '@/services/auth';
 import UserAdList from '@/components/UserAdList';
 import PublicAdList from '@/components/PublicAdList';
+import SellerMetricsCard from '@/components/SellerMetricsCard';
 
 interface PublicUser {
   id: string;
@@ -19,6 +20,7 @@ interface PublicUser {
   isVip?: boolean;
   vipUntil?: string | null;
   averageResponseTime?: string;
+  sellerMetrics?: SellerMetrics;
 }
 
 interface PreviousListing {
@@ -317,7 +319,7 @@ const PublicProfile: React.FC = () => {
                   @{profileUser.username}
                 </p>
 
-                <div className="flex justify-center gap-2">
+                <div className="flex justify-center gap-2 mb-4">
                   {profileUser.isVip && (
                     <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-black shadow shadow-yellow-900/40">
                       <Crown className="w-2.5 h-2.5" /> VIP Seller
@@ -330,6 +332,9 @@ const PublicProfile: React.FC = () => {
                     </div>
                   )}
                 </div>
+
+                {/* 🛡️ Seller Profile Card — 5 Metrics (Theme-aligned with Lucide Icons) */}
+                <SellerMetricsCard metrics={profileUser.sellerMetrics} className="mt-4" />
               </div>
 
               {isOwnProfile && (

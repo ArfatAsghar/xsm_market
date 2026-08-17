@@ -70,6 +70,215 @@ class UserController {
         }
     }
 
+    // ── Seller Profile Card: 5 Metrics Calculation ───────────────────────────
+    public static function calculateSellerMetrics($userId) {
+        try {
+            $pdo = Database::getConnection();
+            $userId = (int)$userId;
+
+            // Check VIP status
+            $userStmt = $pdo->prepare("SELECT vipUntil FROM users WHERE id = ?");
+            $userStmt->execute([$userId]);
+            $userRow = $userStmt->fetch(PDO::FETCH_ASSOC);
+            $isVip = !empty($userRow['vipUntil']) && strtotime($userRow['vipUntil']) > time();
+            $vipMultiplier = $isVip ? 2 : 1;
+
+            // Fetch all completed deals for this seller
+            $dealsStmt = $pdo->prepare("
+                SELECT id, buyer_id, seller_id, channel_price, rating, review_comment, reviewed_at, created_at, updated_at
+                FROM deals
+                WHERE (seller_id = ? OR buyer_id = ?)
+                  AND deal_status IN ('completed', 'payment_completed', 'deal_completed')
+                ORDER BY created_at ASC
+            ");
+            $dealsStmt->execute([$userId, $userId]);
+            $completedDeals = $dealsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            $totalCompletedDeals = count($completedDeals);
+            $positiveReviews = 0;
+            $noReviews = 0;
+            $negativeReviews = 0;
+            $tradingVolume = 0;
+            $reputationScore = 0;
+            $thisMonthPoints = 0;
+
+            $firstDayOfMonth = date('Y-m-01 00:00:00');
+
+            // Track completed deal counts per buyer to identify returning partners
+            $buyerDealCounts = [];
+            $buyerPreviousDealsCount = [];
+
+            foreach ($completedDeals as $d) {
+                $counterpartyId = ((int)$d['seller_id'] === $userId) ? (int)$d['buyer_id'] : (int)$d['seller_id'];
+                $priorDeals = $buyerDealCounts[$counterpartyId] ?? 0;
+                $buyerPreviousDealsCount[$d['id']] = $priorDeals;
+                $buyerDealCounts[$counterpartyId] = $priorDeals + 1;
+            }
+
+            // Count unique returning partners (buyers who completed 2+ deals with this user)
+            $returningPartnersCount = 0;
+            foreach ($buyerDealCounts as $bId => $count) {
+                if ($count >= 2) {
+                    $returningPartnersCount++;
+                }
+            }
+
+            foreach ($completedDeals as $d) {
+                $price = (float)($d['channel_price'] ?? 0);
+                $tradingVolume += $price;
+
+                $rating = strtolower(trim($d['rating'] ?? 'none'));
+                if ($rating === 'positive') {
+                    $positiveReviews++;
+                    $basePoints = 50; // Positive Review = +50 points
+                } elseif ($rating === 'negative') {
+                    $negativeReviews++;
+                    $basePoints = -100; // Negative Review = -100 points
+                } else {
+                    $noReviews++;
+                    $basePoints = $price; // No review = +deal price points ($100 deal -> 100 points)
+                }
+
+                // Returning Partner bonus (+20 if buyer has completed prior deal(s))
+                $isReturningPartnerDeal = ($buyerPreviousDealsCount[$d['id']] ?? 0) > 0;
+                if ($isReturningPartnerDeal) {
+                    $basePoints += 20;
+                }
+
+                // VIP Multiplier (x2)
+                $dealPoints = $basePoints * $vipMultiplier;
+                $reputationScore += $dealPoints;
+
+                // Check if deal/review happened this month
+                $dealDate = !empty($d['reviewed_at']) ? $d['reviewed_at'] : $d['created_at'];
+                if (!empty($dealDate) && $dealDate >= $firstDayOfMonth) {
+                    $thisMonthPoints += $dealPoints;
+                }
+            }
+
+            // 💬 Response Time Calculation (Median of latest 50 conversations)
+            $responseTimeSec = self::calculateMedianResponseTimeSeconds($userId);
+            $responseTimeFormatted = self::formatResponseTimeRange($responseTimeSec);
+
+            return [
+                'reputationScore' => (int)$reputationScore,
+                'thisMonthPoints' => (int)$thisMonthPoints,
+                'completedDeals' => (int)$totalCompletedDeals,
+                'positiveReviews' => (int)$positiveReviews,
+                'noReviews' => (int)$noReviews,
+                'negativeReviews' => (int)$negativeReviews,
+                'tradingVolume' => (float)$tradingVolume,
+                'returningPartners' => (int)$returningPartnersCount,
+                'responseTime' => $responseTimeFormatted,
+                'medianResponseSeconds' => $responseTimeSec
+            ];
+        } catch (Throwable $e) {
+            error_log('Error calculating seller metrics: ' . $e->getMessage());
+            return [
+                'reputationScore' => 0,
+                'thisMonthPoints' => 0,
+                'completedDeals' => 0,
+                'positiveReviews' => 0,
+                'noReviews' => 0,
+                'negativeReviews' => 0,
+                'tradingVolume' => 0,
+                'returningPartners' => 0,
+                'responseTime' => '⚡ Under 15 min',
+                'medianResponseSeconds' => 600
+            ];
+        }
+    }
+
+    private static function calculateMedianResponseTimeSeconds($userId) {
+        try {
+            $pdo = Database::getConnection();
+            $userId = (int)$userId;
+
+            $chatsStmt = $pdo->prepare("
+                SELECT DISTINCT chatId
+                FROM messages
+                WHERE (senderId = ? OR chatId IN (SELECT id FROM chats WHERE support_requested = 0))
+                ORDER BY createdAt DESC
+                LIMIT 100
+            ");
+            $chatsStmt->execute([$userId]);
+            $chatIds = $chatsStmt->fetchAll(PDO::FETCH_COLUMN);
+
+            if (empty($chatIds)) {
+                return 600;
+            }
+
+            $responseTimesSec = [];
+
+            foreach (array_slice($chatIds, 0, 50) as $cId) {
+                $msgStmt = $pdo->prepare("
+                    SELECT id, senderId, createdAt, isStaffMessage
+                    FROM messages
+                    WHERE chatId = ?
+                    ORDER BY id ASC
+                ");
+                $msgStmt->execute([$cId]);
+                $msgs = $msgStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $firstIncomingTime = null;
+
+                foreach ($msgs as $m) {
+                    if (!empty($m['isStaffMessage'])) continue;
+
+                    $senderId = (int)$m['senderId'];
+                    $msgTime = strtotime($m['createdAt']);
+
+                    if ($senderId !== $userId) {
+                        if ($firstIncomingTime === null) {
+                            $firstIncomingTime = $msgTime;
+                        }
+                    } else {
+                        if ($firstIncomingTime !== null) {
+                            $diff = max(0, $msgTime - $firstIncomingTime);
+                            $responseTimesSec[] = $diff;
+                            $firstIncomingTime = null;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (empty($responseTimesSec)) {
+                return 600;
+            }
+
+            sort($responseTimesSec);
+            $count = count($responseTimesSec);
+            $middle = (int)floor($count / 2);
+
+            if ($count % 2 === 0) {
+                $median = ($responseTimesSec[$middle - 1] + $responseTimesSec[$middle]) / 2;
+            } else {
+                $median = $responseTimesSec[$middle];
+            }
+
+            return (float)$median;
+        } catch (Throwable $e) {
+            error_log('Median response time error: ' . $e->getMessage());
+            return 600;
+        }
+    }
+
+    private static function formatResponseTimeRange($seconds) {
+        $mins = $seconds / 60;
+        if ($mins < 5) {
+            return '⚡ Under 5 min';
+        } elseif ($mins < 15) {
+            return '🟢 Under 15 min';
+        } elseif ($mins < 60) {
+            return '🟡 Under 1 hour';
+        } elseif ($mins < 1440) {
+            return '🟠 Within a few hours';
+        } else {
+            return '🔴 Usually 1+ day';
+        }
+    }
+
     // Get user profile
     // Get user profile
     public function getProfile() {
@@ -116,6 +325,8 @@ class UserController {
                 }
             }
             
+            $sellerMetrics = self::calculateSellerMetrics($userData['id']);
+
             Response::json([
                 'user' => [
                     'id' => (int)$userData['id'],
@@ -131,6 +342,7 @@ class UserController {
                     'vipUntil' => $vipUntil,
                     'isVip' => $isVip,
                     'averageResponseTime' => $avgResponseTime,
+                    'sellerMetrics' => $sellerMetrics,
                     'isBanned' => (bool)($userData['isBanned'] ?? false),
                     'banReason' => $userData['banReason'] ?? null,
                     'banExpires' => $userData['banExpires'] ?? null,
@@ -1122,6 +1334,9 @@ public function getUserByUsername($username) {
             error_log('Error counting user ads: ' . $e->getMessage());
         }
 
+        // Compute seller profile card 5 metrics
+        $sellerMetrics = self::calculateSellerMetrics($userData['id']);
+
         // Return public information
         $publicUser = [
             'id' => (int)$userData['id'],
@@ -1134,7 +1349,8 @@ public function getUserByUsername($username) {
             'adCount' => $adCount,
             'vipUntil' => $vipUntil,
             'isVip' => $isVip,
-            'averageResponseTime' => $avgResponseTime
+            'averageResponseTime' => $avgResponseTime,
+            'sellerMetrics' => $sellerMetrics
         ];
 
         Response::json([

@@ -2009,6 +2009,61 @@ try {
             exit;
         }
     }
+    // Review/rating endpoint for a completed deal: POST /api/deals/{id}/review
+    else if (preg_match('/^\/deals\/(\d+)\/review$/', $path, $matches) && $method === 'POST') {
+        try {
+            $deal_id = (int)$matches[1];
+            $currentUser = getCurrentUser();
+            if (!$currentUser) {
+                http_response_code(401);
+                echo json_encode(['success' => false, 'message' => 'Authentication required']);
+                exit;
+            }
+            $userId = (int)$currentUser['userId'];
+            $input = json_decode(file_get_contents('php://input'), true);
+            $rating = strtolower(trim($input['rating'] ?? 'none'));
+            $comment = trim($input['comment'] ?? '');
+
+            if (!in_array($rating, ['positive', 'negative', 'none'])) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Invalid rating. Allowed: positive, negative, none']);
+                exit;
+            }
+
+            $pdo = Database::getConnection();
+            $stmt = $pdo->prepare("SELECT id, buyer_id, seller_id, deal_status FROM deals WHERE id = ?");
+            $stmt->execute([$deal_id]);
+            $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$deal) {
+                http_response_code(404);
+                echo json_encode(['success' => false, 'message' => 'Deal not found']);
+                exit;
+            }
+
+            // Must be participant (buyer or seller)
+            if ($userId !== (int)$deal['buyer_id'] && $userId !== (int)$deal['seller_id']) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'Unauthorized to review this deal']);
+                exit;
+            }
+
+            $upd = $pdo->prepare("UPDATE deals SET rating = ?, review_comment = ?, reviewed_at = NOW() WHERE id = ?");
+            $upd->execute([$rating, $comment, $deal_id]);
+
+            http_response_code(200);
+            echo json_encode([
+                'success' => true,
+                'message' => 'Deal review submitted successfully',
+                'rating' => $rating
+            ]);
+            exit;
+        } catch (Exception $e) {
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+            exit;
+        }
+    }
     else {
         http_response_code(404);
         echo json_encode(['success' => false, 'message' => 'Deals endpoint not found: ' . $path]);

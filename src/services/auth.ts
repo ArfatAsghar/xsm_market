@@ -27,6 +27,19 @@ interface User {
   bannedAt?: string | null;
 }
 
+export interface SellerMetrics {
+  reputationScore: number;
+  thisMonthPoints: number;
+  completedDeals: number;
+  positiveReviews: number;
+  noReviews: number;
+  negativeReviews: number;
+  tradingVolume: number;
+  returningPartners: number;
+  responseTime: string;
+  medianResponseSeconds?: number;
+}
+
 // Token management interface
 interface TokenData {
   accessToken: string;

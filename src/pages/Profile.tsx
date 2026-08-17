@@ -12,6 +12,7 @@ import { useNotifications } from '@/context/NotificationContext';
 import { User } from '@/context/AuthContext';
 import { updateProfile, getProfile, changePassword, logout, requestEmailChange, requestPasswordChange } from '@/services/auth';
 import { compressImage } from '@/utils/imageCompressor';
+import SellerMetricsCard from '@/components/SellerMetricsCard';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
@@ -681,6 +682,9 @@ const Profile: React.FC<ProfileProps> = () => {
                 <Clock className="w-3.5 h-3.5" />
                 <span>{(user as any)?.averageResponseTime || 'Usually replies within a few hours'}</span>
               </div>
+
+              {/* 🛡️ Seller Profile Card — 5 Metrics (Lucide Icons) */}
+              <SellerMetricsCard metrics={(user as any)?.sellerMetrics} className="mt-4 text-left" />
 
               {/* VIP Membership status & CTA */}
               <div className="pt-2 border-t border-xsm-medium-gray/30 mt-2">

@@ -326,8 +326,7 @@ const PublicProfile: React.FC = () => {
                     </span>
                   )}
                   {profileUser.isEmailVerified && (
-                    <div className="inline-flex items-center gap-1 bg-green-500/20 text-green-400 px-2 py-1 rounded-full text-xs">
-                      <div className="w-2.5 h-2.5 bg-green-400 rounded-full"></div>
+                    <div className="inline-flex items-center gap-1 bg-green-500/20 text-green-400 px-2.5 py-0.5 rounded-full text-xs font-semibold">
                       Verified
                     </div>
                   )}
@@ -336,7 +335,7 @@ const PublicProfile: React.FC = () => {
                 {/* Single Response Time Badge */}
                 <div className="mb-4 inline-flex items-center gap-1.5 bg-xsm-yellow/10 border border-xsm-yellow/30 px-3 py-1.5 rounded-full text-xs font-semibold text-xsm-yellow">
                   <Clock className="w-3.5 h-3.5" />
-                  <span>{profileUser.sellerMetrics?.responseTime || 'Usually replies within 15 min'}</span>
+                  <span>{profileUser.sellerMetrics?.responseTime || 'Usually replies in 10 minutes'}</span>
                 </div>
 
                 {/* 🛡️ Seller Profile Card — 4 Metrics (Theme-aligned with Lucide Icons) */}

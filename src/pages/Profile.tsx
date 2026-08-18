@@ -672,15 +672,14 @@ const Profile: React.FC<ProfileProps> = () => {
                 {formatJoinDate(profile.joinDate)}
               </p>
               
-              <div className="text-xs text-green-400 flex items-center justify-center gap-1 mb-3">
-                <div className="w-2 h-2 bg-green-400 rounded-full"></div>
-                <span>Active now</span>
+              <div className="text-xs font-semibold text-green-400 text-center mb-3">
+                Active now
               </div>
 
               {/* Dynamic Average Response Time Badge */}
               <div className="mb-4 inline-flex items-center gap-1.5 bg-xsm-yellow/10 border border-xsm-yellow/30 px-3 py-1.5 rounded-full text-xs font-semibold text-xsm-yellow">
                 <Clock className="w-3.5 h-3.5" />
-                <span>{(user as any)?.sellerMetrics?.responseTime || (user as any)?.averageResponseTime || 'Usually replies within 15 min'}</span>
+                <span>{(user as any)?.sellerMetrics?.responseTime || (user as any)?.averageResponseTime || 'Usually replies in 10 minutes'}</span>
               </div>
 
               {/* 🛡️ Seller Profile Card — 4 Metrics (Lucide Icons) */}

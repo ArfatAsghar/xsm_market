@@ -154,6 +154,16 @@ class UserController {
                 if (!empty($dealDate) && $dealDate >= $firstDayOfMonth) {
                     $thisMonthPoints += $dealPoints;
                 }
+            $recentReviews = [];
+            foreach (array_slice(array_reverse($completedDeals), 0, 15) as $d) {
+                $rating = strtolower(trim($d['rating'] ?? 'none'));
+                $recentReviews[] = [
+                    'id' => (int)$d['id'],
+                    'rating' => $rating,
+                    'comment' => $d['review_comment'] ?? '',
+                    'price' => (float)($d['channel_price'] ?? 0),
+                    'date' => !empty($d['reviewed_at']) ? substr($d['reviewed_at'], 0, 10) : substr($d['created_at'], 0, 10)
+                ];
             }
 
             // 💬 Response Time Calculation (Median of latest 50 conversations)
@@ -170,7 +180,8 @@ class UserController {
                 'tradingVolume' => (float)$tradingVolume,
                 'returningPartners' => (int)$returningPartnersCount,
                 'responseTime' => $responseTimeFormatted,
-                'medianResponseSeconds' => $responseTimeSec
+                'medianResponseSeconds' => $responseTimeSec,
+                'recentReviews' => $recentReviews
             ];
         } catch (Throwable $e) {
             error_log('Error calculating seller metrics: ' . $e->getMessage());
@@ -184,7 +195,8 @@ class UserController {
                 'tradingVolume' => 0,
                 'returningPartners' => 0,
                 'responseTime' => '⚡ Under 15 min',
-                'medianResponseSeconds' => 600
+                'medianResponseSeconds' => 600,
+                'recentReviews' => []
             ];
         }
     }

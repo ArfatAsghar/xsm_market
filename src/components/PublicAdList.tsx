@@ -282,7 +282,7 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
               className="bg-xsm-yellow text-black px-3 py-1.5 rounded-lg hover:bg-yellow-500 transition-colors text-xs font-medium"
             >
               <ShoppingCart className="w-3 h-3 inline mr-1" />
-              Buy
+              Purchase
             </button>
           </div>
           </div>

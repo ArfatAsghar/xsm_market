@@ -319,7 +319,7 @@ const PublicProfile: React.FC = () => {
                   @{profileUser.username}
                 </p>
 
-                <div className="flex justify-center gap-2 mb-4">
+                <div className="flex justify-center gap-2 mb-3">
                   {profileUser.isVip && (
                     <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-black shadow shadow-yellow-900/40">
                       <Crown className="w-2.5 h-2.5" /> VIP Seller
@@ -333,7 +333,13 @@ const PublicProfile: React.FC = () => {
                   )}
                 </div>
 
-                {/* 🛡️ Seller Profile Card — 5 Metrics (Theme-aligned with Lucide Icons) */}
+                {/* Single Response Time Badge */}
+                <div className="mb-4 inline-flex items-center gap-1.5 bg-xsm-yellow/10 border border-xsm-yellow/30 px-3 py-1.5 rounded-full text-xs font-semibold text-xsm-yellow">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>{profileUser.sellerMetrics?.responseTime || 'Usually replies within 15 min'}</span>
+                </div>
+
+                {/* 🛡️ Seller Profile Card — 4 Metrics (Theme-aligned with Lucide Icons) */}
                 <SellerMetricsCard metrics={profileUser.sellerMetrics} className="mt-4" />
               </div>
 

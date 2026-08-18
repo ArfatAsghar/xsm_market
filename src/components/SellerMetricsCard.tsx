@@ -43,7 +43,7 @@ export const SellerMetricsCard: React.FC<SellerMetricsCardProps> = ({ metrics, c
           </div>
         </div>
         {/* Tooltip */}
-        <div className="absolute left-1/2 -top-16 -translate-x-1/2 hidden group-hover:block z-30 w-64 bg-gray-900/95 text-gray-200 text-[11px] p-2.5 rounded-lg border border-gray-700 shadow-2xl pointer-events-none text-center leading-relaxed">
+        <div className="absolute left-1/2 bottom-full mb-2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 w-64 bg-gray-900/95 text-gray-200 text-[11px] p-2.5 rounded-lg border border-xsm-yellow/30 shadow-2xl pointer-events-none text-center leading-relaxed">
           Reputation Score is calculated from completed transactions, reviews, and returning partners. Positive activity increases score; negative reviews reduce it.
         </div>
       </div>
@@ -76,7 +76,7 @@ export const SellerMetricsCard: React.FC<SellerMetricsCardProps> = ({ metrics, c
           </span>
         </div>
         {/* Tooltip */}
-        <div className="absolute left-1/2 -top-14 -translate-x-1/2 hidden group-hover:block z-30 w-64 bg-gray-900/95 text-gray-200 text-[11px] p-2.5 rounded-lg border border-gray-700 shadow-2xl pointer-events-none text-center leading-relaxed">
+        <div className="absolute left-1/2 bottom-full mb-2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 w-64 bg-gray-900/95 text-gray-200 text-[11px] p-2.5 rounded-lg border border-xsm-yellow/30 shadow-2xl pointer-events-none text-center leading-relaxed">
           Shows total successfully completed transactions and how those transactions were rated.
         </div>
       </div>
@@ -93,13 +93,13 @@ export const SellerMetricsCard: React.FC<SellerMetricsCardProps> = ({ metrics, c
           ${tradingVolume.toLocaleString()}
         </span>
         {/* Tooltip */}
-        <div className="absolute left-1/2 -top-14 -translate-x-1/2 hidden group-hover:block z-30 w-64 bg-gray-900/95 text-gray-200 text-[11px] p-2.5 rounded-lg border border-gray-700 shadow-2xl pointer-events-none text-center leading-relaxed">
+        <div className="absolute left-1/2 bottom-full mb-2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 w-64 bg-gray-900/95 text-gray-200 text-[11px] p-2.5 rounded-lg border border-xsm-yellow/30 shadow-2xl pointer-events-none text-center leading-relaxed">
           Total value of successfully completed transactions made through the marketplace.
         </div>
       </div>
 
       {/* 4. Returning Partners */}
-      <div className="relative group pb-2.5 border-b border-xsm-medium-gray/30 flex items-center justify-between cursor-help">
+      <div className="relative group flex items-center justify-between cursor-help">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 rounded-lg bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
             <Users className="w-4 h-4" />
@@ -110,26 +110,8 @@ export const SellerMetricsCard: React.FC<SellerMetricsCardProps> = ({ metrics, c
           {returningPartners.toLocaleString()}
         </span>
         {/* Tooltip */}
-        <div className="absolute left-1/2 -top-14 -translate-x-1/2 hidden group-hover:block z-30 w-64 bg-gray-900/95 text-gray-200 text-[11px] p-2.5 rounded-lg border border-gray-700 shadow-2xl pointer-events-none text-center leading-relaxed">
+        <div className="absolute left-1/2 bottom-full mb-2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 w-64 bg-gray-900/95 text-gray-200 text-[11px] p-2.5 rounded-lg border border-xsm-yellow/30 shadow-2xl pointer-events-none text-center leading-relaxed">
           Number of users who completed a transaction with this user and returned to complete another transaction with them.
-        </div>
-      </div>
-
-      {/* 5. Response Time */}
-      <div className="relative group flex items-center justify-between cursor-help">
-        <div className="flex items-center gap-2.5">
-          <div className="p-1.5 rounded-lg bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
-            <Zap className="w-4 h-4" />
-          </div>
-          <span className="font-semibold text-white text-xs sm:text-sm">Response Time</span>
-        </div>
-        <span className="inline-flex items-center gap-1 font-semibold text-xs px-2.5 py-1 rounded-full bg-xsm-yellow/10 border border-xsm-yellow/30 text-xsm-yellow">
-          <Zap className="w-3 h-3 fill-xsm-yellow/20" />
-          {responseTime}
-        </span>
-        {/* Tooltip */}
-        <div className="absolute left-1/2 -top-14 -translate-x-1/2 hidden group-hover:block z-30 w-64 bg-gray-900/95 text-gray-200 text-[11px] p-2.5 rounded-lg border border-gray-700 shadow-2xl pointer-events-none text-center leading-relaxed">
-          Shows how quickly this user typically responds to new messages based on recent conversation history.
         </div>
       </div>
     </div>

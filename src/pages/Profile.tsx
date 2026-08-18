@@ -680,10 +680,10 @@ const Profile: React.FC<ProfileProps> = () => {
               {/* Dynamic Average Response Time Badge */}
               <div className="mb-4 inline-flex items-center gap-1.5 bg-xsm-yellow/10 border border-xsm-yellow/30 px-3 py-1.5 rounded-full text-xs font-semibold text-xsm-yellow">
                 <Clock className="w-3.5 h-3.5" />
-                <span>{(user as any)?.averageResponseTime || 'Usually replies within a few hours'}</span>
+                <span>{(user as any)?.sellerMetrics?.responseTime || (user as any)?.averageResponseTime || 'Usually replies within 15 min'}</span>
               </div>
 
-              {/* 🛡️ Seller Profile Card — 5 Metrics (Lucide Icons) */}
+              {/* 🛡️ Seller Profile Card — 4 Metrics (Lucide Icons) */}
               <SellerMetricsCard metrics={(user as any)?.sellerMetrics} className="mt-4 text-left" />
 
               {/* VIP Membership status & CTA */}

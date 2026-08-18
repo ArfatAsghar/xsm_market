@@ -648,11 +648,66 @@ const Home: React.FC<HomeProps> = () => {
         </div>
       )}
 
-      {/* Tagline Banner */}
-      <div className="w-full bg-black py-10 px-4 mt-2">
-        <p className="text-white text-xl sm:text-2xl md:text-3xl font-black text-center tracking-tight leading-snug max-w-3xl mx-auto">
-          XSM-Market is a versatile platform for secure social media account transactions
+      {/* Tagline Banner — themed with XSM yellow/black palette */}
+      <div
+        className="w-full relative overflow-hidden py-12 px-4 mt-2"
+        style={{
+          background: 'linear-gradient(135deg, #0a0a0a 0%, #111111 50%, #0a0a0a 100%)',
+          borderTop: '1px solid rgba(255,208,0,0.12)',
+          borderBottom: '1px solid rgba(255,208,0,0.12)',
+        }}
+      >
+        {/* Subtle gold ambient glow */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: 'radial-gradient(ellipse 70% 60% at 50% 50%, rgba(255,208,0,0.06) 0%, transparent 70%)' }}
+        />
+
+        {/* Headline */}
+        <h2 className="relative text-center text-white text-2xl sm:text-3xl md:text-4xl font-black tracking-tight leading-tight max-w-4xl mx-auto mb-3">
+          The #1 Platform for{' '}
+          <span
+            className="relative inline-block"
+            style={{
+              background: 'linear-gradient(90deg, #FFD700, #FFA500)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            Secure Social Media
+          </span>{' '}
+          Account Transactions
+        </h2>
+
+        {/* Sub-tagline */}
+        <p className="relative text-center text-gray-400 text-sm sm:text-base max-w-2xl mx-auto mb-8 leading-relaxed">
+          XSM Market connects buyers and sellers of social media accounts through a fully managed escrow system — no scams, no middlemen, just safe verified deals.
         </p>
+
+        {/* Feature pills */}
+        <div className="relative flex flex-wrap items-center justify-center gap-3 max-w-3xl mx-auto">
+          {[
+            { icon: '🔒', label: 'Escrow Protected' },
+            { icon: '✅', label: 'Verified Sellers' },
+            { icon: '💬', label: 'Real-Time Chat' },
+            { icon: '⚡', label: 'Instant Deals' },
+            { icon: '🏆', label: 'VIP Listings' },
+            { icon: '🌐', label: 'All Platforms' },
+          ].map(({ icon, label }) => (
+            <span
+              key={label}
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border"
+              style={{
+                background: 'rgba(255,208,0,0.07)',
+                borderColor: 'rgba(255,208,0,0.25)',
+                color: '#FFD700',
+              }}
+            >
+              <span>{icon}</span>
+              <span>{label}</span>
+            </span>
+          ))}
+        </div>
       </div>
     </>
   );

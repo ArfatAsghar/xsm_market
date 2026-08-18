@@ -341,7 +341,7 @@ const AdList: React.FC<AdListProps> = ({
   return (
     <div className="space-y-6">
       {/* Ad Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {displayAds.map((ad) => {
           const isVipListing = Boolean(
             ad.seller?.isVip ||
@@ -355,7 +355,7 @@ const AdList: React.FC<AdListProps> = ({
           return (
             <div 
               key={ad.id} 
-              className={`xsm-card group transition-all duration-300 cursor-pointer h-full flex flex-col relative overflow-hidden ${
+              className={`xsm-card !p-3 group transition-all duration-300 cursor-pointer h-full flex flex-col relative overflow-hidden ${
                 isVipListing
                   ? 'border-2 border-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_28px_rgba(245,158,11,0.45)] bg-gradient-to-b from-amber-950/20 via-xsm-dark-gray to-xsm-dark-gray'
                   : ''
@@ -364,14 +364,14 @@ const AdList: React.FC<AdListProps> = ({
             >
               {/* Thumbnail */}
               <div 
-                className="relative h-48 bg-gradient-to-br from-xsm-medium-gray to-xsm-dark-gray rounded-lg mb-4 overflow-hidden group/image cursor-pointer"
+                className="relative h-36 bg-gradient-to-br from-xsm-medium-gray to-xsm-dark-gray rounded-lg mb-2.5 overflow-hidden group/image cursor-pointer"
                 onClick={(e) => navigateToDetail(ad, e)}
               >
                 <div className="w-full h-full overflow-hidden">
                   <img 
                     src={getListingImage(ad)}
                     alt={ad.title}
-                    className="w-full h-full object-contain bg-black transition-all duration-500 ease-in-out p-4"
+                    className="w-full h-full object-contain bg-black transition-all duration-500 ease-in-out p-2"
                     style={{ objectPosition: 'center' }}
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
@@ -412,48 +412,47 @@ const AdList: React.FC<AdListProps> = ({
               </div>
 
             {/* Content */}
-            <div className="space-y-3 flex flex-col flex-1">
-              <div className="flex items-start justify-between gap-4 min-h-[56px]">
+            <div className="space-y-1.5 flex flex-col flex-1">
+              <div className="flex items-start justify-between gap-2">
                 {/* Clickable title */}
                 <h3
-                  className="text-white font-semibold text-lg line-clamp-2 group-hover:text-xsm-yellow transition-colors flex-1 cursor-pointer hover:underline"
+                  className="text-white font-semibold text-sm line-clamp-1 group-hover:text-xsm-yellow transition-colors flex-1 cursor-pointer hover:underline"
                   onClick={(e) => navigateToDetail(ad, e)}
                 >
                   {ad.title}
                 </h3>
-                <div className="text-green-400 font-bold whitespace-nowrap text-lg">
+                <div className="text-green-400 font-bold whitespace-nowrap text-sm">
                   {formatPrice(ad.price)}
                 </div>
               </div>
 
               {/* Stats */}
-              <div className="flex flex-col gap-1 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-medium">Category:</span>
-                  <span className="text-xsm-light-gray">{ad.category}</span>
+              <div className="flex flex-col gap-0.5 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400 font-medium">Category:</span>
+                  <span className="text-xsm-light-gray truncate">{ad.category}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-medium">Subscribers:</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400 font-medium">Subscribers:</span>
                   <span className="text-white">{formatNumber(ad.subscribers)}</span>
                 </div>
-                {/* Monetization Status */}
-                <div className="flex items-center gap-2">
-                  <span className="text-white font-medium">Monetization:</span>
-                  <span className={`font-medium ${ad.isMonetized ? 'text-green-400' : 'text-red-400'}`}>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-gray-400 font-medium">Monetization:</span>
+                  <span className={`font-semibold ${ad.isMonetized ? 'text-green-400' : 'text-red-400'}`}>
                     {ad.isMonetized ? 'YES' : 'NO'}
                   </span>
                 </div>
                 {ad.monthlyIncome > 0 && (
-                  <div className="flex items-center gap-2">
-                    <DollarSign className="w-4 h-4 text-green-400" />
-                    <span className="text-green-400">{formatPrice(ad.monthlyIncome)}/mo</span>
+                  <div className="flex items-center gap-1.5">
+                    <DollarSign className="w-3 h-3 text-green-400" />
+                    <span className="text-green-400 text-xs">{formatPrice(ad.monthlyIncome)}/mo</span>
                   </div>
                 )}
               </div>
 
               {/* Seller info — Profile Picture + Username → Seller Profile */}
               <div
-                className="flex items-center gap-2 pt-2 border-t border-xsm-medium-gray/30 cursor-pointer hover:opacity-90 transition-opacity"
+                className="flex items-center gap-1.5 pt-1.5 border-t border-xsm-medium-gray/30 cursor-pointer hover:opacity-90 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
                   navigate(`/u/${ad.seller.username}`);
@@ -483,10 +482,10 @@ const AdList: React.FC<AdListProps> = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="mt-auto w-full pt-2">
+              <div className="mt-auto w-full pt-1.5">
                 <button
                   onClick={(e) => handlePurchase(ad, e)}
-                  className="w-full bg-xsm-yellow text-black py-3 rounded-lg hover:bg-yellow-500 transition-colors font-medium"
+                  className="w-full bg-xsm-yellow text-black py-2 rounded-lg hover:bg-yellow-500 transition-colors font-semibold text-sm"
                 >
                   Make Purchase
                 </button>

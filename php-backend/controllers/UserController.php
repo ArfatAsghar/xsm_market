@@ -154,15 +154,17 @@ class UserController {
                 if (!empty($dealDate) && $dealDate >= $firstDayOfMonth) {
                     $thisMonthPoints += $dealPoints;
                 }
+            }
+
             $recentReviews = [];
-            foreach (array_slice(array_reverse($completedDeals), 0, 15) as $d) {
-                $rating = strtolower(trim($d['rating'] ?? 'none'));
+            foreach (array_slice(array_reverse($completedDeals), 0, 15) as $rd) {
+                $rating = strtolower(trim($rd['rating'] ?? 'none'));
                 $recentReviews[] = [
-                    'id' => (int)$d['id'],
+                    'id' => (int)$rd['id'],
                     'rating' => $rating,
-                    'comment' => $d['review_comment'] ?? '',
-                    'price' => (float)($d['channel_price'] ?? 0),
-                    'date' => !empty($d['reviewed_at']) ? substr($d['reviewed_at'], 0, 10) : substr($d['created_at'], 0, 10)
+                    'comment' => $rd['review_comment'] ?? '',
+                    'price' => (float)($rd['channel_price'] ?? 0),
+                    'date' => !empty($rd['reviewed_at']) ? substr($rd['reviewed_at'], 0, 10) : substr($rd['created_at'], 0, 10)
                 ];
             }
 

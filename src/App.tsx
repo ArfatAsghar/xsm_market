@@ -189,81 +189,80 @@ const AppContent: React.FC = () => {
 
       </ErrorBoundary>
 
-      {/* Footer - Aligned length & styling with header */}
-      <footer className="bg-xsm-black border-t border-xsm-medium-gray/30 py-8 relative">
-        {/* Top subtle yellow accent line matching header */}
+      {/* Footer — matches Navbar in height, width, padding & background */}
+      <footer
+        className="border-t border-white/[0.06] relative"
+        style={{
+          background: 'linear-gradient(135deg, rgba(10,10,10,0.98) 0%, rgba(18,18,18,0.98) 50%, rgba(10,10,10,0.98) 100%)',
+        }}
+      >
+        {/* Yellow bottom accent line (mirrors navbar's top accent) */}
         <div
-          className="absolute top-0 left-0 right-0 h-[1px]"
-          style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,208,0,0.4) 30%, rgba(255,208,0,0.7) 50%, rgba(255,208,0,0.4) 70%, transparent 100%)' }}
+          className="absolute bottom-0 left-0 right-0 h-[1px]"
+          style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,208,0,0.6) 30%, rgba(255,208,0,0.9) 50%, rgba(255,208,0,0.6) 70%, transparent 100%)' }}
         />
 
         <div className="max-w-[1280px] mx-auto px-5 sm:px-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6 md:gap-8">
-            {/* Logo and Sell Button (left aligned with generous spacing between logo and sell) */}
-            <div className="flex items-center gap-10 sm:gap-14">
-              <button 
+          <div className="grid grid-cols-1 md:grid-cols-3 items-center h-[64px]">
+
+            {/* LEFT: Logo + Sell Button */}
+            <div className="flex items-center gap-8 justify-start">
+              <button
                 onClick={() => { navigate('/'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
-                className="focus:outline-none group"
+                className="flex items-center gap-3 flex-shrink-0 group focus:outline-none"
               >
-                <img 
-                  src="/images/logo.png" 
-                  alt="XSM Market Logo" 
-                  className="h-9 object-contain relative z-10 transition-all duration-300 group-hover:scale-105"
-                  style={{ filter: 'drop-shadow(0 0 6px rgba(255,208,0,0.35))' }}
-                />
+                <div className="relative">
+                  <div
+                    className="absolute -inset-2 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300"
+                    style={{ background: 'radial-gradient(circle, rgba(255,208,0,0.18) 0%, transparent 70%)' }}
+                  />
+                  <img
+                    src="/images/logo.png"
+                    alt="XSM Market Logo"
+                    className="h-9 object-contain relative z-10 transition-all duration-300 group-hover:scale-105"
+                    style={{ filter: 'drop-shadow(0 0 6px rgba(255,208,0,0.35))' }}
+                  />
+                </div>
               </button>
+
               <button
                 onClick={() => {
-                  if (!isLoggedIn) {
-                    navigate('/login');
-                    return;
-                  }
+                  if (!isLoggedIn) { navigate('/login'); return; }
                   navigate('/sell');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="relative group inline-flex items-center gap-2 px-5 py-2 text-[14px] font-extrabold tracking-wide text-black rounded-xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-[0_0_12px_rgba(255,208,0,0.4)] hover:shadow-[0_0_20px_rgba(255,208,0,0.75)] cursor-pointer border border-yellow-300/30"
-                style={{
-                  background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%)',
-                }}
+                className="relative group inline-flex items-center gap-2 px-4 py-1.5 text-[13.5px] font-extrabold tracking-wide text-black rounded-xl transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-[0_0_12px_rgba(255,208,0,0.4)] hover:shadow-[0_0_20px_rgba(255,208,0,0.75)] cursor-pointer border border-yellow-300/30"
+                style={{ background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%)' }}
               >
                 <FaTag className="text-xs transition-transform duration-300 group-hover:rotate-12" />
                 <span>Sell</span>
               </button>
             </div>
-            
-            {/* Navigation Links in a single clean horizontal line (About Us, Contact, Terms of Service, Privacy Policy) */}
-            <div className="flex items-center gap-6 sm:gap-8 text-sm font-semibold text-xsm-light-gray whitespace-nowrap overflow-x-auto py-1">
-              <button 
-                onClick={() => { navigate('/about'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
-                className="hover:text-xsm-yellow transition-colors relative py-1 after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-xsm-yellow hover:after:w-full after:transition-all after:duration-300"
-              >
-                About Us
-              </button>
-              <button 
-                onClick={() => { navigate('/contact'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
-                className="hover:text-xsm-yellow transition-colors relative py-1 after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-xsm-yellow hover:after:w-full after:transition-all after:duration-300"
-              >
-                Contact
-              </button>
-              <button 
-                onClick={() => { navigate('/terms'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
-                className="hover:text-xsm-yellow transition-colors relative py-1 after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-xsm-yellow hover:after:w-full after:transition-all after:duration-300"
-              >
-                Terms of Service
-              </button>
-              <button 
-                onClick={() => { navigate('/privacy'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} 
-                className="hover:text-xsm-yellow transition-colors relative py-1 after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-xsm-yellow hover:after:w-full after:transition-all after:duration-300"
-              >
-                Privacy Policy
-              </button>
+
+            {/* CENTER: XSM Tagline */}
+            <div className="hidden md:flex items-center justify-center">
+              <p className="text-[11px] font-semibold text-gray-500 tracking-widest uppercase whitespace-nowrap">
+                🔒 Secure Social Media Marketplace & Escrow Platform
+              </p>
             </div>
-          </div>
-          
-          {/* Copyright */}
-          <div className="mt-6 pt-5 border-t border-xsm-medium-gray/20 flex flex-col sm:flex-row items-center justify-between text-xs text-xsm-medium-gray gap-2">
-            <p>© 2025 XSM Market. All rights reserved.</p>
-            <p className="text-[11px] text-gray-500">Secure Social Media Marketplace & Escrow Platform</p>
+
+            {/* RIGHT: Nav Links */}
+            <div className="hidden md:flex items-center justify-end gap-6 text-[13px] font-semibold text-gray-400 whitespace-nowrap">
+              {[
+                { label: 'About Us', path: '/about' },
+                { label: 'Contact', path: '/contact' },
+                { label: 'Terms', path: '/terms' },
+                { label: 'Privacy', path: '/privacy' },
+              ].map(({ label, path }) => (
+                <button
+                  key={path}
+                  onClick={() => { navigate(path); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  className="relative py-1 hover:text-xsm-yellow transition-colors duration-200 after:content-[''] after:absolute after:bottom-0 after:left-0 after:w-0 after:h-[2px] after:bg-xsm-yellow hover:after:w-full after:transition-all after:duration-300"
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </footer>

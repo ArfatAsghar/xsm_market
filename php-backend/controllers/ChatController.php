@@ -1348,7 +1348,12 @@ class ChatController {
                 return $emptySummary;
             }
 
+            $idCol = $pickColumn(['id', 'deal_id', 'dealId']);
+            $txnCol = $pickColumn(['transaction_id', 'transactionId', 'txnId']);
+
             $selectParts = [
+                $idCol ? "`$idCol` AS id" : "0 AS id",
+                $txnCol ? "`$txnCol` AS transaction_id" : "'' AS transaction_id",
                 "`$buyerCol` AS buyer_id",
                 "`$sellerCol` AS seller_id",
                 $titleCol ? "`$titleCol` AS channel_title" : "'Deal' AS channel_title",
@@ -1372,10 +1377,15 @@ class ChatController {
                 $isBought = (int)$deal['buyer_id'] === (int)$currentUserId;
 
                 return [
+                    'id' => (int)($deal['id'] ?? 0),
+                    'deal_id' => (int)($deal['id'] ?? 0),
+                    'transaction_id' => $deal['transaction_id'] ?? '',
                     'channel' => $deal['channel_title'] ?: 'Deal',
                     'price' => (float)($deal['channel_price'] ?? 0),
                     'role' => $isBought ? 'bought' : 'sold',
-                    'status' => $deal['deal_status'] ?? ''
+                    'status' => $deal['deal_status'] ?? '',
+                    'buyer_id' => (int)($deal['buyer_id'] ?? 0),
+                    'seller_id' => (int)($deal['seller_id'] ?? 0)
                 ];
             }, $deals));
 

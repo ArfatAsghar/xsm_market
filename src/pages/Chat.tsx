@@ -7,6 +7,7 @@ import { getImageUrl } from '@/config/api';
 import { toast } from '@/components/ui/use-toast';
 import { io, Socket } from 'socket.io-client';
 import DealCardMessage from '@/components/DealCardMessage';
+import SellerDealView from '@/components/SellerDealView';
 
 // Custom scrollbar styles
 const scrollbarStyles = `
@@ -163,6 +164,70 @@ const Chat: React.FC = () => {
   // Deal card refs: dealId -> DOM element for scroll-to-highlight
   const dealCardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const [highlightedDealId, setHighlightedDealId] = useState<number | null>(null);
+  const [selectedDealForModal, setSelectedDealForModal] = useState<any | null>(null);
+  const [showSellerDealModal, setShowSellerDealModal] = useState(false);
+
+  const handleOpenDealModal = async (dealId: number | string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`${API_URL}/deals/${dealId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const dealObj = data.deal || data;
+        setSelectedDealForModal(dealObj);
+        setShowSellerDealModal(true);
+        return;
+      }
+    } catch (err) {
+      console.error('Error fetching deal for modal:', err);
+    }
+    // Fallback: navigate to seller-deals page
+    navigate('/seller-deals');
+  };
+
+  const parseDealCardFromMessage = (content: string): any => {
+    if (!content) return null;
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed && (parsed.deal_id || parsed.channel_title || parsed.transaction_id)) {
+        return parsed;
+      }
+    } catch {}
+
+    if (
+      content.includes('Deal Initiated') ||
+      content.includes('Transaction ID:') ||
+      content.includes('I want to purchase your listing')
+    ) {
+      const titleMatch = content.match(/listing ['"]([^'"]+)['"]/i) || content.match(/channel ['"]([^'"]+)['"]/i) || content.match(/listing ([^\n]+) for/i);
+      const priceMatch = content.match(/\$([0-9]+(?:\.[0-9]{1,2})?)/);
+      const txnMatch = content.match(/TXN[A-Z0-9_-]+/i) || content.match(/Transaction ID:\s*([^\s\n]+)/i);
+
+      const title = titleMatch ? titleMatch[1] : 'Social Media Channel';
+      const price = priceMatch ? parseFloat(priceMatch[1]) : 0;
+      const txnId = txnMatch ? txnMatch[0].replace(/Transaction ID:\s*/i, '').trim() : 'TXN0001';
+      const numMatch = txnId.match(/\d+/);
+      const dealId = numMatch ? parseInt(numMatch[0].slice(-6), 10) || 1 : 1;
+
+      return {
+        deal_id: dealId,
+        transaction_id: txnId,
+        channel_title: title,
+        channel_price: price,
+        escrow_fee: price > 50 ? price * 0.05 : 2,
+        deal_status: 'seller_reviewing',
+        buyer_username: 'Buyer',
+        transaction_type: 'safest',
+        created_at: new Date().toISOString()
+      };
+    }
+
+    return null;
+  };
 
   const handleRequestAgent = async () => {
     if (!selectedChat || !user) return;
@@ -1347,30 +1412,27 @@ const Chat: React.FC = () => {
                         const isSystem = message.messageType === 'system';
 
                         // ── DEAL CARD MESSAGES: show an inline deal card when a deal is started ──
-                        if (message.messageType === 'deal_card') {
-                          let dealData: any = null;
-                          try {
-                            dealData = typeof message.content === 'string' ? JSON.parse(message.content) : message.content;
-                          } catch {
-                            dealData = null;
-                          }
-                          if (dealData && dealData.deal_id) {
-                            const dealId = Number(dealData.deal_id);
-                            return (
-                              <div
-                                key={message.id}
-                                ref={(el) => {
-                                  if (el) dealCardRefs.current.set(dealId, el);
-                                  else dealCardRefs.current.delete(dealId);
-                                }}
-                              >
-                                <DealCardMessage
-                                  dealData={dealData}
-                                  isHighlighted={highlightedDealId === dealId}
-                                />
-                              </div>
-                            );
-                          }
+                        const cardData = message.messageType === 'deal_card'
+                          ? (typeof message.content === 'string' ? parseDealCardFromMessage(message.content) : message.content)
+                          : parseDealCardFromMessage(message.content);
+
+                        if (cardData && cardData.deal_id) {
+                          const dealId = Number(cardData.deal_id);
+                          return (
+                            <div
+                              key={message.id}
+                              ref={(el) => {
+                                if (el) dealCardRefs.current.set(dealId, el);
+                                else dealCardRefs.current.delete(dealId);
+                              }}
+                            >
+                              <DealCardMessage
+                                dealData={cardData}
+                                isHighlighted={highlightedDealId === dealId}
+                                onOpenDealModal={handleOpenDealModal}
+                              />
+                            </div>
+                          );
                         }
 
                         // System messages render as centered notification pills
@@ -1750,33 +1812,31 @@ const Chat: React.FC = () => {
 
               return (
                 <div className="pt-3 border-t border-xsm-medium-gray">
-                  <p className="text-sm text-xsm-light-gray mb-2">All deals with this seller — click to jump to deal card</p>
-                  {dealList.map((deal, index) => {
-                    const dealId = deal.deal_id != null ? Number(deal.deal_id) : null;
-                    const hasDealCard = dealId !== null && dealCardRefs.current.has(dealId);
+                  <p className="text-sm text-xsm-light-gray mb-2">All deals with this seller — click any deal to review</p>
+                  {dealList.map((deal: any, index: number) => {
+                    const dealId = deal.deal_id || deal.id;
+                    const hasDealCard = dealId != null && dealCardRefs.current.has(Number(dealId));
                     return (
                       <div
                         key={`${deal.channel}-${index}`}
                         onClick={() => {
-                          if (!hasDealCard || dealId === null) return;
                           setShowDealSummary(false);
-                          setTimeout(() => {
-                            const el = dealCardRefs.current.get(dealId);
+                          if (dealId) {
+                            handleOpenDealModal(dealId);
+                            const el = dealCardRefs.current.get(Number(dealId));
                             if (el) {
                               el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                              setHighlightedDealId(dealId);
+                              setHighlightedDealId(Number(dealId));
                               setTimeout(() => setHighlightedDealId(null), 2500);
                             }
-                          }, 150);
+                          } else {
+                            navigate('/seller-deals');
+                          }
                         }}
-                        className={`flex items-center justify-between gap-3 text-sm py-2.5 px-2 rounded-lg border-b border-xsm-medium-gray/30 last:border-b-0 transition-all duration-150 ${
-                          hasDealCard
-                            ? 'cursor-pointer hover:bg-xsm-yellow/10 group'
-                            : 'cursor-default'
-                        }`}
+                        className="flex items-center justify-between gap-3 text-sm py-2.5 px-3 rounded-xl border border-xsm-medium-gray/30 bg-xsm-black/50 hover:bg-xsm-yellow/10 hover:border-xsm-yellow/40 cursor-pointer transition-all duration-200 group mb-1.5"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className={`text-white truncate font-medium ${hasDealCard ? 'group-hover:text-xsm-yellow transition-colors' : ''}`}>
+                          <p className="text-white truncate font-semibold group-hover:text-xsm-yellow transition-colors">
                             {deal.channel || 'Deal'}
                           </p>
                           {(deal.role || deal.status) && (
@@ -1786,12 +1846,12 @@ const Chat: React.FC = () => {
                           )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-xsm-yellow font-semibold whitespace-nowrap">
+                          <span className="text-xsm-yellow font-bold whitespace-nowrap">
                             ${Number(deal.price || 0).toLocaleString()}
                           </span>
-                          {hasDealCard && (
-                            <span className="text-xs text-gray-500 group-hover:text-xsm-yellow transition-colors" title="Click to view in chat">↗</span>
-                          )}
+                          <span className="text-xs text-xsm-yellow opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all">
+                            Review ↗
+                          </span>
                         </div>
                       </div>
                     );
@@ -1802,6 +1862,22 @@ const Chat: React.FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Seller Deal Review Modal inside Chat */}
+        {showSellerDealModal && (
+          <SellerDealView
+            isOpen={showSellerDealModal}
+            onClose={() => {
+              setShowSellerDealModal(false);
+              setSelectedDealForModal(null);
+            }}
+            deal={selectedDealForModal}
+            onDealUpdate={() => {
+              fetchChats(true);
+              if (selectedChat) fetchMessages(selectedChat.id);
+            }}
+          />
         )}
 
 

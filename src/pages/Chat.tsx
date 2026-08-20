@@ -6,6 +6,7 @@ import { API_URL } from '@/services/auth';
 import { getImageUrl } from '@/config/api';
 import { toast } from '@/components/ui/use-toast';
 import { io, Socket } from 'socket.io-client';
+import DealCardMessage from '@/components/DealCardMessage';
 
 // Custom scrollbar styles
 const scrollbarStyles = `
@@ -159,6 +160,9 @@ const Chat: React.FC = () => {
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSeenAnnouncementIdRef = useRef<number>(parseInt(localStorage.getItem('xsm_lastSeenAnnouncementId') || '0', 10));
+  // Deal card refs: dealId -> DOM element for scroll-to-highlight
+  const dealCardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const [highlightedDealId, setHighlightedDealId] = useState<number | null>(null);
 
   const handleRequestAgent = async () => {
     if (!selectedChat || !user) return;
@@ -1342,6 +1346,33 @@ const Chat: React.FC = () => {
                         const isMyMessage = message.senderId === user?.id || String(message.senderId) === String(user?.id);
                         const isSystem = message.messageType === 'system';
 
+                        // ── DEAL CARD MESSAGES: show an inline deal card when a deal is started ──
+                        if (message.messageType === 'deal_card') {
+                          let dealData: any = null;
+                          try {
+                            dealData = typeof message.content === 'string' ? JSON.parse(message.content) : message.content;
+                          } catch {
+                            dealData = null;
+                          }
+                          if (dealData && dealData.deal_id) {
+                            const dealId = Number(dealData.deal_id);
+                            return (
+                              <div
+                                key={message.id}
+                                ref={(el) => {
+                                  if (el) dealCardRefs.current.set(dealId, el);
+                                  else dealCardRefs.current.delete(dealId);
+                                }}
+                              >
+                                <DealCardMessage
+                                  dealData={dealData}
+                                  isHighlighted={highlightedDealId === dealId}
+                                />
+                              </div>
+                            );
+                          }
+                        }
+
                         // System messages render as centered notification pills
                         if (isSystem) {
                           return (
@@ -1696,55 +1727,83 @@ const Chat: React.FC = () => {
                   <span className="text-xsm-light-gray">Total deals</span>
                   <span className="font-semibold">{selectedChat.dealSummary?.totalDeals || 0}</span>
                 </div>
-            {(
-  selectedChat.dealSummary?.deals && selectedChat.dealSummary.deals.length > 0
-    ? selectedChat.dealSummary.deals
-    : (selectedChat.dealSummary?.channels || []).map((channel, index) => ({
-        channel,
-        price: selectedChat.dealSummary?.prices?.[index] || 0,
-        role: '',
-        status: ''
-      }))
-).length > 0 ? (
-  <div className="pt-3 border-t border-xsm-medium-gray">
-    <p className="text-sm text-xsm-light-gray mb-2">All deals with this seller</p>
-    {(
-      selectedChat.dealSummary?.deals && selectedChat.dealSummary.deals.length > 0
-        ? selectedChat.dealSummary.deals
-        : (selectedChat.dealSummary?.channels || []).map((channel, index) => ({
-            channel,
-            price: selectedChat.dealSummary?.prices?.[index] || 0,
-            role: '',
-            status: ''
-          }))
-    ).map((deal, index) => (
-      <div
-        key={`${deal.channel}-${index}`}
-        className="flex items-center justify-between gap-3 text-sm py-2 border-b border-xsm-medium-gray/40 last:border-b-0"
-      >
-        <div className="min-w-0">
-          <p className="text-white truncate">{deal.channel || 'Deal'}</p>
-          {(deal.role || deal.status) && (
-            <p className="text-xs text-xsm-light-gray capitalize">
-              {[deal.role, deal.status].filter(Boolean).join(' · ')}
-            </p>
-          )}
-        </div>
-        <span className="text-xsm-yellow font-semibold whitespace-nowrap">
-          ${Number(deal.price || 0).toLocaleString()}
-        </span>
-      </div>
-    ))}
-  </div>
-) : (
-  <p className="text-sm text-xsm-light-gray pt-3 border-t border-xsm-medium-gray">
-    No completed deals with this user yet.
-  </p>
-)}
+            {(() => {
+              const dealList = (
+                selectedChat.dealSummary?.deals && selectedChat.dealSummary.deals.length > 0
+                  ? selectedChat.dealSummary.deals
+                  : (selectedChat.dealSummary?.channels || []).map((channel, index) => ({
+                      channel,
+                      price: selectedChat.dealSummary?.prices?.[index] || 0,
+                      role: '',
+                      status: '',
+                      deal_id: undefined as number | undefined,
+                    }))
+              ) as Array<{ channel: string; price: number; role?: string; status?: string; deal_id?: number }>;
+
+              if (dealList.length === 0) {
+                return (
+                  <p className="text-sm text-xsm-light-gray pt-3 border-t border-xsm-medium-gray">
+                    No completed deals with this user yet.
+                  </p>
+                );
+              }
+
+              return (
+                <div className="pt-3 border-t border-xsm-medium-gray">
+                  <p className="text-sm text-xsm-light-gray mb-2">All deals with this seller — click to jump to deal card</p>
+                  {dealList.map((deal, index) => {
+                    const dealId = deal.deal_id != null ? Number(deal.deal_id) : null;
+                    const hasDealCard = dealId !== null && dealCardRefs.current.has(dealId);
+                    return (
+                      <div
+                        key={`${deal.channel}-${index}`}
+                        onClick={() => {
+                          if (!hasDealCard || dealId === null) return;
+                          setShowDealSummary(false);
+                          setTimeout(() => {
+                            const el = dealCardRefs.current.get(dealId);
+                            if (el) {
+                              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                              setHighlightedDealId(dealId);
+                              setTimeout(() => setHighlightedDealId(null), 2500);
+                            }
+                          }, 150);
+                        }}
+                        className={`flex items-center justify-between gap-3 text-sm py-2.5 px-2 rounded-lg border-b border-xsm-medium-gray/30 last:border-b-0 transition-all duration-150 ${
+                          hasDealCard
+                            ? 'cursor-pointer hover:bg-xsm-yellow/10 group'
+                            : 'cursor-default'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-white truncate font-medium ${hasDealCard ? 'group-hover:text-xsm-yellow transition-colors' : ''}`}>
+                            {deal.channel || 'Deal'}
+                          </p>
+                          {(deal.role || deal.status) && (
+                            <p className="text-xs text-xsm-light-gray capitalize">
+                              {[deal.role, deal.status].filter(Boolean).join(' · ')}
+                            </p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-xsm-yellow font-semibold whitespace-nowrap">
+                            ${Number(deal.price || 0).toLocaleString()}
+                          </span>
+                          {hasDealCard && (
+                            <span className="text-xs text-gray-500 group-hover:text-xsm-yellow transition-colors" title="Click to view in chat">↗</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
               </div>
             </div>
           </div>
         )}
+
 
         {/* Security Notice */}
         <div className="mt-6 bg-xsm-black/50 rounded-lg p-4">

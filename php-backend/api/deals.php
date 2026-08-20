@@ -164,12 +164,49 @@ function createDeal() {
         
         // Get the created deal with all details
         $deal = getDealWithDetails($deal_id);
+
+        // ── Post a deal_card message into the buyer-seller chat ──
+        // Find the existing chat between buyer and seller
+        $chatStmt = $pdo->prepare("
+            SELECT c.id as chat_id FROM chats c
+            INNER JOIN chat_participants cp1 ON c.id = cp1.chatId AND cp1.isActive = 1
+            INNER JOIN chat_participants cp2 ON c.id = cp2.chatId AND cp2.isActive = 1
+            WHERE cp1.userId = ? AND cp2.userId = ?
+            AND cp1.chatId = cp2.chatId
+            LIMIT 1
+        ");
+        $chatStmt->execute([$user['id'], $input['seller_id']]);
+        $chat = $chatStmt->fetch(PDO::FETCH_ASSOC);
+
+        if ($chat && isset($chat['chat_id'])) {
+            // Build compact deal card JSON payload for the message content
+            $paymentMethodsList = array_map(function($m) { return ['id' => $m['id'], 'name' => $m['name'], 'category' => $m['category']]; }, $input['payment_methods']);
+            $dealCardContent = json_encode([
+                'deal_id'         => (int)$deal_id,
+                'transaction_id'  => $transaction_id,
+                'channel_title'   => $input['channel_title'],
+                'channel_price'   => (float)$input['channel_price'],
+                'escrow_fee'      => (float)$input['escrow_fee'],
+                'deal_status'     => 'seller_reviewing',
+                'buyer_username'  => $user['username'] ?? 'Buyer',
+                'seller_id'       => (string)$input['seller_id'],
+                'transaction_type'=> $transaction_type,
+                'payment_methods' => $paymentMethodsList,
+                'created_at'      => date('Y-m-d H:i:s'),
+            ]);
+
+            $msgStmt = $pdo->prepare("
+                INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
+                VALUES (?, ?, ?, 'deal_card', 0, NOW(), NOW())
+            ");
+            $msgStmt->execute([$chat['chat_id'], $user['id'], $dealCardContent]);
+        }
         
         http_response_code(201);
         echo json_encode([
             'message' => 'Deal created successfully',
             'deal_id' => $deal_id,
-            'transaction_id' => $input['transaction_id'],
+            'transaction_id' => $transaction_id,
             'deal' => $deal
         ]);
         

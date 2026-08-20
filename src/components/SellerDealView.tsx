@@ -405,28 +405,41 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
             <p className="text-xsm-light-gray mb-4">
               The buyer has selected these payment methods. If you're comfortable with any of these options, click "I Agree to Terms" below.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {deal.payment_methods.map((method, index) => (
-                <div
-                  key={index}
-                  className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg"
-                >
-                  <div className="w-8 h-8 bg-xsm-yellow rounded-full flex items-center justify-center">
-                    <DollarSign size={16} className="text-black" />
+
+            {(() => {
+              const methods: any[] = Array.isArray(deal?.payment_methods)
+                ? deal.payment_methods
+                : (typeof (deal as any)?.buyer_payment_methods === 'string'
+                    ? (() => { try { return JSON.parse((deal as any).buyer_payment_methods) || []; } catch { return []; } })()
+                    : (Array.isArray((deal as any)?.buyer_payment_methods) ? (deal as any).buyer_payment_methods : []));
+
+              return (
+                <>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {methods.map((method, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg"
+                      >
+                        <div className="w-8 h-8 bg-xsm-yellow rounded-full flex items-center justify-center">
+                          <DollarSign size={16} className="text-black" />
+                        </div>
+                        <div>
+                          <div className="text-white font-medium">{method.name || method.id || 'Payment Method'}</div>
+                          {method.category && <div className="text-xsm-light-gray text-sm capitalize">{method.category}</div>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <div className="text-white font-medium">{method.name}</div>
-                    <div className="text-xsm-light-gray text-sm capitalize">{method.category}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            {deal.payment_methods.length === 0 && (
-              <div className="text-center py-4">
-                <p className="text-xsm-light-gray">No payment methods selected</p>
-              </div>
-            )}
+
+                  {methods.length === 0 && (
+                    <div className="text-center py-4">
+                      <p className="text-xsm-light-gray">No payment methods selected</p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
 
           {/* Transaction Process */}

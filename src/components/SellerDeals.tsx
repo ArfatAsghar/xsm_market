@@ -232,15 +232,15 @@ const SellerDeals: React.FC = () => {
                       </div>
                       <div>
                         <p className="text-xsm-light-gray text-sm">Payment Methods</p>
-                        <p className="text-white">{deal.payment_methods.length} selected</p>
+                        <p className="text-white">{(deal.payment_methods || []).length} selected</p>
                       </div>
                     </div>
 
-                    {deal.payment_methods.length > 0 && (
+                    {(deal.payment_methods || []).length > 0 && (
                       <div className="mb-4">
                         <p className="text-xsm-light-gray text-sm mb-2">Available Payment Methods:</p>
                         <div className="flex flex-wrap gap-2">
-                          {deal.payment_methods.slice(0, 3).map((method, index) => (
+                          {(deal.payment_methods || []).slice(0, 3).map((method, index) => (
                             <span
                               key={index}
                               className="px-2 py-1 bg-gray-700 text-white rounded text-sm"
@@ -248,9 +248,9 @@ const SellerDeals: React.FC = () => {
                               {method.name}
                             </span>
                           ))}
-                          {deal.payment_methods.length > 3 && (
+                          {(deal.payment_methods || []).length > 3 && (
                             <span className="px-2 py-1 bg-gray-600 text-white rounded text-sm">
-                              +{deal.payment_methods.length - 3} more
+                              +{(deal.payment_methods || []).length - 3} more
                             </span>
                           )}
                         </div>

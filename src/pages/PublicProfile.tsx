@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { User as UserIcon, Edit, Calendar, MessageCircle, Crown, Clock, DollarSign, CheckCircle2, ShieldCheck, Users, ChevronDown, ChevronUp, X, Check, Camera } from 'lucide-react';
+import { User as UserIcon, Edit, Calendar, MessageCircle, Crown, Clock, DollarSign, CheckCircle2, ShieldCheck, Users, ChevronDown, ChevronUp, X, Check, Camera, Upload, Lock } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import { getPublicProfile, updateProfile, API_URL, SellerMetrics, ReviewItem } from '@/services/auth';
 import UserAdList from '@/components/UserAdList';
 import PublicAdList from '@/components/PublicAdList';
+
+const DEFAULT_DESCRIPTION = "Welcome to my marketplace profile! I specialize in buying and selling verified social media accounts, YouTube channels, and digital assets with safe and secure escrow transactions.";
 
 interface PublicUser {
   id: string;
@@ -110,7 +112,7 @@ const PublicProfile: React.FC = () => {
   const handleOpenEditModal = () => {
     if (!profileUser) return;
     setEditFullName(profileUser.fullName || '');
-    setEditDescription(profileUser.description || '');
+    setEditDescription(profileUser.description || DEFAULT_DESCRIPTION);
     setEditProfilePicture(profileUser.profilePicture || '');
     setShowEditModal(true);
   };
@@ -232,7 +234,7 @@ const PublicProfile: React.FC = () => {
                     type="button"
                     onClick={handleOpenEditModal}
                     className="absolute bottom-0 right-0 bg-xsm-yellow text-black p-2 rounded-full hover:bg-yellow-500 transition-colors shadow-lg"
-                    title="Edit Profile Picture"
+                    title="Upload Profile Picture"
                   >
                     <Camera className="w-4 h-4" />
                   </button>
@@ -248,7 +250,7 @@ const PublicProfile: React.FC = () => {
                   )}
                 </h1>
 
-                <p className="text-xsm-light-gray text-xs mb-3">
+                <p className="text-xsm-light-gray text-xs mb-3 font-mono">
                   @{profileUser.username}
                 </p>
 
@@ -351,49 +353,28 @@ const PublicProfile: React.FC = () => {
 
           {/* ── MIDDLE MAIN CONTENT SECTION (6 Columns on Desktop) ── */}
           <div className="lg:col-span-6 space-y-6">
-            {/* Profile Description */}
-            {(profileUser.description || isOwnProfile) && (
-              <div className="bg-xsm-dark-gray rounded-xl p-5 shadow-lg border border-xsm-medium-gray/30">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-lg font-bold text-xsm-yellow">About</h2>
-                  {isOwnProfile && (
-                    <button
-                      type="button"
-                      onClick={handleOpenEditModal}
-                      className="text-xsm-light-gray hover:text-xsm-yellow transition-colors flex items-center gap-1 text-xs font-semibold"
-                      title="Edit Description"
-                    >
-                      <Edit className="w-3.5 h-3.5" /> Edit
-                    </button>
-                  )}
-                </div>
-
-                {profileUser.description ? (
-                  <p className="text-xsm-light-gray text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
-                    {profileUser.description}
-                  </p>
-                ) : isOwnProfile ? (
-                  <div className="text-center py-6">
-                    <p className="text-xsm-light-gray text-xs mb-3">
-                      Tell others about yourself and your channel portfolio...
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleOpenEditModal}
-                      className="bg-xsm-yellow text-black px-4 py-1.5 rounded-lg hover:bg-yellow-500 transition-colors text-xs font-bold shadow"
-                    >
-                      Add Description
-                    </button>
-                  </div>
-                ) : (
-                  <p className="text-xsm-light-gray text-xs italic">
-                    This user hasn't added a description yet.
-                  </p>
+            {/* Profile Description (Always available with default description) */}
+            <div className="bg-xsm-dark-gray rounded-xl p-5 shadow-lg border border-xsm-medium-gray/30">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-bold text-xsm-yellow">About</h2>
+                {isOwnProfile && (
+                  <button
+                    type="button"
+                    onClick={handleOpenEditModal}
+                    className="text-xsm-light-gray hover:text-xsm-yellow transition-colors flex items-center gap-1 text-xs font-semibold"
+                    title="Edit Description"
+                  >
+                    <Edit className="w-3.5 h-3.5" /> Edit
+                  </button>
                 )}
               </div>
-            )}
 
-            {/* Seller's Listings (Single clean rendering, no duplicate title wrapper) */}
+              <p className="text-xsm-light-gray text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
+                {profileUser.description || DEFAULT_DESCRIPTION}
+              </p>
+            </div>
+
+            {/* Seller's Listings (Single clean rendering) */}
             <div className="bg-xsm-dark-gray rounded-xl p-5 shadow-lg border border-xsm-medium-gray/30">
               {isOwnProfile ? (
                 <UserAdList />
@@ -495,6 +476,65 @@ const PublicProfile: React.FC = () => {
             </div>
 
             <form onSubmit={handleSaveProfile} className="space-y-4">
+              {/* Profile Picture Image Upload */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1.5">Profile Picture</label>
+                <div className="flex items-center gap-4 bg-xsm-black/60 p-3 rounded-xl border border-xsm-medium-gray/30">
+                  <div className="w-14 h-14 rounded-full overflow-hidden bg-xsm-yellow flex items-center justify-center flex-shrink-0 ring-2 ring-xsm-yellow/30 shadow">
+                    {editProfilePicture ? (
+                      <img src={editProfilePicture} alt="Avatar Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <UserIcon className="w-8 h-8 text-black" />
+                    )}
+                  </div>
+                  <div className="space-y-1.5 flex-1">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="avatar-file-upload"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          if (file.size > 5 * 1024 * 1024) {
+                            showError('Image size should be under 5MB');
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = (evt) => {
+                            setEditProfilePicture(evt.target?.result as string);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                    <label
+                      htmlFor="avatar-file-upload"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-xsm-yellow text-black text-xs font-bold rounded-lg cursor-pointer hover:bg-yellow-400 transition-colors shadow-sm"
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Upload Image File
+                    </label>
+                    <p className="text-[10px] text-gray-400">PNG, JPG, WEBP up to 5MB</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Username (Locked / Cannot be changed) */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1 flex items-center justify-between">
+                  <span>Username</span>
+                  <span className="text-[10px] text-amber-400 font-bold flex items-center gap-1">
+                    <Lock className="w-3 h-3" /> Permanent
+                  </span>
+                </label>
+                <input
+                  type="text"
+                  value={`@${profileUser.username}`}
+                  disabled
+                  className="xsm-input w-full text-xs opacity-60 cursor-not-allowed bg-xsm-black/60 font-semibold text-xsm-yellow"
+                />
+              </div>
+
               {/* Full Name */}
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1">Full Name / Display Name</label>
@@ -516,18 +556,6 @@ const PublicProfile: React.FC = () => {
                   className="xsm-input w-full text-xs min-h-[120px] resize-y"
                   placeholder="Describe your background, specialty, and channel portfolio..."
                   rows={4}
-                />
-              </div>
-
-              {/* Profile Picture URL */}
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">Profile Picture Image URL (Optional)</label>
-                <input
-                  type="text"
-                  value={editProfilePicture}
-                  onChange={(e) => setEditProfilePicture(e.target.value)}
-                  className="xsm-input w-full text-xs"
-                  placeholder="https://example.com/your-avatar.jpg"
                 />
               </div>
 

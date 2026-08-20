@@ -1015,63 +1015,6 @@ const SellChannel: React.FC<SellChannelProps> = () => {
               />
             </div>
 
-            {/* Subscribers Input — read-only when auto-extracted */}
-            <div>
-              <input
-                type="number"
-                name="subscribers"
-                value={formData.subscribers}
-                onChange={extractedData ? undefined : handleInputChange}
-                readOnly={!!extractedData}
-                className={`xsm-input w-full ${
-                  extractedData ? 'opacity-70 cursor-not-allowed bg-xsm-dark-gray/60' : ''
-                }`}
-                placeholder="Number of subscribers/followers"
-              />
-            </div>
-
-            {/* Monetization Toggle */}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <span className="mr-3 text-white">Channel Status:</span>
-                <div className="flex items-center space-x-6">
-                  <label className="inline-flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="monetizationStatus"
-                      className="sr-only"
-                      checked={!formData.isMonetized}
-                      onChange={() => setFormData(prev => ({ ...prev, isMonetized: false }))}
-                    />
-                    <div className={`flex items-center ${!formData.isMonetized ? 'text-xsm-yellow' : 'text-white'}`}>
-                      <div className={`w-4 h-4 mr-2 rounded-full border ${!formData.isMonetized ? 'bg-xsm-yellow border-xsm-yellow' : 'border-white'} flex items-center justify-center`}>
-                        {!formData.isMonetized && <div className="w-2 h-2 bg-xsm-black rounded-full"></div>}
-                      </div>
-                      Non Monetized
-                    </div>
-                  </label>
-                  
-                  <label className="inline-flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="monetizationStatus"
-                      className="sr-only"
-                      checked={formData.isMonetized}
-                      onChange={() => setFormData(prev => ({ ...prev, isMonetized: true }))}
-                    />
-                    <div className={`flex items-center ${formData.isMonetized ? 'text-xsm-yellow' : 'text-white'}`}>
-                      <div className={`w-4 h-4 mr-2 rounded-full border ${formData.isMonetized ? 'bg-xsm-yellow border-xsm-yellow' : 'border-white'} flex items-center justify-center`}>
-                        {formData.isMonetized && <div className="w-2 h-2 bg-xsm-black rounded-full"></div>}
-                      </div>
-                      Monetized
-                    </div>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-
-
             {/* Optional Fields Section */}
             <div className="pt-6">
               <h2 className="text-xl font-medium mb-4">Optional fields</h2>
@@ -1088,59 +1031,97 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                 />
               </div>
 
-              {/* Content Type Dropdown */}
-              <div className="mb-6 relative" ref={contentTypeDropdownRef}>
-                <div 
-                  onClick={() => setShowContentTypeDropdown(!showContentTypeDropdown)}
-                  className="xsm-input w-full flex items-center justify-between cursor-pointer"
-                >
-                  <span className="text-white font-medium">
-                  {formData.contentType || "-- Specify the primary content published --"}
-                  </span>
-                  <ChevronDown className="w-5 h-5 text-xsm-light-gray" />
-                </div>
-                
-                {/* Dropdown menu */}
-                {showContentTypeDropdown && (
-                  <div className="absolute z-10 mt-1 w-full bg-xsm-black rounded-md shadow-lg border border-xsm-medium-gray overflow-hidden">
-                    <div className="max-h-60 overflow-y-auto">
-                      {contentTypes.map((type) => (
-                        <div
-                          key={type}
-                          onClick={() => {
-                            setFormData(prev => ({ ...prev, contentType: type }));
-                            setShowContentTypeDropdown(false);
-                          }}
-                          className={`px-4 py-3 cursor-pointer hover:bg-xsm-medium-gray/30 ${
-                            formData.contentType === type ? 'bg-xsm-yellow text-black font-semibold' : 'text-white font-medium'}'
-                          }`}
-                        >
-                          {type}
+              {/* Specify Primary Content Published — Compact Selection Cards */}
+              <div className="mb-6">
+                <label className="block text-white font-medium mb-2.5">
+                  Specify Primary Content Published
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { id: 'Unique content', label: 'Unique Content', icon: '✨', desc: '100% Original' },
+                    { id: 'Rewritten', label: 'Rewritten', icon: '✍️', desc: 'Edited / Remixed' },
+                    { id: 'Not unique content', label: 'Not Unique', icon: '📋', desc: 'Reuploaded / Curated' },
+                    { id: 'Mixed', label: 'Mixed Content', icon: '🔀', desc: 'Original & Reused' },
+                  ].map((item) => {
+                    const isSelected = formData.contentType === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, contentType: item.id }))}
+                        className={`p-3 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? 'border-xsm-yellow bg-xsm-yellow/10 text-xsm-yellow ring-1 ring-xsm-yellow shadow-md'
+                            : 'border-xsm-medium-gray/40 bg-xsm-black/60 text-gray-300 hover:border-xsm-yellow/50 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-sm">{item.icon}</span>
+                          <span className="font-bold text-xs">{item.label}</span>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                        <p className="text-[10px] text-gray-400">{item.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
-              {/* Ways of Earning & Promotion */}
+              {/* Ways of Earning — Platform Specific Method Selection Chips */}
               <div className="mb-6">
-                <textarea
+                <label className="block text-white font-medium mb-1.5">Ways of Earning</label>
+                <p className="text-xs text-xsm-light-gray mb-3">
+                  Select monetization and revenue methods used for this channel/account:
+                </p>
+
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {[
+                    'AdSense Monetization',
+                    'Brand Sponsorships',
+                    'Affiliate Marketing',
+                    'Channel Memberships',
+                    'Merch & Digital Products',
+                    'Sponsored Posts',
+                    'Creator Rewards Program',
+                    'LIVE Gifting & Tips'
+                  ].map((method) => {
+                    const isSelected = formData.incomeDetails.includes(method);
+                    return (
+                      <button
+                        key={method}
+                        type="button"
+                        onClick={() => {
+                          const current = formData.incomeDetails
+                            .split(',')
+                            .map(s => s.trim())
+                            .filter(Boolean);
+
+                          let updated: string[];
+                          if (current.includes(method)) {
+                            updated = current.filter(m => m !== method);
+                          } else {
+                            updated = [...current, method];
+                          }
+                          setFormData(prev => ({ ...prev, incomeDetails: updated.join(', ') }));
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          isSelected
+                            ? 'bg-xsm-yellow text-black border-xsm-yellow shadow-md'
+                            : 'bg-xsm-black/80 text-gray-300 border-xsm-medium-gray/40 hover:border-xsm-yellow/50 hover:text-white'
+                        }`}
+                      >
+                        {isSelected ? '✓ ' : '+ '}{method}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <input
+                  type="text"
                   name="incomeDetails"
                   value={formData.incomeDetails}
                   onChange={handleInputChange}
-                  className="xsm-input w-full resize-none mb-4"
-                  rows={4}
-                  placeholder="Ways of Earning"
-                />
-                
-                <textarea
-                  name="promotionDetails"
-                  value={formData.promotionDetails}
-                  onChange={handleInputChange}
-                  className="xsm-input w-full resize-none"
-                  rows={4}
-                  placeholder="Ways of Promotion"
+                  className="xsm-input w-full text-xs"
+                  placeholder="Or type custom earning methods (e.g., AdSense, Sponsorships, Affiliate Sales)"
                 />
               </div>
 

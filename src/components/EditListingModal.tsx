@@ -781,50 +781,21 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-white font-medium mb-2">
-                Price ($) <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="number"
-                name="price"
-                value={formData.price}
-                onChange={handleInputChange}
-                className="xsm-input w-full"
-                placeholder="Enter price"
-                min="0"
-                step="0.01"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block text-white font-medium mb-2">Subscribers/Followers</label>
-              <input
-                type="number"
-                name="subscribers"
-                value={formData.subscribers}
-                onChange={handleInputChange}
-                className="xsm-input w-full"
-                placeholder="Enter subscriber count"
-                min="0"
-              />
-            </div>
-          </div>
-
           <div>
-            <label className="block text-white font-medium mb-2">Monetization Status</label>
-            <div className="flex items-center space-x-2 pt-2">
-              <input
-                type="checkbox"
-                name="isMonetized"
-                checked={formData.isMonetized}
-                onChange={handleInputChange}
-                className="w-4 h-4 text-xsm-yellow bg-xsm-dark-gray border-xsm-medium-gray rounded focus:ring-xsm-yellow focus:ring-2"
-              />
-              <span className="text-white">This channel is monetized</span>
-            </div>
+            <label className="block text-white font-medium mb-2">
+              Price ($) <span className="text-red-400">*</span>
+            </label>
+            <input
+              type="number"
+              name="price"
+              value={formData.price}
+              onChange={handleInputChange}
+              className="xsm-input w-full"
+              placeholder="Enter price"
+              min="0"
+              step="0.01"
+              required
+            />
           </div>
 
           <div>
@@ -839,27 +810,62 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
             />
           </div>
 
+          {/* Ways of Earning — Platform Specific Method Selection Chips */}
           <div>
-            <label className="block text-white font-medium mb-2">Income Details</label>
-            <textarea
+            <label className="block text-white font-medium mb-1.5">Ways of Earning</label>
+            <p className="text-xs text-xsm-light-gray mb-2.5">
+              Select monetization and revenue methods used for this account:
+            </p>
+
+            <div className="flex flex-wrap gap-2 mb-3">
+              {[
+                'AdSense Monetization',
+                'Brand Sponsorships',
+                'Affiliate Marketing',
+                'Channel Memberships',
+                'Merch & Digital Products',
+                'Sponsored Posts',
+                'Creator Rewards Program',
+                'LIVE Gifting & Tips'
+              ].map((method) => {
+                const isSelected = (formData.incomeDetails || '').includes(method);
+                return (
+                  <button
+                    key={method}
+                    type="button"
+                    onClick={() => {
+                      const current = (formData.incomeDetails || '')
+                        .split(',')
+                        .map(s => s.trim())
+                        .filter(Boolean);
+
+                      let updated: string[];
+                      if (current.includes(method)) {
+                        updated = current.filter(m => m !== method);
+                      } else {
+                        updated = [...current, method];
+                      }
+                      setFormData(prev => ({ ...prev, incomeDetails: updated.join(', ') }));
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      isSelected
+                        ? 'bg-xsm-yellow text-black border-xsm-yellow shadow-md'
+                        : 'bg-xsm-black/80 text-gray-300 border-xsm-medium-gray/40 hover:border-xsm-yellow/50 hover:text-white'
+                    }`}
+                  >
+                    {isSelected ? '✓ ' : '+ '}{method}
+                  </button>
+                );
+              })}
+            </div>
+
+            <input
+              type="text"
               name="incomeDetails"
               value={formData.incomeDetails}
               onChange={handleInputChange}
-              className="xsm-input w-full min-h-[80px] resize-y"
-              placeholder="Detail your revenue sources (AdSense, sponsorships, affiliate marketing, etc.)"
-              rows={3}
-            />
-          </div>
-
-          <div>
-            <label className="block text-white font-medium mb-2">Promotion Details</label>
-            <textarea
-              name="promotionDetails"
-              value={formData.promotionDetails}
-              onChange={handleInputChange}
-              className="xsm-input w-full min-h-[80px] resize-y"
-              placeholder="How do you promote your content? (social media, SEO, collaborations, etc.)"
-              rows={3}
+              className="xsm-input w-full text-xs"
+              placeholder="Or type custom earning methods (e.g., AdSense, Sponsorships)"
             />
           </div>
 

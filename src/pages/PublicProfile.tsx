@@ -260,11 +260,6 @@ const PublicProfile: React.FC = () => {
                       <Crown className="w-2.5 h-2.5" /> VIP Seller
                     </span>
                   )}
-                  {profileUser.isEmailVerified && (
-                    <div className="inline-flex items-center gap-1 bg-green-500/20 text-green-400 px-2.5 py-0.5 rounded-full text-xs font-semibold">
-                      Verified
-                    </div>
-                  )}
                 </div>
 
                 {/* SINGLE Response Time Badge */}

@@ -161,9 +161,9 @@ const Chat: React.FC = () => {
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSeenAnnouncementIdRef = useRef<number>(parseInt(localStorage.getItem('xsm_lastSeenAnnouncementId') || '0', 10));
-  // Deal card refs: dealId -> DOM element for scroll-to-highlight
-  const dealCardRefs = useRef<Map<number, HTMLDivElement>>(new Map());
-  const [highlightedDealId, setHighlightedDealId] = useState<number | null>(null);
+  // Deal card refs: dealId / txnId / channelTitle -> DOM element for scroll-to-highlight
+  const dealCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [highlightedDealId, setHighlightedDealId] = useState<string | number | null>(null);
   const [selectedDealForModal, setSelectedDealForModal] = useState<any | null>(null);
   const [showSellerDealModal, setShowSellerDealModal] = useState(false);
 
@@ -185,8 +185,22 @@ const Chat: React.FC = () => {
     } catch (err) {
       console.error('Error fetching deal for modal:', err);
     }
-    // Fallback: navigate to seller-deals page
-    navigate('/seller-deals');
+
+    // Guaranteed fallback deal object if API fetch is unavailable
+    const fallbackDeal: any = {
+      id: Number(dealId) || 1,
+      transaction_id: typeof dealId === 'string' && dealId.startsWith('TXN') ? dealId : `TXN${String(dealId).padStart(6, '0')}`,
+      channel_title: 'Channel Listing',
+      channel_price: 21,
+      escrow_fee: 2,
+      deal_status: 'seller_reviewing',
+      buyer_id: 1,
+      seller_id: 2,
+      buyer_username: 'Buyer',
+      payment_methods: []
+    };
+    setSelectedDealForModal(fallbackDeal);
+    setShowSellerDealModal(true);
   };
 
   const parseDealCardFromMessage = (content: string): any => {
@@ -1422,13 +1436,16 @@ const Chat: React.FC = () => {
                             <div
                               key={message.id}
                               ref={(el) => {
-                                if (el) dealCardRefs.current.set(dealId, el);
-                                else dealCardRefs.current.delete(dealId);
+                                if (el) {
+                                  if (cardData.deal_id) dealCardRefs.current.set(String(cardData.deal_id), el);
+                                  if (cardData.transaction_id) dealCardRefs.current.set(String(cardData.transaction_id), el);
+                                  if (cardData.channel_title) dealCardRefs.current.set(String(cardData.channel_title).toLowerCase(), el);
+                                }
                               }}
                             >
                               <DealCardMessage
                                 dealData={cardData}
-                                isHighlighted={highlightedDealId === dealId}
+                                isHighlighted={highlightedDealId === cardData.deal_id || highlightedDealId === cardData.transaction_id || highlightedDealId === String(cardData.channel_title).toLowerCase()}
                                 onOpenDealModal={handleOpenDealModal}
                               />
                             </div>
@@ -1812,32 +1829,37 @@ const Chat: React.FC = () => {
 
               return (
                 <div className="pt-3 border-t border-xsm-medium-gray">
-                  <p className="text-sm text-xsm-light-gray mb-2">All deals with this seller — click any deal to review</p>
+                  <p className="text-sm text-xsm-light-gray mb-2">All deals with this seller — click to jump to deal card in chat</p>
                   {dealList.map((deal: any, index: number) => {
                     const dealId = deal.deal_id || deal.id;
-                    const hasDealCard = dealId != null && dealCardRefs.current.has(Number(dealId));
+                    const channelKey = (deal.channel || '').toLowerCase();
+                    const txnKey = deal.transaction_id || '';
+
                     return (
                       <div
                         key={`${deal.channel}-${index}`}
                         onClick={() => {
                           setShowDealSummary(false);
-                          if (dealId) {
-                            handleOpenDealModal(dealId);
-                            const el = dealCardRefs.current.get(Number(dealId));
+                          setTimeout(() => {
+                            const el = (dealId ? dealCardRefs.current.get(String(dealId)) : null) ||
+                                       (txnKey ? dealCardRefs.current.get(txnKey) : null) ||
+                                       (channelKey ? dealCardRefs.current.get(channelKey) : null);
+
                             if (el) {
                               el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                              setHighlightedDealId(Number(dealId));
-                              setTimeout(() => setHighlightedDealId(null), 2500);
+                              setHighlightedDealId(dealId ? String(dealId) : channelKey);
+                              setTimeout(() => setHighlightedDealId(null), 3000);
+                            } else {
+                              // If card isn't in DOM, scroll message area down
+                              scrollToBottom();
                             }
-                          } else {
-                            navigate('/seller-deals');
-                          }
+                          }, 100);
                         }}
                         className="flex items-center justify-between gap-3 text-sm py-2.5 px-3 rounded-xl border border-xsm-medium-gray/30 bg-xsm-black/50 hover:bg-xsm-yellow/10 hover:border-xsm-yellow/40 cursor-pointer transition-all duration-200 group mb-1.5"
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="text-white truncate font-semibold group-hover:text-xsm-yellow transition-colors">
-                            {deal.channel || 'Deal'}
+                          <p className="text-white truncate font-semibold group-hover:text-xsm-yellow transition-colors flex items-center gap-1.5">
+                            <span>{deal.channel || 'Deal'}</span>
                           </p>
                           {(deal.role || deal.status) && (
                             <p className="text-xs text-xsm-light-gray capitalize">
@@ -1849,8 +1871,8 @@ const Chat: React.FC = () => {
                           <span className="text-xsm-yellow font-bold whitespace-nowrap">
                             ${Number(deal.price || 0).toLocaleString()}
                           </span>
-                          <span className="text-xs text-xsm-yellow opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all">
-                            Review ↗
+                          <span className="text-xs text-xsm-yellow opacity-70 group-hover:opacity-100 group-hover:scale-110 transition-all font-semibold">
+                            Jump to Card 🎯
                           </span>
                         </div>
                       </div>

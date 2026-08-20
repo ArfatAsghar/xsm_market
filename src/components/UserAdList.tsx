@@ -511,7 +511,7 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
         </div>
       ) : (
         <div className="max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {ads.map((ad, adIndex) => {
               const isVipListing = Boolean(
                 (user as any)?.isVip ||
@@ -526,154 +526,102 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
               return (
                 <div
                   key={ad.id}
-                  className={`rounded-lg p-3 shadow-sm flex flex-col items-center transition-all duration-300 w-full max-w-[240px] mx-auto cursor-pointer relative overflow-hidden ${
+                  className={`rounded-xl p-3 shadow-md flex flex-col justify-between transition-all duration-300 w-full cursor-pointer relative overflow-hidden ${
                     isVipListing
-                      ? 'bg-gradient-to-b from-amber-950/30 via-xsm-black/70 to-xsm-black/70 border-2 border-amber-500/80 shadow-[0_0_18px_rgba(245,158,11,0.25)] hover:shadow-[0_0_25px_rgba(245,158,11,0.45)]'
-                      : 'bg-xsm-black/50 border border-xsm-medium-gray/20 hover:border-xsm-yellow/30'
+                      ? 'bg-gradient-to-b from-amber-950/40 via-xsm-black/90 to-xsm-black border border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.2)] hover:border-amber-400'
+                      : 'bg-xsm-black/80 border border-xsm-medium-gray/30 hover:border-xsm-yellow/40'
                   }`}
                   style={isDeleting ? { opacity: 0, transform: 'scale(0.8)', pointerEvents: 'none', transition: 'opacity 0.35s ease, transform 0.35s ease' } : { transition: 'opacity 0.35s ease, transform 0.35s ease' }}
                   onClick={() => handleViewAd(ad)}
                 >
-                  {/* Listing Number Badge */}
-                  <span className="absolute top-2 left-2 z-10 text-[10px] font-bold text-black bg-xsm-yellow rounded-full px-1.5 py-0.5 leading-none shadow">#{adIndex + 1}</span>
-                  {/* Channel Thumbnail Circle with Platform Icon → Product Details */}
-                  <div className="relative mb-2 flex items-center">
-                    <div className="absolute -left-4 -top-0">
-                      {getPlatformIconSmall(ad.platform)}
-                    </div>
-                    <div
-                      className={`w-20 h-20 rounded-full overflow-hidden border-2 cursor-pointer transition-all duration-200 ${
-                        isVipListing
-                          ? 'border-amber-400 ring-2 ring-amber-500/50'
-                          : 'border-xsm-medium-gray/30 hover:ring-2 hover:ring-xsm-yellow/60 hover:border-xsm-yellow/50'
-                      }`}
-                      onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
-                      title="View product details"
-                    >
-                      <img
-                        src={(() => {
-                          const thumbnail = typeof ad.thumbnail === 'string' ? ad.thumbnail.trim() : '';
-                          if (thumbnail && thumbnail !== '0') return getImageUrl(thumbnail) || thumbnail;
-                          return '/default-avatar.png';
-                        })()}
-                        alt="Ad Thumbnail"
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Banned Banner */}
-                  {ad.isBanned && (
-                    <div className="w-full mb-1.5 bg-red-900/80 border border-red-700 rounded-md px-2 py-1 flex items-center gap-1.5">
-                      <span className="text-red-400 text-xs font-bold">🚫 BANNED</span>
-                    </div>
-                  )}
-
-                  {/* Channel Name → Product Details */}
-                  <h4
-                    className="text-white font-semibold text-xs text-center mb-0.5 truncate w-full cursor-pointer hover:text-xsm-yellow hover:underline transition-colors duration-200"
-                    onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
-                    title="View product details"
-                  >
-                    {ad.title}
-                  </h4>
-
-                  {/* VIP Badge */}
-                  {isVipListing && (
-                    <div className="flex justify-center mb-1">
-                      <span className="flex items-center gap-1 bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 text-black text-[9px] px-2 py-0.5 rounded-md font-black shadow shadow-amber-500/40 border border-yellow-200/60 uppercase tracking-wider">
-                        <Crown className="w-2.5 h-2.5 fill-black text-black" />
-                        <span>VIP LISTING</span>
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Pinned Badge */}
-                  {ad.pinned && (
-                    <div className="flex justify-center mb-0.5">
-                      <span className="bg-yellow-500 text-black text-xs px-2 py-0.5 rounded-full font-semibold flex items-center">
-                        <Pin className="w-3 h-3 mr-1" />
-                        PINNED
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Subscribers */}
-                  <div className="text-center mb-0.5">
-                    <span className="text-blue-400 font-medium text-xs">
-                      Subscribers: {formatNumber(ad.subscribers)}
+                  {/* Top Badges */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-black bg-xsm-yellow rounded-full px-1.5 py-0.5 leading-none shadow">
+                      #{adIndex + 1}
                     </span>
+
+                    <div className="flex items-center gap-1">
+                      {isVipListing && (
+                        <Crown className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400/20" title="VIP Listing" />
+                      )}
+                      {ad.pinned && (
+                        <Pin className="w-3.5 h-3.5 text-yellow-500" title="Pinned" />
+                      )}
+                    </div>
                   </div>
 
-                  {/* Price */}
-                  <div className="text-center mb-0.5">
-                    <span className="text-xsm-yellow font-semibold text-xs">
-                      Price: {formatPrice(ad.price)}
+                  {/* Thumbnail & Title Row */}
+                  <div className="flex items-center gap-2.5 mb-2.5">
+                    <div className="relative flex-shrink-0">
+                      <div
+                        className={`w-11 h-11 rounded-lg overflow-hidden border ${
+                          isVipListing ? 'border-amber-400' : 'border-xsm-medium-gray/40'
+                        }`}
+                        onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
+                      >
+                        <img
+                          src={(() => {
+                            const thumbnail = typeof ad.thumbnail === 'string' ? ad.thumbnail.trim() : '';
+                            if (thumbnail && thumbnail !== '0') return getImageUrl(thumbnail) || thumbnail;
+                            return '/default-avatar.png';
+                          })()}
+                          alt="Thumbnail"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="absolute -bottom-1 -right-1">
+                        {getPlatformIconSmall(ad.platform)}
+                      </div>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <h4
+                        className="text-white font-bold text-xs truncate hover:text-xsm-yellow transition-colors"
+                        onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
+                      >
+                        {ad.title}
+                      </h4>
+                      <p className="text-[10px] text-blue-400 font-medium">
+                        {formatNumber(ad.subscribers)} subs
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Price & Monetization */}
+                  <div className="flex items-center justify-between pt-2 border-t border-xsm-medium-gray/20 mb-2 text-xs">
+                    <span className="text-xsm-yellow font-extrabold text-xs sm:text-sm">
+                      {formatPrice(ad.price)}
                     </span>
-                  </div>
-
-                  {/* Monetization */}
-                  <div className="text-center mb-1.5">
-                    <span className={`text-xs ${ad.isMonetized ? 'text-green-400' : 'text-red-400'}`}>
-                      Monetization: {ad.isMonetized ? 'Yes' : 'No'}
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                      ad.isMonetized ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                    }`}>
+                      {ad.isMonetized ? 'Monetized' : 'Non-Monetized'}
                     </span>
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex justify-center space-x-1 w-full" onClick={(e) => e.stopPropagation()}>
-                    {ad.isBanned ? (
-                      <>
-                        <span className="text-red-400 text-[10px] text-center italic px-1">Banned — edit &amp; resubmit</span>
-                        <button
-                          onClick={() => handleEdit(ad)}
-                          className="w-6 h-6 bg-xsm-yellow hover:bg-yellow-500 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
-                          title="Edit to resubmit"
-                        >
-                          <Edit className="w-3 h-3 text-xsm-black" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => handleEdit(ad)}
-                          className="w-6 h-6 bg-xsm-yellow hover:bg-yellow-500 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
-                          title="Edit"
-                        >
-                          <Edit className="w-3 h-3 text-xsm-black" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(ad.id)}
-                          className="w-6 h-6 bg-red-500 hover:bg-red-600 rounded-full flex items-center justify-center transition-colors flex-shrink-0"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3 h-3 text-white" />
-                        </button>
-                        <div className="relative group flex-shrink-0">
-                          <button
-                            onClick={() => handlePullUp(ad.id)}
-                            className={`w-6 h-6 rounded-full flex items-center justify-center transition-colors ${
-                              isUserVip
-                                ? 'bg-gradient-to-br from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300'
-                                : 'bg-blue-500 hover:bg-blue-600'
-                            }`}
-                            title={isUserVip ? `Bump (VIP: ${bumpCooldownDays}-day cooldown)` : `Bump (${bumpCooldownDays}-day cooldown)`}
-                          >
-                            <Zap className="w-3 h-3 text-white" />
-                          </button>
-                          {/* VIP Bump badge */}
-                          {isUserVip && (
-                            <span className="absolute -top-1.5 -right-1.5 bg-amber-400 text-black text-[7px] font-black rounded-full w-3.5 h-3.5 flex items-center justify-center leading-none">3</span>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => handlePin(ad.id)}
-                          className={`w-6 h-6 ${ad.pinned ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-orange-500 hover:bg-orange-600'} rounded-full flex items-center justify-center transition-colors flex-shrink-0`}
-                          title={ad.pinned ? "Unpin Listing" : "Pin Listing"}
-                        >
-                          <Pin className={`w-3 h-3 text-white ${ad.pinned ? 'fill-current' : ''}`} />
-                        </button>
-                      </>
-                    )}
+                  <div className="flex items-center justify-end gap-1.5 pt-1.5 border-t border-xsm-medium-gray/20" onClick={(e) => e.stopPropagation()}>
+                    <button
+                      onClick={() => handleEdit(ad)}
+                      className="p-1 bg-xsm-yellow text-black hover:bg-yellow-400 rounded-md transition-colors"
+                      title="Edit Listing"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(ad.id)}
+                      className="p-1 bg-rose-500/80 text-white hover:bg-rose-600 rounded-md transition-colors"
+                      title="Delete Listing"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handlePullUp(ad.id)}
+                      className="p-1 bg-blue-500 text-white hover:bg-blue-600 rounded-md transition-colors"
+                      title="Bump Listing"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               );

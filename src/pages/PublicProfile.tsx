@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { User as UserIcon, Edit, Calendar, MessageCircle, Crown, Clock, DollarSign, CheckCircle2, ShieldCheck, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { User as UserIcon, Edit, Calendar, MessageCircle, Crown, Clock, DollarSign, CheckCircle2, ShieldCheck, Users, ChevronDown, ChevronUp, X, Check, Camera } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
-import { getPublicProfile, API_URL, SellerMetrics, ReviewItem } from '@/services/auth';
+import { getPublicProfile, updateProfile, API_URL, SellerMetrics, ReviewItem } from '@/services/auth';
 import UserAdList from '@/components/UserAdList';
 import PublicAdList from '@/components/PublicAdList';
 
@@ -76,10 +76,17 @@ const PublicProfile: React.FC = () => {
   const { username } = useParams<{ username: string }>();
   const navigate = useNavigate();
   const { user: currentUser, isLoggedIn } = useAuth();
-  const { startConversation } = useNotifications();
+  const { startConversation, showSuccess, showError } = useNotifications();
 
   const [profileUser, setProfileUser] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Edit Profile / Description Modal State
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editFullName, setEditFullName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editProfilePicture, setEditProfilePicture] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -100,8 +107,39 @@ const PublicProfile: React.FC = () => {
     fetchProfile();
   }, [username]);
 
-  const handleEditProfile = () => {
-    navigate('/profile');
+  const handleOpenEditModal = () => {
+    if (!profileUser) return;
+    setEditFullName(profileUser.fullName || '');
+    setEditDescription(profileUser.description || '');
+    setEditProfilePicture(profileUser.profilePicture || '');
+    setShowEditModal(true);
+  };
+
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSavingProfile(true);
+      const updated = await updateProfile({
+        fullName: editFullName,
+        description: editDescription,
+        profilePicture: editProfilePicture,
+      });
+
+      setProfileUser(prev => prev ? {
+        ...prev,
+        fullName: updated.fullName || editFullName,
+        description: updated.description || editDescription,
+        profilePicture: updated.profilePicture || editProfilePicture,
+      } : null);
+
+      showSuccess('Profile updated successfully!');
+      setShowEditModal(false);
+    } catch (err: any) {
+      console.error('Error saving profile:', err);
+      showError(err.message || 'Failed to update profile');
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleMessageSeller = async () => {
@@ -192,11 +230,11 @@ const PublicProfile: React.FC = () => {
                 {isOwnProfile && (
                   <button
                     type="button"
-                    onClick={handleEditProfile}
+                    onClick={handleOpenEditModal}
                     className="absolute bottom-0 right-0 bg-xsm-yellow text-black p-2 rounded-full hover:bg-yellow-500 transition-colors shadow-lg"
-                    title="Edit Profile"
+                    title="Edit Profile Picture"
                   >
-                    <Edit className="w-4 h-4" />
+                    <Camera className="w-4 h-4" />
                   </button>
                 )}
               </div>
@@ -269,8 +307,8 @@ const PublicProfile: React.FC = () => {
                 <div className="mb-4">
                   <button
                     type="button"
-                    onClick={handleEditProfile}
-                    className="w-full bg-xsm-yellow text-black px-4 py-2 rounded-lg hover:bg-yellow-500 transition-colors font-medium flex items-center justify-center gap-2 text-xs"
+                    onClick={handleOpenEditModal}
+                    className="w-full bg-xsm-yellow text-black px-4 py-2 rounded-lg hover:bg-yellow-500 transition-colors font-bold flex items-center justify-center gap-2 text-xs shadow-md"
                   >
                     <Edit className="w-3.5 h-3.5" />
                     Edit Profile
@@ -321,11 +359,11 @@ const PublicProfile: React.FC = () => {
                   {isOwnProfile && (
                     <button
                       type="button"
-                      onClick={handleEditProfile}
-                      className="text-xsm-light-gray hover:text-white transition-colors"
+                      onClick={handleOpenEditModal}
+                      className="text-xsm-light-gray hover:text-xsm-yellow transition-colors flex items-center gap-1 text-xs font-semibold"
                       title="Edit Description"
                     >
-                      <Edit className="w-4 h-4" />
+                      <Edit className="w-3.5 h-3.5" /> Edit
                     </button>
                   )}
                 </div>
@@ -337,12 +375,12 @@ const PublicProfile: React.FC = () => {
                 ) : isOwnProfile ? (
                   <div className="text-center py-6">
                     <p className="text-xsm-light-gray text-xs mb-3">
-                      Tell others about yourself...
+                      Tell others about yourself and your channel portfolio...
                     </p>
                     <button
                       type="button"
-                      onClick={handleEditProfile}
-                      className="bg-xsm-yellow text-black px-4 py-1.5 rounded-lg hover:bg-yellow-500 transition-colors text-xs font-semibold"
+                      onClick={handleOpenEditModal}
+                      className="bg-xsm-yellow text-black px-4 py-1.5 rounded-lg hover:bg-yellow-500 transition-colors text-xs font-bold shadow"
                     >
                       Add Description
                     </button>
@@ -355,24 +393,25 @@ const PublicProfile: React.FC = () => {
               </div>
             )}
 
-            {/* Seller's Listings */}
+            {/* Seller's Listings (Single clean rendering, no duplicate title wrapper) */}
             <div className="bg-xsm-dark-gray rounded-xl p-5 shadow-lg border border-xsm-medium-gray/30">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-xsm-yellow">
-                  {isOwnProfile ? 'My Listings' : `${profileUser.username}'s Listings`}
-                </h2>
-                <span className="text-xsm-light-gray bg-xsm-medium-gray px-2.5 py-0.5 rounded-full text-xs font-semibold">
-                  {profileUser.adCount || 0}
-                </span>
-              </div>
-
               {isOwnProfile ? (
                 <UserAdList />
               ) : (
-                <PublicAdList
-                  userId={profileUser.id}
-                  username={profileUser.username}
-                />
+                <>
+                  <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-bold text-xsm-yellow">
+                      {`${profileUser.username}'s Listings`}
+                    </h2>
+                    <span className="text-xsm-light-gray bg-xsm-medium-gray px-2.5 py-0.5 rounded-full text-xs font-semibold">
+                      {profileUser.adCount || 0}
+                    </span>
+                  </div>
+                  <PublicAdList
+                    userId={profileUser.id}
+                    username={profileUser.username}
+                  />
+                </>
               )}
             </div>
           </div>
@@ -437,6 +476,82 @@ const PublicProfile: React.FC = () => {
 
         </div>
       </div>
+
+      {/* ── EDIT PROFILE & DESCRIPTION MODAL ── */}
+      {showEditModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-xsm-dark-gray border border-xsm-yellow/40 rounded-2xl p-6 w-full max-w-lg shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-xsm-medium-gray/30 pb-3">
+              <h3 className="text-lg font-bold text-xsm-yellow flex items-center gap-2">
+                <Edit className="w-5 h-5" /> Edit Profile & Description
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowEditModal(false)}
+                className="text-gray-400 hover:text-white p-1 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              {/* Full Name */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">Full Name / Display Name</label>
+                <input
+                  type="text"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="xsm-input w-full text-xs"
+                  placeholder="Enter your full name or display title"
+                />
+              </div>
+
+              {/* About Description */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">About / Bio Description</label>
+                <textarea
+                  value={editDescription}
+                  onChange={(e) => setEditDescription(e.target.value)}
+                  className="xsm-input w-full text-xs min-h-[120px] resize-y"
+                  placeholder="Describe your background, specialty, and channel portfolio..."
+                  rows={4}
+                />
+              </div>
+
+              {/* Profile Picture URL */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-300 mb-1">Profile Picture Image URL (Optional)</label>
+                <input
+                  type="text"
+                  value={editProfilePicture}
+                  onChange={(e) => setEditProfilePicture(e.target.value)}
+                  className="xsm-input w-full text-xs"
+                  placeholder="https://example.com/your-avatar.jpg"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-xsm-medium-gray/30">
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 text-xs font-bold text-gray-300 bg-xsm-black hover:bg-xsm-medium-gray/50 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingProfile}
+                  className="px-5 py-2 text-xs font-bold text-black bg-xsm-yellow hover:bg-yellow-400 rounded-lg transition-colors flex items-center gap-1.5 shadow"
+                >
+                  {savingProfile ? 'Saving...' : 'Save Profile'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

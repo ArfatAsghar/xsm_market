@@ -86,8 +86,9 @@ const PublicProfile: React.FC = () => {
       if (!username) return;
       try {
         setLoading(true);
-        const data = await getPublicProfile(username);
-        setProfileUser(data);
+        const res = await getPublicProfile(username);
+        const userData = res?.data ? res.data : res;
+        setProfileUser(userData);
       } catch (err) {
         console.error('Error fetching public profile:', err);
         setProfileUser(null);
@@ -118,9 +119,11 @@ const PublicProfile: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Recently';
     try {
       const date = new Date(dateString);
+      if (isNaN(date.getTime())) return 'Recently';
       return date.toLocaleDateString(undefined, {
         year: 'numeric',
         month: 'long',
@@ -155,7 +158,7 @@ const PublicProfile: React.FC = () => {
     );
   }
 
-  const isOwnProfile = currentUser?.username === profileUser.username;
+  const isOwnProfile = isLoggedIn && !!currentUser && currentUser.username?.toLowerCase() === profileUser.username?.toLowerCase();
 
   return (
     <div className="min-h-screen bg-xsm-black text-white pt-6 pb-12">

@@ -104,11 +104,12 @@ const SellChannel: React.FC<SellChannelProps> = () => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
 
-  // Title comes from auto-extraction; not required to be typed manually
+  // Title and subscribers come from auto-extraction; required before creating listing
   const isFieldsValid = 
     formData.channelUrl.trim().length > 0 &&
     formData.category.trim().length > 0 &&
-    formData.price.trim().length > 0 && parseFloat(formData.price) >= 5;
+    formData.price.trim().length > 0 && parseFloat(formData.price) >= 5 &&
+    formData.subscribers.trim().length > 0 && parseInt(formData.subscribers) >= 0;
 
   // For new listings verification is required; edit mode skips verification
   const isFormValid = isFieldsValid && (isEditMode || isCodeVerified === true);
@@ -117,6 +118,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     if (!formData.channelUrl.trim()) return '🔗 Please enter profile / channel URL above';
     if (!isEditMode && isCodeVerified === null) return '⚡ Click "Auto-Fill" to extract details & verify ownership code';
     if (!isEditMode && isCodeVerified === false) return '❌ Ownership code not found in bio. Add code to bio and click "Auto-Fill"';
+    if (!formData.subscribers.trim() || isNaN(parseInt(formData.subscribers))) return '📊 Followers / Subscribers count must be auto-extracted from profile';
     if (!formData.category.trim()) return '📌 Please select a Topic / Category';
     if (!formData.price.trim() || isNaN(parseFloat(formData.price)) || parseFloat(formData.price) < 5) return '💰 Please enter listing price ($5 minimum)';
     return null;
@@ -1060,18 +1062,18 @@ const SellChannel: React.FC<SellChannelProps> = () => {
             {/* Followers / Subscribers & Price Input Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-white font-medium mb-1.5 text-sm">
-                  {(formData.platform === 'youtube' || formData.platform === 'telegram') ? 'Subscribers' : 'Followers'} Count
-                  <span className="text-xsm-yellow text-xs ml-2">(Auto-filled or edit manually)</span>
+                <label className="block text-white font-medium mb-1.5 text-sm flex items-center justify-between">
+                  <span>{(formData.platform === 'youtube' || formData.platform === 'telegram') ? 'Subscribers' : 'Followers'} Count</span>
+                  <span className="text-xsm-yellow text-xs font-semibold">🔒 Auto-Extracted</span>
                 </label>
                 <input
-                  type="number"
+                  type="text"
                   name="subscribers"
-                  value={formData.subscribers}
-                  onChange={handleInputChange}
-                  className="xsm-input w-full"
-                  placeholder={`Enter ${(formData.platform === 'youtube' || formData.platform === 'telegram') ? 'subscribers' : 'followers'} count (e.g. 5000)`}
-                  min="0"
+                  value={formData.subscribers ? Number(formData.subscribers).toLocaleString() : ''}
+                  readOnly
+                  disabled
+                  className="xsm-input w-full opacity-80 cursor-not-allowed bg-xsm-black/80 font-bold text-xsm-yellow border-xsm-medium-gray/50"
+                  placeholder={`Auto-extracted ${(formData.platform === 'youtube' || formData.platform === 'telegram') ? 'subscribers' : 'followers'} count`}
                 />
               </div>
 

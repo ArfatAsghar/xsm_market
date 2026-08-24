@@ -395,24 +395,17 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     }));
   };
 
-  // Helper to verify YouTube URL
-  const isYouTubeUrl = (url: string): boolean => {
+  // Helper to verify Supported Social Media URL
+  const isSupportedSocialUrl = (url: string): boolean => {
     const clean = url.trim().toLowerCase();
-    return clean.includes('youtube.com') || clean.includes('youtu.be');
+    return /youtube\.com|youtu\.be|tiktok\.com|instagram\.com|facebook\.com|fb\.com|twitter\.com|x\.com|t\.me|telegram\.me/.test(clean);
   };
 
-  // Auto-extract when a valid YouTube URL is detected (debounced 1.5s after typing stops)
+  // Auto-extract when a valid social media URL is detected (debounced 1.5s after typing stops)
   useEffect(() => {
     const url = formData.channelUrl.trim();
     if (!url) return;
-    if (!isYouTubeUrl(url)) {
-      if (/tiktok\.com|instagram\.com|facebook\.com|fb\.com|twitter\.com|x\.com/.test(url.toLowerCase())) {
-        toast({
-          variant: "destructive",
-          title: "Invalid URL",
-          description: "Invalid URL. Currently, only YouTube URLs are supported.",
-        });
-      }
+    if (!isSupportedSocialUrl(url)) {
       return;
     }
 
@@ -424,6 +417,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         const profileData = result.data;
         setExtractedData(profileData);
         const subCount = profileData.followers || profileData.subscribers || 0;
+        const detectedPlat = profileData.platform || detectPlatform(url) || 'youtube';
 
         if (profileData.codeVerified) {
           setIsCodeVerified(true);
@@ -434,7 +428,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         setFormData(prev => ({
           ...prev,
           title: profileData.title || prev.title,
-          platform: 'youtube',
+          platform: detectedPlat,
           subscribers: subCount ? String(subCount) : prev.subscribers,
           profilePicture: profileData.profilePicture || prev.profilePicture
         }));
@@ -470,16 +464,16 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       toast({
         variant: "destructive",
         title: "Missing URL",
-        description: "Please enter a YouTube URL first",
+        description: "Please enter a valid social media URL first",
       });
       return;
     }
 
-    if (!isYouTubeUrl(url)) {
+    if (!isSupportedSocialUrl(url)) {
       toast({
         variant: "destructive",
         title: "Invalid URL",
-        description: "Invalid URL. Currently, only YouTube URLs are supported.",
+        description: "Please enter a valid YouTube, TikTok, Instagram, Facebook, Twitter/X, or Telegram link.",
       });
       return;
     }
@@ -492,6 +486,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       setExtractedData(profileData);
       
       const subCount = profileData.followers || profileData.subscribers || 0;
+      const detectedPlat = profileData.platform || detectPlatform(url) || 'youtube';
 
       if (profileData.codeVerified) {
         setIsCodeVerified(true);
@@ -502,7 +497,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       setFormData(prev => ({
         ...prev,
         title: profileData.title || prev.title,
-        platform: 'youtube',
+        platform: detectedPlat,
         subscribers: subCount ? String(subCount) : prev.subscribers,
         profilePicture: profileData.profilePicture || prev.profilePicture
       }));
@@ -510,13 +505,13 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       if (profileData.codeVerified) {
         toast({
           title: "Profile Extracted & Code Verified! ✅",
-          description: `Verification code ${verificationCode} verified in channel details.`,
+          description: `Verification code ${verificationCode} verified in profile details.`,
         });
       } else {
         toast({
           variant: "destructive",
           title: "❌ Verification Code Missing",
-          description: `Verification code ${verificationCode} was NOT found in your YouTube channel description/bio. Please add it to your bio and try again.`,
+          description: `Verification code ${verificationCode} was NOT found in your profile description/bio. Please add it to your bio and try again.`,
         });
       }
       
@@ -541,18 +536,18 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         toast({
           variant: "destructive",
           title: "Channel Ownership Not Verified ❌",
-          description: `You must add verification code ${verificationCode} to your YouTube channel description/bio and extract channel details before publishing.`,
+          description: `You must add verification code ${verificationCode} to your profile description/bio and extract details before publishing.`,
         });
         setIsSubmitting(false);
         return;
       }
 
-      // Validation: YouTube URL check
-      if (!isYouTubeUrl(formData.channelUrl)) {
+      // Validation: Social Media URL check
+      if (!isSupportedSocialUrl(formData.channelUrl)) {
         toast({
           variant: "destructive",
           title: "Invalid URL",
-          description: "Invalid URL. Currently, only YouTube URLs are supported.",
+          description: "Please enter a valid YouTube, TikTok, Instagram, Facebook, Twitter/X, or Telegram link.",
         });
         setIsSubmitting(false);
         return;
@@ -582,8 +577,8 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         return;
       }
 
-      // Platform is strictly youtube
-      let platform = 'youtube';
+      // Detect platform dynamically
+      let platform = formData.platform || detectPlatform(formData.channelUrl) || 'youtube';
 
       // Upload new screenshots if any files are selected
       let screenshotData: any[] = existingScreenshots.map((item) =>
@@ -831,28 +826,32 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                 <h4 className="text-xs font-bold text-xsm-yellow uppercase tracking-wider">
                   Social Media Platform Availability
                 </h4>
-                <span className="text-[11px] text-xsm-light-gray">Currently supporting YouTube</span>
+                <span className="text-[11px] text-green-400 font-semibold">Auto-Extraction Enabled for All Platforms</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2 text-xs">
-                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2.5 py-1.5 rounded-lg font-semibold">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
                   <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                  <span>YouTube — Available</span>
+                  <span>YouTube — Active</span>
                 </div>
-                <div className="flex items-center gap-2 bg-xsm-dark-gray text-gray-400 border border-gray-700/40 px-2.5 py-1.5 rounded-lg font-medium opacity-75">
-                  <span className="w-2 h-2 rounded-full bg-amber-500/60"></span>
-                  <span>Instagram — Coming Soon</span>
+                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                  <span>TikTok — Active</span>
                 </div>
-                <div className="flex items-center gap-2 bg-xsm-dark-gray text-gray-400 border border-gray-700/40 px-2.5 py-1.5 rounded-lg font-medium opacity-75">
-                  <span className="w-2 h-2 rounded-full bg-amber-500/60"></span>
-                  <span>TikTok — Coming Soon</span>
+                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                  <span>Instagram — Active</span>
                 </div>
-                <div className="flex items-center gap-2 bg-xsm-dark-gray text-gray-400 border border-gray-700/40 px-2.5 py-1.5 rounded-lg font-medium opacity-75">
-                  <span className="w-2 h-2 rounded-full bg-amber-500/60"></span>
-                  <span>Facebook — Coming Soon</span>
+                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                  <span>Facebook — Active</span>
                 </div>
-                <div className="flex items-center gap-2 bg-xsm-dark-gray text-gray-400 border border-gray-700/40 px-2.5 py-1.5 rounded-lg font-medium opacity-75">
-                  <span className="w-2 h-2 rounded-full bg-amber-500/60"></span>
-                  <span>Twitter/X — Coming Soon</span>
+                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                  <span>Twitter/X — Active</span>
+                </div>
+                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
+                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                  <span>Telegram — Active</span>
                 </div>
               </div>
             </div>
@@ -864,10 +863,10 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xl">🔐</span>
-                      <h3 className="text-white font-bold text-base">Channel Ownership Verification</h3>
+                      <h3 className="text-white font-bold text-base">Account Ownership Verification</h3>
                     </div>
                     <p className="text-xsm-light-gray text-xs leading-relaxed mb-3">
-                      To verify channel ownership, add this unique 10-character code into your <strong className="text-white">YouTube channel description / bio</strong> or <strong className="text-white">About section</strong> before creating the listing.
+                      To verify ownership, add this unique 10-character code into your <strong className="text-white">social media profile bio / description / About section</strong> before listing.
                     </p>
                     <div className="flex items-center gap-3">
                       <div className="bg-xsm-black border border-amber-500/50 rounded-lg px-4 py-2 font-mono text-amber-400 font-bold tracking-widest text-lg select-all shadow-inner">

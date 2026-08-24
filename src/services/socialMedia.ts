@@ -56,6 +56,8 @@ export const detectPlatform = (url: string): string | null => {
     return 'twitter';
   } else if (url.includes('facebook.com')) {
     return 'facebook';
+  } else if (url.includes('t.me') || url.includes('telegram.me')) {
+    return 'telegram';
   }
   return null;
 };

@@ -389,35 +389,21 @@ const Home: React.FC<HomeProps> = () => {
                   {/* Platform quick filter buttons */}
                   <div className="flex flex-wrap items-center gap-3 mb-5 py-2">
                     <span className="text-sm text-white mr-2 font-medium">Quick Filter:</span>
-                    {platforms.filter(p => p.id !== 'all' && p.id !== 'telegram').map(platform => {
-                      const isYouTube = platform.id === 'youtube';
-
+                    {platforms.filter(p => p.id !== 'all').map(platform => {
                       return (
                         <div key={platform.id} className="relative group/platform">
                           <button
                             onClick={() => {
-                              if (isYouTube) {
-                                setSelectedPlatform(platform.name);
-                              } else {
-                                toast({
-                                  title: `${platform.name} — Coming Soon`,
-                                  description: "Invalid URL. Currently, only YouTube URLs are supported.",
-                                });
-                              }
+                              setSelectedPlatform(platform.name);
                             }}
                             className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all border-2 shadow-lg relative ${
                               selectedPlatform === platform.name 
                                 ? 'bg-xsm-yellow text-black border-xsm-yellow ring-2 ring-xsm-yellow ring-offset-2 ring-offset-xsm-dark-gray' 
-                                : isYouTube
-                                ? 'bg-xsm-black text-xsm-yellow border-xsm-yellow/50 hover:bg-xsm-yellow/10 hover:border-xsm-yellow'
-                                : 'bg-xsm-black/50 text-gray-500 border-gray-700/50 hover:border-gray-500 opacity-70'
+                                : 'bg-xsm-black text-xsm-yellow border-xsm-yellow/50 hover:bg-xsm-yellow/10 hover:border-xsm-yellow'
                             }`}
-                            title={isYouTube ? platform.name : `${platform.name} (Coming Soon)`}
+                            title={platform.name}
                           >
                             {platform.logo && cloneElement(platform.logo as React.ReactElement, { className: "w-6 h-6" })}
-                            {!isYouTube && (
-                              <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full border border-xsm-black"></span>
-                            )}
                           </button>
                         </div>
                       );

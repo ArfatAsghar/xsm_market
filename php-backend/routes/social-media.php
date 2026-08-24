@@ -60,12 +60,22 @@ function handleSocialMediaExtract() {
             'verificationCode' => $verificationCode
         ];
 
+        $extracted = [];
         if ($platform === 'youtube') {
-            $youtubeData = fetchYouTubeProfileData($url, $verificationCode);
-            foreach ($youtubeData as $key => $value) {
-                if ($value !== null && $value !== '') {
-                    $profileData[$key] = $value;
-                }
+            $extracted = fetchYouTubeProfileData($url, $verificationCode);
+        } elseif ($platform === 'tiktok') {
+            $extracted = fetchTikTokProfileData($url, $verificationCode);
+        } elseif ($platform === 'instagram') {
+            $extracted = fetchInstagramProfileData($url, $verificationCode);
+        } elseif ($platform === 'twitter') {
+            $extracted = fetchTwitterProfileData($url, $verificationCode);
+        } elseif ($platform === 'facebook') {
+            $extracted = fetchFacebookProfileData($url, $verificationCode);
+        }
+
+        foreach ($extracted as $key => $value) {
+            if ($value !== null && $value !== '') {
+                $profileData[$key] = $value;
             }
         }
 
@@ -523,5 +533,289 @@ function handleSocialBladeIntegration() {
         error_log('Social Blade integration error: ' . $e->getMessage());
         Response::error('Failed to fetch Social Blade data', 500);
     }
+function getRapidApiKey() {
+    $envKey = getenv('RAPIDAPI_KEY');
+    if ($envKey) return $envKey;
+    return '0951108164mshd9a0970e7be24efp175df6jsn1104858fd362';
+}
+
+function fetchTikTokProfileData($url, $verificationCode = '') {
+    $result = [
+        'title'            => null,
+        'channelName'      => null,
+        'profilePicture'   => null,
+        'subscribers'      => 0,
+        'followers'        => 0,
+        'description'      => null,
+        'codeVerified'     => false,
+        'verificationCode' => $verificationCode
+    ];
+
+    $apiKey = getRapidApiKey();
+    $handle = '';
+    if (preg_match('/@([^\/\?]+)/', $url, $m)) {
+        $handle = $m[1];
+    } elseif (preg_match('/tiktok\.com\/([^\/\?]+)/', $url, $m)) {
+        $handle = ltrim($m[1], '@');
+    }
+
+    if (!$handle) return $result;
+
+    $result['channelName'] = '@' . $handle;
+    $result['title']       = '@' . $handle . ' TikTok';
+
+    // ── RapidAPI Call: TikTok Scraper ────────────────
+    if ($apiKey) {
+        $rapidUrl = 'https://tiktok-all-in-one-api.p.rapidapi.com/user/info?username=' . urlencode($handle);
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $rapidUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_HTTPHEADER => [
+                'X-RapidAPI-Key: ' . $apiKey,
+                'X-RapidAPI-Host: tiktok-all-in-one-api.p.rapidapi.com'
+            ]
+        ]);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        if ($response) {
+            $json = json_decode($response, true);
+            $userInfo = $json['user'] ?? $json['data']['user'] ?? $json['userInfo']['user'] ?? $json['data'] ?? [];
+            $stats    = $json['stats'] ?? $json['data']['stats'] ?? $json['userInfo']['stats'] ?? [];
+
+            if (!empty($userInfo)) {
+                $result['title']          = $userInfo['nickname'] ?? $userInfo['uniqueId'] ?? ('@' . $handle);
+                $result['channelName']    = '@' . ($userInfo['uniqueId'] ?? $handle);
+                $result['profilePicture'] = $userInfo['avatarLarger'] ?? $userInfo['avatarMedium'] ?? $userInfo['avatarThumb'] ?? null;
+                $result['description']    = $userInfo['signature'] ?? '';
+
+                $followerCount = $stats['followerCount'] ?? $userInfo['followerCount'] ?? 0;
+                if ($followerCount > 0) {
+                    $result['subscribers'] = (int)$followerCount;
+                    $result['followers']   = (int)$followerCount;
+                }
+            }
+        }
+    }
+
+    // Fallback HTML scrape for TikTok avatar & bio
+    if (!$result['profilePicture'] || !$result['description']) {
+        $html = fetchTextUrl('https://www.tiktok.com/@' . urlencode($handle));
+        if ($html) {
+            if (!$result['title'] && preg_match('/<meta property="og:title" content="([^"]+)"/i', $html, $m)) {
+                $result['title'] = html_entity_decode($m[1], ENT_QUOTES);
+            }
+            if (!$result['description'] && preg_match('/<meta property="og:description" content="([^"]+)"/i', $html, $m)) {
+                $result['description'] = html_entity_decode($m[1], ENT_QUOTES);
+            }
+            if (!$result['profilePicture'] && preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
+                $result['profilePicture'] = $m[1];
+            }
+            if ($result['followers'] === 0 && preg_match('/"followerCount"\s*:\s*([0-9]+)/i', $html, $m)) {
+                $count = (int)$m[1];
+                $result['subscribers'] = $count;
+                $result['followers']   = $count;
+            }
+        }
+    }
+
+    if (!empty($verificationCode)) {
+        $code = trim($verificationCode);
+        $result['codeVerified'] = !empty($result['description']) && (stripos($result['description'], $code) !== false);
+    } else {
+        $result['codeVerified'] = true;
+    }
+
+    return $result;
+}
+
+function fetchInstagramProfileData($url, $verificationCode = '') {
+    $result = [
+        'title'            => null,
+        'channelName'      => null,
+        'profilePicture'   => null,
+        'subscribers'      => 0,
+        'followers'        => 0,
+        'description'      => null,
+        'codeVerified'     => false,
+        'verificationCode' => $verificationCode
+    ];
+
+    $apiKey = getRapidApiKey();
+    $handle = '';
+    if (preg_match('/instagram\.com\/([^\/\?]+)/', $url, $m)) {
+        $handle = trim($m[1]);
+    }
+
+    if (!$handle || in_array($handle, ['p', 'reel', 'stories', 'explore', 'direct'])) return $result;
+
+    $result['channelName'] = '@' . $handle;
+    $result['title']       = '@' . $handle . ' Instagram';
+
+    // ── RapidAPI Call: Instagram Data API ──────────────────
+    if ($apiKey) {
+        $rapidUrl = 'https://instagram-scraper-api2.p.rapidapi.com/v1/info?username_or_id_or_url=' . urlencode($handle);
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $rapidUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_HTTPHEADER => [
+                'X-RapidAPI-Key: ' . $apiKey,
+                'X-RapidAPI-Host: instagram-scraper-api2.p.rapidapi.com'
+            ]
+        ]);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        if ($response) {
+            $json = json_decode($response, true);
+            $data = $json['data'] ?? $json;
+            if (!empty($data)) {
+                $result['title']          = $data['full_name'] ?? $data['username'] ?? ('@' . $handle);
+                $result['channelName']    = '@' . ($data['username'] ?? $handle);
+                $result['profilePicture'] = $data['profile_pic_url_hd'] ?? $data['profile_pic_url'] ?? null;
+                $result['description']    = $data['biography'] ?? '';
+
+                $followerCount = $data['follower_count'] ?? $data['edge_followed_by']['count'] ?? 0;
+                if ($followerCount > 0) {
+                    $result['subscribers'] = (int)$followerCount;
+                    $result['followers']   = (int)$followerCount;
+                }
+            }
+        }
+    }
+
+    // Fallback HTML Scrape
+    if (!$result['profilePicture'] || !$result['description']) {
+        $html = fetchTextUrl('https://www.instagram.com/' . urlencode($handle) . '/');
+        if ($html) {
+            if (!$result['title'] && preg_match('/<meta property="og:title" content="([^"]+)"/i', $html, $m)) {
+                $result['title'] = html_entity_decode($m[1], ENT_QUOTES);
+            }
+            if (!$result['description'] && preg_match('/<meta property="og:description" content="([^"]+)"/i', $html, $m)) {
+                $result['description'] = html_entity_decode($m[1], ENT_QUOTES);
+            }
+            if (!$result['profilePicture'] && preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
+                $result['profilePicture'] = $m[1];
+            }
+        }
+    }
+
+    if (!empty($verificationCode)) {
+        $code = trim($verificationCode);
+        $result['codeVerified'] = !empty($result['description']) && (stripos($result['description'], $code) !== false);
+    } else {
+        $result['codeVerified'] = true;
+    }
+
+    return $result;
+}
+
+function fetchTwitterProfileData($url, $verificationCode = '') {
+    $result = [
+        'title'            => null,
+        'channelName'      => null,
+        'profilePicture'   => null,
+        'subscribers'      => 0,
+        'followers'        => 0,
+        'description'      => null,
+        'codeVerified'     => false,
+        'verificationCode' => $verificationCode
+    ];
+
+    $apiKey = getRapidApiKey();
+    $handle = '';
+    if (preg_match('/(?:twitter\.com|x\.com)\/([^\/\?]+)/', $url, $m)) {
+        $handle = trim($m[1]);
+    }
+
+    if (!$handle || in_array($handle, ['home', 'explore', 'notifications', 'messages', 'search', 'settings'])) return $result;
+
+    $result['channelName'] = '@' . $handle;
+    $result['title']       = '@' . $handle . ' Twitter';
+
+    if ($apiKey) {
+        $rapidUrl = 'https://twitter-api45.p.rapidapi.com/screenname.php?username=' . urlencode($handle);
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL => $rapidUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => 8,
+            CURLOPT_HTTPHEADER => [
+                'X-RapidAPI-Key: ' . $apiKey,
+                'X-RapidAPI-Host: twitter-api45.p.rapidapi.com'
+            ]
+        ]);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        if ($response) {
+            $json = json_decode($response, true);
+            if (!empty($json)) {
+                $result['title']          = $json['name'] ?? ('@' . $handle);
+                $result['channelName']    = '@' . ($json['screen_name'] ?? $handle);
+                $avatar = $json['profile_image_url_https'] ?? $json['avatar'] ?? null;
+                if ($avatar) {
+                    $result['profilePicture'] = str_replace('_normal', '_400x400', $avatar);
+                }
+                $result['description']    = $json['description'] ?? $json['desc'] ?? '';
+
+                $followerCount = $json['followers_count'] ?? $json['subscribers_count'] ?? 0;
+                if ($followerCount > 0) {
+                    $result['subscribers'] = (int)$followerCount;
+                    $result['followers']   = (int)$followerCount;
+                }
+            }
+        }
+    }
+
+    if (!empty($verificationCode)) {
+        $code = trim($verificationCode);
+        $result['codeVerified'] = !empty($result['description']) && (stripos($result['description'], $code) !== false);
+    } else {
+        $result['codeVerified'] = true;
+    }
+
+    return $result;
+}
+
+function fetchFacebookProfileData($url, $verificationCode = '') {
+    $result = [
+        'title'            => null,
+        'channelName'      => null,
+        'profilePicture'   => null,
+        'subscribers'      => 0,
+        'followers'        => 0,
+        'description'      => null,
+        'codeVerified'     => false,
+        'verificationCode' => $verificationCode
+    ];
+
+    $html = fetchTextUrl($url);
+    if ($html) {
+        if (preg_match('/<meta property="og:title" content="([^"]+)"/i', $html, $m)) {
+            $title = html_entity_decode($m[1], ENT_QUOTES);
+            $result['title']       = $title;
+            $result['channelName'] = $title;
+        }
+        if (preg_match('/<meta property="og:description" content="([^"]+)"/i', $html, $m)) {
+            $result['description'] = html_entity_decode($m[1], ENT_QUOTES);
+        }
+        if (preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
+            $result['profilePicture'] = $m[1];
+        }
+    }
+
+    if (!empty($verificationCode)) {
+        $code = trim($verificationCode);
+        $result['codeVerified'] = !empty($result['description']) && (stripos($result['description'], $code) !== false);
+    } else {
+        $result['codeVerified'] = true;
+    }
+
+    return $result;
 }
 ?>

@@ -746,7 +746,18 @@ function fetchTwitterProfileData($url, $verificationCode = '') {
 
     // ── 1. Twitter Free Syndication Endpoint (No API Key Required!) ──
     $synUrl = 'https://cdn.syndication.twimg.com/widgets/followbutton/info.json?screen_names=' . urlencode($handle);
-    $synResponse = fetchTextUrl($synUrl);
+    $chSyn = curl_init();
+    curl_setopt_array($chSyn, [
+        CURLOPT_URL            => $synUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 6,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        CURLOPT_HTTPHEADER     => ['Accept: application/json']
+    ]);
+    $synResponse = curl_exec($chSyn);
+    curl_close($chSyn);
+
     if ($synResponse) {
         $synJson = json_decode($synResponse, true);
         if (is_array($synJson) && isset($synJson[0])) {
@@ -760,9 +771,10 @@ function fetchTwitterProfileData($url, $verificationCode = '') {
             if (!empty($user['profile_image_url_https'])) {
                 $result['profilePicture'] = str_replace('_normal', '_400x400', $user['profile_image_url_https']);
             }
-            if (isset($user['followers_count']) && (int)$user['followers_count'] >= 0) {
-                $result['subscribers'] = (int)$user['followers_count'];
-                $result['followers']   = (int)$user['followers_count'];
+            if (isset($user['followers_count'])) {
+                $count = (int)$user['followers_count'];
+                $result['subscribers'] = $count;
+                $result['followers']   = $count;
             }
         }
     }

@@ -817,13 +817,10 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                   {formData.title && (
                     <p className="text-white font-semibold text-base truncate">{formData.title}</p>
                   )}
-                  {formData.subscribers && (
-                    <p className="text-xsm-light-gray text-sm mt-0.5">
-                      {parseInt(formData.subscribers) >= 1000000
-                        ? (parseInt(formData.subscribers) / 1000000).toFixed(1) + 'M'
-                        : parseInt(formData.subscribers) >= 1000
-                        ? (parseInt(formData.subscribers) / 1000).toFixed(1) + 'K'
-                        : formData.subscribers} subscribers
+                  {formData.subscribers !== '' && (
+                    <p className="text-xsm-light-gray text-sm mt-0.5 font-medium">
+                      {formatFollowerCount(parseInt(formData.subscribers) || 0)}{' '}
+                      {(formData.platform === 'youtube' || formData.platform === 'telegram') ? 'subscribers' : 'followers'}
                     </p>
                   )}
                 </div>
@@ -1060,16 +1057,38 @@ const SellChannel: React.FC<SellChannelProps> = () => {
               )}
             </div>
 
-            {/* Price Input */}
-            <div>
-              <input
-                type="text"
-                name="price"
-                value={formData.price}
-                onChange={handleInputChange}
-                className="xsm-input w-full"
-                placeholder="Enter price ($)"
-              />
+            {/* Followers / Subscribers & Price Input Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-white font-medium mb-1.5 text-sm">
+                  {(formData.platform === 'youtube' || formData.platform === 'telegram') ? 'Subscribers' : 'Followers'} Count
+                  <span className="text-xsm-yellow text-xs ml-2">(Auto-filled or edit manually)</span>
+                </label>
+                <input
+                  type="number"
+                  name="subscribers"
+                  value={formData.subscribers}
+                  onChange={handleInputChange}
+                  className="xsm-input w-full"
+                  placeholder={`Enter ${(formData.platform === 'youtube' || formData.platform === 'telegram') ? 'subscribers' : 'followers'} count (e.g. 5000)`}
+                  min="0"
+                />
+              </div>
+
+              <div>
+                <label className="block text-white font-medium mb-1.5 text-sm">
+                  Price ($ USD)
+                  <span className="text-xsm-yellow text-xs ml-2">(Minimum $5)</span>
+                </label>
+                <input
+                  type="text"
+                  name="price"
+                  value={formData.price}
+                  onChange={handleInputChange}
+                  className="xsm-input w-full"
+                  placeholder="Enter price ($)"
+                />
+              </div>
             </div>
 
             {/* Optional Fields Section */}

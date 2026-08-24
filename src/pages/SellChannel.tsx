@@ -108,10 +108,19 @@ const SellChannel: React.FC<SellChannelProps> = () => {
   const isFieldsValid = 
     formData.channelUrl.trim().length > 0 &&
     formData.category.trim().length > 0 &&
-    formData.price.trim().length > 0 && parseFloat(formData.price) >= 5 &&
-    formData.subscribers.trim().length > 0 && parseInt(formData.subscribers) >= 0;
+    formData.price.trim().length > 0 && parseFloat(formData.price) >= 5;
+
   // For new listings verification is required; edit mode skips verification
   const isFormValid = isFieldsValid && (isEditMode || isCodeVerified === true);
+
+  const getValidationMissingReason = (): string | null => {
+    if (!formData.channelUrl.trim()) return '🔗 Please enter profile / channel URL above';
+    if (!isEditMode && isCodeVerified === null) return '⚡ Click "Auto-Fill" to extract details & verify ownership code';
+    if (!isEditMode && isCodeVerified === false) return '❌ Ownership code not found in bio. Add code to bio and click "Auto-Fill"';
+    if (!formData.category.trim()) return '📌 Please select a Topic / Category';
+    if (!formData.price.trim() || isNaN(parseFloat(formData.price)) || parseFloat(formData.price) < 5) return '💰 Please enter listing price ($5 minimum)';
+    return null;
+  };
   const contentTypeDropdownRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -429,7 +438,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
           ...prev,
           title: profileData.title || prev.title,
           platform: detectedPlat,
-          subscribers: subCount ? String(subCount) : prev.subscribers,
+          subscribers: String(subCount),
           profilePicture: profileData.profilePicture || prev.profilePicture
         }));
 
@@ -499,7 +508,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         ...prev,
         title: profileData.title || prev.title,
         platform: detectedPlat,
-        subscribers: subCount ? String(subCount) : prev.subscribers,
+        subscribers: String(subCount),
         profilePicture: profileData.profilePicture || prev.profilePicture
       }));
 
@@ -1375,24 +1384,22 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
              {/* Submit Button */}
             <div className="mt-8 text-center">
-              {/* Hint text when fields are filled but verification is pending */}
-              {!isEditMode && isFieldsValid && isCodeVerified !== true && (
-                <p className="text-amber-400 text-sm mb-3 font-medium">
-                  {isCodeVerified === false
-                    ? '❌ Verification code not found in channel bio. Add it to your YouTube bio and click Auto-Fill again.'
-                    : '⏳ Add the verification code to your YouTube channel bio, then click Auto-Fill to verify ownership before publishing.'}
-                </p>
+              {/* Helpful diagnostic hint when form is incomplete or verification is pending */}
+              {getValidationMissingReason() && (
+                <div className="p-3 bg-amber-950/40 border border-amber-500/40 rounded-xl mb-4 text-amber-300 text-xs font-semibold flex items-center justify-center gap-2 shadow-inner">
+                  <span>{getValidationMissingReason()}</span>
+                </div>
               )}
               <button
                 onClick={handleSubmit}
                 disabled={isSubmitting || !isFormValid}
-                className={`bg-xsm-yellow text-black py-3 rounded-md font-medium hover:bg-yellow-400 transition-colors w-full ${isSubmitting || !isFormValid ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`bg-xsm-yellow text-black py-3.5 rounded-xl font-bold text-base hover:bg-yellow-400 transition-all w-full cursor-pointer shadow-lg ${isSubmitting || !isFormValid ? 'opacity-50 cursor-not-allowed' : 'hover:scale-[1.01]'}`}
               >
                 {isSubmitting 
                   ? (isEditMode ? 'Updating Listing...' : 'Creating Listing...') 
-                  : !isEditMode && isFieldsValid && isCodeVerified !== true
-                    ? '🔐 Verify Channel Ownership First'
-                    : (isEditMode ? 'Update Listing' : 'Create Listing')
+                  : isFormValid
+                  ? (isEditMode ? 'Update Listing ✅' : 'Create Listing ✅')
+                  : 'Complete Required Fields Above'
                 }
               </button>
             </div>

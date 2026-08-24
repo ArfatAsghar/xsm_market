@@ -76,7 +76,11 @@ function handleSocialMediaExtract() {
         }
 
         foreach ($extracted as $key => $value) {
+            // Allow 0 integer/float through — only skip actual null / empty string
             if ($value !== null && $value !== '') {
+                $profileData[$key] = $value;
+            } elseif (is_int($value) || is_float($value)) {
+                // Explicitly preserve numeric 0 so subscribers=0 is passed to frontend
                 $profileData[$key] = $value;
             }
         }
@@ -596,8 +600,8 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
                 $result['profilePicture'] = $userInfo['avatarLarger'] ?? $userInfo['avatarMedium'] ?? $userInfo['avatarThumb'] ?? null;
                 $result['description']    = $userInfo['signature'] ?? '';
 
-                $followerCount = $stats['followerCount'] ?? $userInfo['followerCount'] ?? 0;
-                if ($followerCount > 0) {
+                $followerCount = $stats['followerCount'] ?? $userInfo['followerCount'] ?? null;
+                if ($followerCount !== null) {
                     $result['subscribers'] = (int)$followerCount;
                     $result['followers']   = (int)$followerCount;
                 }
@@ -618,10 +622,13 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
             if (!$result['profilePicture'] && preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
                 $result['profilePicture'] = $m[1];
             }
-            if ($result['followers'] === 0 && preg_match('/"followerCount"\s*:\s*([0-9]+)/i', $html, $m)) {
-                $count = (int)$m[1];
-                $result['subscribers'] = $count;
-                $result['followers']   = $count;
+            // Try multiple patterns to extract follower count from TikTok HTML
+            if (!isset($result['followersExtracted']) && preg_match('/"followerCount"\s*:\s*([0-9]+)/i', $html, $m)) {
+                $result['subscribers'] = (int)$m[1];
+                $result['followers']   = (int)$m[1];
+            } elseif (!isset($result['followersExtracted']) && preg_match('/"fans"\s*:\s*([0-9]+)/i', $html, $m)) {
+                $result['subscribers'] = (int)$m[1];
+                $result['followers']   = (int)$m[1];
             }
         }
     }
@@ -684,8 +691,8 @@ function fetchInstagramProfileData($url, $verificationCode = '') {
                 $result['profilePicture'] = $data['profile_pic_url_hd'] ?? $data['profile_pic_url'] ?? null;
                 $result['description']    = $data['biography'] ?? '';
 
-                $followerCount = $data['follower_count'] ?? $data['edge_followed_by']['count'] ?? 0;
-                if ($followerCount > 0) {
+                $followerCount = $data['follower_count'] ?? $data['edge_followed_by']['count'] ?? null;
+                if ($followerCount !== null) {
                     $result['subscribers'] = (int)$followerCount;
                     $result['followers']   = (int)$followerCount;
                 }
@@ -872,24 +879,96 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
         'verificationCode' => $verificationCode
     ];
 
-    $html = fetchTextUrl($url);
-    if ($html) {
-        if (preg_match('/<meta property="og:title" content="([^"]+)"/i', $html, $m)) {
-            $title = html_entity_decode($m[1], ENT_QUOTES);
-            $result['title']       = $title;
-            $result['channelName'] = $title;
+    $apiKey = getRapidApiKey();
+
+    // Extract Facebook page username / ID from URL
+    $fbHandle = '';
+    if (preg_match('/facebook\.com\/([^\/\?]+)/', $url, $m)) {
+        $fbHandle = trim($m[1]);
+    }
+
+    // ── 1. RapidAPI: Facebook Pages Scraper ─────────────────────
+    if ($apiKey && $fbHandle && !in_array(strtolower($fbHandle), ['groups', 'events', 'watch', 'marketplace', 'login', 'profile.php'])) {
+        $rapidUrl = 'https://facebook-pages-scraper.p.rapidapi.com/page_info?page_name=' . urlencode($fbHandle);
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $rapidUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 6,
+            CURLOPT_HTTPHEADER     => [
+                'X-RapidAPI-Key: ' . $apiKey,
+                'X-RapidAPI-Host: facebook-pages-scraper.p.rapidapi.com'
+            ]
+        ]);
+        $response = curl_exec($ch);
+        curl_close($ch);
+
+        if ($response) {
+            $json = json_decode($response, true);
+            $data = $json['data'] ?? $json ?? [];
+            if (!empty($data) && (isset($data['name']) || isset($data['fan_count']))) {
+                if (!empty($data['name'])) {
+                    $result['title']       = $data['name'];
+                    $result['channelName'] = $data['name'];
+                }
+                if (!empty($data['description']) || !empty($data['about'])) {
+                    $result['description'] = $data['description'] ?? $data['about'];
+                }
+                if (!empty($data['picture']['data']['url']) || !empty($data['cover']['source'])) {
+                    $result['profilePicture'] = $data['picture']['data']['url'] ?? $data['cover']['source'];
+                }
+                $fans = $data['fan_count'] ?? $data['followers_count'] ?? $data['likes'] ?? null;
+                if ($fans !== null) {
+                    $result['subscribers'] = (int)$fans;
+                    $result['followers']   = (int)$fans;
+                }
+            }
         }
-        if (preg_match('/<meta property="og:description" content="([^"]+)"/i', $html, $m)) {
-            $result['description'] = html_entity_decode($m[1], ENT_QUOTES);
-        }
-        if (preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
-            $result['profilePicture'] = $m[1];
+    }
+
+    // ── 2. HTML Scrape Fallback ───────────────────────────────────
+    $html = '';
+    if (!$result['title'] || !$result['profilePicture']) {
+        $html = fetchTextUrl($url);
+        if ($html) {
+            if (!$result['title'] && preg_match('/<meta property="og:title" content="([^"]+)"/i', $html, $m)) {
+                $title = html_entity_decode($m[1], ENT_QUOTES);
+                $result['title']       = $title;
+                $result['channelName'] = $title;
+            }
+            if (!$result['description'] && preg_match('/<meta property="og:description" content="([^"]+)"/i', $html, $m)) {
+                $result['description'] = html_entity_decode($m[1], ENT_QUOTES);
+            }
+            if (!$result['profilePicture'] && preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
+                $result['profilePicture'] = $m[1];
+            }
+            // Try to extract follower count from JSON-LD or page text
+            if ($result['followers'] === 0) {
+                if (preg_match('/([0-9,.]+[KMB]?)\s+(?:people follow|followers?|likes?)/i', $html, $m)) {
+                    $raw = $m[1];
+                    $count = 0;
+                    if (preg_match('/([0-9.]+)([KMB])/i', $raw, $pm)) {
+                        $val  = floatval($pm[1]);
+                        $unit = strtoupper($pm[2]);
+                        if ($unit === 'K') $count = (int)($val * 1000);
+                        elseif ($unit === 'M') $count = (int)($val * 1000000);
+                        elseif ($unit === 'B') $count = (int)($val * 1000000000);
+                    } else {
+                        $count = (int)preg_replace('/[^0-9]/', '', $raw);
+                    }
+                    if ($count >= 0) {
+                        $result['subscribers'] = $count;
+                        $result['followers']   = $count;
+                    }
+                }
+            }
         }
     }
 
     if (!empty($verificationCode)) {
         $code = trim($verificationCode);
-        $result['codeVerified'] = !empty($result['description']) && (stripos($result['description'], $code) !== false);
+        $searchIn = ($result['description'] ?? '') . ' ' . $html;
+        $result['codeVerified'] = (stripos($searchIn, $code) !== false);
     } else {
         $result['codeVerified'] = true;
     }
@@ -909,29 +988,63 @@ function fetchTelegramProfileData($url, $verificationCode = '') {
         'verificationCode' => $verificationCode
     ];
 
-    $html = fetchTextUrl($url);
+    // Normalise t.me URL → actual preview URL
+    $previewUrl = $url;
+    if (preg_match('/t\.me\/([^\/\?]+)/', $url, $m)) {
+        $handle = $m[1];
+        $result['channelName'] = '@' . $handle;
+        $previewUrl = 'https://t.me/' . urlencode($handle);
+    }
+
+    $html = fetchTextUrl($previewUrl);
     if ($html) {
+        // Title
         if (preg_match('/<meta property="og:title" content="([^"]+)"/i', $html, $m)) {
             $title = html_entity_decode($m[1], ENT_QUOTES);
             $result['title']       = $title;
             $result['channelName'] = $title;
+        } elseif (preg_match('/<div class="tgme_page_title">([^<]+)<\/div>/i', $html, $m)) {
+            $title = html_entity_decode(trim($m[1]), ENT_QUOTES);
+            $result['title']       = $title;
+            $result['channelName'] = $title;
         }
+
+        // Bio / description
         if (preg_match('/<meta property="og:description" content="([^"]+)"/i', $html, $m)) {
             $result['description'] = html_entity_decode($m[1], ENT_QUOTES);
+        } elseif (preg_match('/<div class="tgme_page_description">([^<]+)<\/div>/i', $html, $m)) {
+            $result['description'] = html_entity_decode(trim($m[1]), ENT_QUOTES);
         }
+
+        // Avatar
         if (preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
             $result['profilePicture'] = $m[1];
+        } elseif (preg_match('/tgme_page_photo.*?src="([^"]+)"/is', $html, $m)) {
+            $result['profilePicture'] = $m[1];
         }
-        if (preg_match('/([0-9\s,]+)\s*(?:subscribers|members)/i', $html, $m)) {
-            $count = (int)preg_replace('/[^0-9]/', '', $m[1]);
-            $result['subscribers'] = $count;
-            $result['followers']   = $count;
+
+        // Subscriber / member count — multiple Telegram page patterns
+        $subCount = 0;
+        // Pattern 1: tgme_page_extra (e.g. "1 234 subscribers", "5 members")
+        if (preg_match('/<div class="tgme_page_extra">[^<]*?([0-9][\s0-9,\.]*[0-9])\s*(?:subscribers?|members?)[^<]*<\/div>/i', $html, $m)) {
+            $subCount = (int)preg_replace('/[^0-9]/', '', $m[1]);
         }
+        // Pattern 2: generic text anywhere on the page
+        if (!$subCount && preg_match('/([0-9][\s0-9,]+[0-9])\s*(?:subscribers?|members?)/i', $html, $m)) {
+            $subCount = (int)preg_replace('/[^0-9]/', '', $m[1]);
+        }
+        // Pattern 3: JSON-style "subscribers":N or "members":N
+        if (!$subCount && preg_match('/"(?:subscribers?|members?)"\s*:\s*([0-9]+)/i', $html, $m)) {
+            $subCount = (int)$m[1];
+        }
+        $result['subscribers'] = $subCount;
+        $result['followers']   = $subCount;
     }
 
     if (!empty($verificationCode)) {
         $code = trim($verificationCode);
-        $result['codeVerified'] = !empty($result['description']) && (stripos($result['description'], $code) !== false);
+        $searchIn = ($result['description'] ?? '') . ' ' . ($html ?? '');
+        $result['codeVerified'] = (stripos($searchIn, $code) !== false);
     } else {
         $result['codeVerified'] = true;
     }

@@ -105,22 +105,23 @@ const SellChannel: React.FC<SellChannelProps> = () => {
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
 
   // Title and subscribers come from auto-extraction; required before creating listing
+  // Note: formData.subscribers = "" means never extracted; "0" = extracted 0 followers (valid)
   const isFieldsValid = 
     formData.channelUrl.trim().length > 0 &&
     formData.category.trim().length > 0 &&
     formData.price.trim().length > 0 && parseFloat(formData.price) >= 5 &&
-    formData.subscribers.trim().length > 0 && parseInt(formData.subscribers) >= 0;
+    formData.subscribers !== '' && !isNaN(parseInt(formData.subscribers));
 
   // For new listings verification is required; edit mode skips verification
   const isFormValid = isFieldsValid && (isEditMode || isCodeVerified === true);
 
   const getValidationMissingReason = (): string | null => {
-    if (!formData.channelUrl.trim()) return '🔗 Please enter profile / channel URL above';
-    if (!isEditMode && isCodeVerified === null) return '⚡ Click "Auto-Fill" to extract details & verify ownership code';
+    if (!formData.channelUrl.trim()) return '🔗 Please enter your profile / channel URL';
+    if (!isEditMode && isCodeVerified === null) return '⚡ Click "Auto-Fill" to extract profile details & verify ownership code';
     if (!isEditMode && isCodeVerified === false) return '❌ Ownership code not found in bio. Add code to bio and click "Auto-Fill"';
-    if (!formData.subscribers.trim() || isNaN(parseInt(formData.subscribers))) return '📊 Followers / Subscribers count must be auto-extracted from profile';
+    if (formData.subscribers === '' || isNaN(parseInt(formData.subscribers))) return '📊 Followers / Subscribers must be auto-extracted — click "Auto-Fill" on your profile URL';
     if (!formData.category.trim()) return '📌 Please select a Topic / Category';
-    if (!formData.price.trim() || isNaN(parseFloat(formData.price)) || parseFloat(formData.price) < 5) return '💰 Please enter listing price ($5 minimum)';
+    if (!formData.price.trim() || isNaN(parseFloat(formData.price)) || parseFloat(formData.price) < 5) return '💰 Please enter listing price (minimum $5)';
     return null;
   };
   const contentTypeDropdownRef = useRef<HTMLDivElement>(null);

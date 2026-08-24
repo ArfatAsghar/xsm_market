@@ -434,16 +434,17 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         }));
 
         if (profileData.title) {
+          const platformLabel = detectedPlat === 'twitter' ? 'Twitter / X' : detectedPlat.charAt(0).toUpperCase() + detectedPlat.slice(1);
           if (profileData.codeVerified) {
             toast({
-              title: '✅ Channel Ownership Verified!',
-              description: `Verification code ${verificationCode} found in channel bio.`,
+              title: '✅ Account Ownership Verified!',
+              description: `Verification code ${verificationCode} found in ${platformLabel} bio.`,
             });
           } else {
             toast({
               variant: "destructive",
-              title: '⚠️ Code Not Found in Channel Bio',
-              description: `Please add code ${verificationCode} to your YouTube channel description/bio to verify ownership.`,
+              title: `⚠️ Code Not Found in ${platformLabel} Bio`,
+              description: `Please add code ${verificationCode} to your ${platformLabel} account bio/description to verify ownership.`,
             });
           }
         }

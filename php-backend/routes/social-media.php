@@ -821,6 +821,9 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
         $result['codeVerified'] = true;
     }
 
+    return $result;
+}
+
 function fetchTelegramProfileData($url, $verificationCode = '') {
     $result = [
         'title'            => null,

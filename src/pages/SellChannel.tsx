@@ -1005,7 +1005,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                       <div className="mt-3 p-3 bg-green-900/30 border border-green-500/50 rounded-lg">
                         <p className="text-green-400 text-sm">
                           ✅ Extracted: <strong>{extractedData.title}</strong> 
-                          {(extractedData.followers || extractedData.subscribers) && (
+                          {Boolean(extractedData.followers || extractedData.subscribers) && (
                             <span> • {formatFollowerCount(extractedData.followers || extractedData.subscribers)} followers</span>
                           )}
                         </p>

@@ -733,22 +733,48 @@ function fetchTwitterProfileData($url, $verificationCode = '') {
 
     $apiKey = getRapidApiKey();
     $handle = '';
-    if (preg_match('/(?:twitter\.com|x\.com)\/([^\/\?]+)/', $url, $m)) {
+    if (preg_match('/(?:twitter\.com|x\.com)\/([^\/\?]+)/i', $url, $m)) {
         $handle = trim($m[1]);
     }
 
-    if (!$handle || in_array($handle, ['home', 'explore', 'notifications', 'messages', 'search', 'settings'])) return $result;
+    if (!$handle || in_array(strtolower($handle), ['home', 'explore', 'notifications', 'messages', 'search', 'settings', 'i'])) {
+        return $result;
+    }
 
     $result['channelName'] = '@' . $handle;
-    $result['title']       = '@' . $handle . ' Twitter';
+    $result['title']       = '@' . $handle;
 
+    // ── 1. Twitter Free Syndication Endpoint (No API Key Required!) ──
+    $synUrl = 'https://cdn.syndication.twimg.com/widgets/followbutton/info.json?screen_names=' . urlencode($handle);
+    $synResponse = fetchTextUrl($synUrl);
+    if ($synResponse) {
+        $synJson = json_decode($synResponse, true);
+        if (is_array($synJson) && isset($synJson[0])) {
+            $user = $synJson[0];
+            if (!empty($user['name'])) {
+                $result['title'] = $user['name'];
+            }
+            if (!empty($user['screen_name'])) {
+                $result['channelName'] = '@' . $user['screen_name'];
+            }
+            if (!empty($user['profile_image_url_https'])) {
+                $result['profilePicture'] = str_replace('_normal', '_400x400', $user['profile_image_url_https']);
+            }
+            if (isset($user['followers_count']) && (int)$user['followers_count'] >= 0) {
+                $result['subscribers'] = (int)$user['followers_count'];
+                $result['followers']   = (int)$user['followers_count'];
+            }
+        }
+    }
+
+    // ── 2. RapidAPI Scraper (If API Key Configured) ─────────────
     if ($apiKey) {
         $rapidUrl = 'https://twitter-api45.p.rapidapi.com/screenname.php?username=' . urlencode($handle);
         $ch = curl_init();
         curl_setopt_array($ch, [
             CURLOPT_URL => $rapidUrl,
             CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT => 8,
+            CURLOPT_TIMEOUT => 6,
             CURLOPT_HTTPHEADER => [
                 'X-RapidAPI-Key: ' . $apiKey,
                 'X-RapidAPI-Host: twitter-api45.p.rapidapi.com'
@@ -759,15 +785,20 @@ function fetchTwitterProfileData($url, $verificationCode = '') {
 
         if ($response) {
             $json = json_decode($response, true);
-            if (!empty($json)) {
-                $result['title']          = $json['name'] ?? ('@' . $handle);
-                $result['channelName']    = '@' . ($json['screen_name'] ?? $handle);
+            if (!empty($json) && (isset($json['name']) || isset($json['description']))) {
+                if (!empty($json['name'])) {
+                    $result['title'] = $json['name'];
+                }
+                if (!empty($json['screen_name'])) {
+                    $result['channelName'] = '@' . $json['screen_name'];
+                }
                 $avatar = $json['profile_image_url_https'] ?? $json['avatar'] ?? null;
                 if ($avatar) {
                     $result['profilePicture'] = str_replace('_normal', '_400x400', $avatar);
                 }
-                $result['description']    = $json['description'] ?? $json['desc'] ?? '';
-
+                if (!empty($json['description']) || !empty($json['desc'])) {
+                    $result['description'] = $json['description'] ?? $json['desc'];
+                }
                 $followerCount = $json['followers_count'] ?? $json['subscribers_count'] ?? 0;
                 if ($followerCount > 0) {
                     $result['subscribers'] = (int)$followerCount;
@@ -777,9 +808,39 @@ function fetchTwitterProfileData($url, $verificationCode = '') {
         }
     }
 
+    // ── 3. OEmbed & Web Bio Fallback ──────────────────────────
+    $htmlContent = '';
+    if (empty($result['description'])) {
+        $oembedUrl = 'https://publish.twitter.com/oembed?url=https://x.com/' . urlencode($handle);
+        $oembedResponse = fetchTextUrl($oembedUrl);
+        if ($oembedResponse) {
+            $oembedJson = json_decode($oembedResponse, true);
+            if (!empty($oembedJson['author_name']) && $result['title'] === ('@' . $handle)) {
+                $result['title'] = $oembedJson['author_name'];
+            }
+            if (!empty($oembedJson['html'])) {
+                $result['description'] = strip_tags($oembedJson['html']);
+                $htmlContent .= ' ' . $oembedJson['html'];
+            }
+        }
+
+        $html = fetchTextUrl('https://x.com/' . urlencode($handle));
+        if ($html) {
+            $htmlContent .= ' ' . $html;
+            if (preg_match('/<meta property="og:description" content="([^"]+)"/i', $html, $m)) {
+                $result['description'] = html_entity_decode($m[1], ENT_QUOTES);
+            }
+            if (empty($result['profilePicture']) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
+                $result['profilePicture'] = $m[1];
+            }
+        }
+    }
+
+    // ── Code Ownership Verification ───────────────────────────
     if (!empty($verificationCode)) {
         $code = trim($verificationCode);
-        $result['codeVerified'] = !empty($result['description']) && (stripos($result['description'], $code) !== false);
+        $searchHaystack = ($result['description'] ?? '') . ' ' . ($result['title'] ?? '') . ' ' . $htmlContent;
+        $result['codeVerified'] = (stripos($searchHaystack, $code) !== false);
     } else {
         $result['codeVerified'] = true;
     }

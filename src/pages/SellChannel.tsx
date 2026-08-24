@@ -821,151 +821,199 @@ const SellChannel: React.FC<SellChannelProps> = () => {
             )}
 
             {/* Social Media Availability Indicator */}
-            <div className="p-4 bg-xsm-black/70 border border-xsm-medium-gray/40 rounded-xl mb-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="text-xs font-bold text-xsm-yellow uppercase tracking-wider">
-                  Social Media Platform Availability
-                </h4>
-                <span className="text-[11px] text-green-400 font-semibold">Auto-Extraction Enabled for All Platforms</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
-                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                  <span>YouTube — Active</span>
-                </div>
-                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                  <span>TikTok — Active</span>
-                </div>
-                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                  <span>Instagram — Active</span>
-                </div>
-                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                  <span>Facebook — Active</span>
-                </div>
-                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                  <span>Twitter/X — Active</span>
-                </div>
-                <div className="flex items-center gap-2 bg-green-950/70 text-green-400 border border-green-700/60 px-2 py-1.5 rounded-lg font-semibold">
-                  <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-                  <span>Telegram — Active</span>
-                </div>
-              </div>
-            </div>
+            {(() => {
+              const platformConfigs: Record<string, { id: string; name: string; label: string; placeholder: string; bioInstruction: string }> = {
+                youtube: {
+                  id: 'youtube',
+                  name: 'YouTube',
+                  label: 'YouTube Channel URL',
+                  placeholder: 'Paste your YouTube channel URL (e.g., https://www.youtube.com/@channel)',
+                  bioInstruction: 'YouTube channel description / bio'
+                },
+                tiktok: {
+                  id: 'tiktok',
+                  name: 'TikTok',
+                  label: 'TikTok Profile Link',
+                  placeholder: 'Paste your TikTok profile link (e.g., https://www.tiktok.com/@username)',
+                  bioInstruction: 'TikTok profile Bio'
+                },
+                instagram: {
+                  id: 'instagram',
+                  name: 'Instagram',
+                  label: 'Instagram Profile Link',
+                  placeholder: 'Paste your Instagram profile link (e.g., https://www.instagram.com/username)',
+                  bioInstruction: 'Instagram profile Bio'
+                },
+                facebook: {
+                  id: 'facebook',
+                  name: 'Facebook',
+                  label: 'Facebook Page / Profile Link',
+                  placeholder: 'Paste your Facebook page link (e.g., https://www.facebook.com/pagename)',
+                  bioInstruction: 'Facebook Page About / Intro'
+                },
+                twitter: {
+                  id: 'twitter',
+                  name: 'Twitter / X',
+                  label: 'Twitter / X Profile Link',
+                  placeholder: 'Paste your Twitter / X profile link (e.g., https://twitter.com/username)',
+                  bioInstruction: 'Twitter / X account Bio'
+                },
+                telegram: {
+                  id: 'telegram',
+                  name: 'Telegram',
+                  label: 'Telegram Channel / Group Link',
+                  placeholder: 'Paste your Telegram channel link (e.g., https://t.me/channelname)',
+                  bioInstruction: 'Telegram channel description'
+                }
+              };
 
-            {/* Channel Ownership Verification Banner */}
-            {!isEditMode && (
-              <div className="p-5 bg-gradient-to-r from-amber-950/60 via-xsm-black to-xsm-dark-gray border border-amber-500/40 rounded-xl shadow-lg mb-6">
-                <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xl">🔐</span>
-                      <h3 className="text-white font-bold text-base">Account Ownership Verification</h3>
+              const currentPlatformKey = formData.platform || 'youtube';
+              const activeConfig = platformConfigs[currentPlatformKey] || platformConfigs['youtube'];
+
+              return (
+                <>
+                  <div className="p-4 bg-xsm-black/70 border border-xsm-medium-gray/40 rounded-xl mb-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-bold text-xsm-yellow uppercase tracking-wider">
+                        Select Social Media Platform
+                      </h4>
+                      <span className="text-[11px] text-green-400 font-semibold">Click a platform below to switch link input</span>
                     </div>
-                    <p className="text-xsm-light-gray text-xs leading-relaxed mb-3">
-                      To verify ownership, add this unique 10-character code into your <strong className="text-white">social media profile bio / description / About section</strong> before listing.
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <div className="bg-xsm-black border border-amber-500/50 rounded-lg px-4 py-2 font-mono text-amber-400 font-bold tracking-widest text-lg select-all shadow-inner">
-                        {verificationCode}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 text-xs">
+                      {Object.values(platformConfigs).map(plat => {
+                        const isSelected = (formData.platform || 'youtube') === plat.id;
+                        return (
+                          <button
+                            key={plat.id}
+                            type="button"
+                            onClick={() => setFormData(prev => ({ ...prev, platform: plat.id }))}
+                            className={`flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl font-bold transition-all cursor-pointer border ${
+                              isSelected
+                                ? 'bg-xsm-yellow text-black border-xsm-yellow ring-2 ring-xsm-yellow/50 shadow-lg scale-105'
+                                : 'bg-green-950/40 text-green-400 border-green-700/50 hover:bg-green-900/60'
+                            }`}
+                          >
+                            <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-black animate-ping' : 'bg-green-400'}`}></span>
+                            <span>{plat.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Channel Ownership Verification Banner */}
+                  {!isEditMode && (
+                    <div className="p-5 bg-gradient-to-r from-amber-950/60 via-xsm-black to-xsm-dark-gray border border-amber-500/40 rounded-xl shadow-lg mb-6">
+                      <div className="flex items-start justify-between gap-4 flex-col sm:flex-row">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-xl">🔐</span>
+                            <h3 className="text-white font-bold text-base">{activeConfig.name} Ownership Verification</h3>
+                          </div>
+                          <p className="text-xsm-light-gray text-xs leading-relaxed mb-3">
+                            To verify ownership, add this unique 10-character code into your <strong className="text-xsm-yellow">{activeConfig.bioInstruction}</strong> before extracting.
+                          </p>
+                          <div className="flex items-center gap-3">
+                            <div className="bg-xsm-black border border-amber-500/50 rounded-lg px-4 py-2 font-mono text-amber-400 font-bold tracking-widest text-lg select-all shadow-inner">
+                              {verificationCode}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                navigator.clipboard.writeText(verificationCode);
+                                setIsCopied(true);
+                                toast({ title: "Code Copied! 📋", description: `${verificationCode} copied to clipboard.` });
+                                setTimeout(() => setIsCopied(false), 2000);
+                              }}
+                              className="px-3.5 py-2 bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                            >
+                              {isCopied ? 'Copied! ✅' : '📋 Copy Code'}
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* Status indicator */}
+                        <div className="self-stretch sm:self-center flex flex-col items-center sm:items-end justify-center min-w-[150px] pt-2 sm:pt-0 border-t sm:border-t-0 border-amber-500/20">
+                          {isCodeVerified === true && (
+                            <div className="bg-green-950/80 border border-green-500/60 text-green-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                              <span className="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
+                              <span>Code Verified ✅</span>
+                            </div>
+                          )}
+                          {isCodeVerified === false && (
+                            <div className="bg-red-950/80 border border-red-500/60 text-red-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                              <span>Code Missing ❌</span>
+                            </div>
+                          )}
+                          {isCodeVerified === null && (
+                            <div className="bg-amber-950/80 border border-amber-500/60 text-amber-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                              <span>Pending Extract ⏳</span>
+                            </div>
+                          )}
+                          <p className="text-[10px] text-xsm-medium-gray mt-1 text-center sm:text-right">
+                            {isCodeVerified === true
+                              ? 'Found in profile bio'
+                              : isCodeVerified === false
+                              ? 'Not found in profile bio'
+                              : 'Add code to bio & extract'}
+                          </p>
+                        </div>
                       </div>
+                    </div>
+                  )}
+
+                  {/* URL Input with Auto-Extract */}
+                  <div>
+                    <label className="block text-white font-medium mb-2">
+                      {activeConfig.label}
+                      <span className="text-sm text-xsm-yellow ml-2">(Auto-extract bio, followers & profile pic)</span>
+                    </label>
+                    <div className="flex gap-3">
+                      <input
+                        type="text"
+                        name="channelUrl"
+                        value={formData.channelUrl}
+                        onChange={handleInputChange}
+                        className="xsm-input flex-1"
+                        placeholder={activeConfig.placeholder}
+                      />
                       <button
                         type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(verificationCode);
-                          setIsCopied(true);
-                          toast({ title: "Code Copied! 📋", description: `${verificationCode} copied to clipboard.` });
-                          setTimeout(() => setIsCopied(false), 2000);
-                        }}
-                        className="px-3.5 py-2 bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
+                        onClick={handleExtractProfile}
+                        disabled={isExtracting || !formData.channelUrl.trim()}
+                        className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap ${
+                          isExtracting || !formData.channelUrl.trim()
+                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                            : 'bg-xsm-yellow text-black hover:bg-yellow-400 cursor-pointer'
+                        }`}
                       >
-                        {isCopied ? 'Copied! ✅' : '📋 Copy Code'}
+                        {isExtracting ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Extracting...
+                          </>
+                        ) : (
+                          <>
+                            <Search className="w-4 h-4" />
+                            Auto-Fill
+                          </>
+                        )}
                       </button>
                     </div>
+                    {extractedData && (
+                      <div className="mt-3 p-3 bg-green-900/30 border border-green-500/50 rounded-lg">
+                        <p className="text-green-400 text-sm">
+                          ✅ Extracted: <strong>{extractedData.title}</strong> 
+                          {(extractedData.followers || extractedData.subscribers) && (
+                            <span> • {formatFollowerCount(extractedData.followers || extractedData.subscribers)} followers</span>
+                          )}
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  
-                  {/* Status indicator */}
-                  <div className="self-stretch sm:self-center flex flex-col items-center sm:items-end justify-center min-w-[150px] pt-2 sm:pt-0 border-t sm:border-t-0 border-amber-500/20">
-                    {isCodeVerified === true && (
-                      <div className="bg-green-950/80 border border-green-500/60 text-green-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
-                        <span className="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
-                        <span>Code Verified ✅</span>
-                      </div>
-                    )}
-                    {isCodeVerified === false && (
-                      <div className="bg-red-950/80 border border-red-500/60 text-red-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
-                        <span>Code Missing ❌</span>
-                      </div>
-                    )}
-                    {isCodeVerified === null && (
-                      <div className="bg-amber-950/80 border border-amber-500/60 text-amber-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
-                        <span>Pending Extract ⏳</span>
-                      </div>
-                    )}
-                    <p className="text-[10px] text-xsm-medium-gray mt-1 text-center sm:text-right">
-                      {isCodeVerified === true
-                        ? 'Found in channel bio'
-                        : isCodeVerified === false
-                        ? 'Not found in channel bio'
-                        : 'Add code to bio & extract'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* URL Input with Auto-Extract */}
-            <div>
-              <label className="block text-white font-medium mb-2">
-                YouTube Channel URL
-                <span className="text-sm text-xsm-yellow ml-2">(Only YouTube URLs supported)</span>
-              </label>
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  name="channelUrl"
-                  value={formData.channelUrl}
-                  onChange={handleInputChange}
-                  className="xsm-input flex-1"
-                  placeholder="Paste your YouTube channel URL (e.g., https://www.youtube.com/@channel)"
-                />
-                <button
-                  type="button"
-                  onClick={handleExtractProfile}
-                  disabled={isExtracting || !formData.channelUrl.trim()}
-                  className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap ${
-                    isExtracting || !formData.channelUrl.trim()
-                      ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                      : 'bg-xsm-yellow text-black hover:bg-yellow-400'
-                  }`}
-                >
-                  {isExtracting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 animate-spin" />
-                      Extracting...
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4" />
-                      Auto-Fill
-                    </>
-                  )}
-                </button>
-              </div>
-              {extractedData && (
-                <div className="mt-3 p-3 bg-green-900/30 border border-green-500/50 rounded-lg">
-                  <p className="text-green-400 text-sm">
-                    ✅ Extracted: <strong>{extractedData.title}</strong> 
-                    {(extractedData.followers || extractedData.subscribers) && (
-                      <span> • {formatFollowerCount(extractedData.followers || extractedData.subscribers)} followers</span>
-                    )}
-                  </p>
-                </div>
-              )}
-            </div>
+                </>
+              );
+            })()}
 
             {/* Category Dropdown */}
             <div className="relative" ref={categoryDropdownRef}>

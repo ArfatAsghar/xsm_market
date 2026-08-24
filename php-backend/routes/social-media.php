@@ -71,6 +71,8 @@ function handleSocialMediaExtract() {
             $extracted = fetchTwitterProfileData($url, $verificationCode);
         } elseif ($platform === 'facebook') {
             $extracted = fetchFacebookProfileData($url, $verificationCode);
+        } elseif ($platform === 'telegram') {
+            $extracted = fetchTelegramProfileData($url, $verificationCode);
         }
 
         foreach ($extracted as $key => $value) {
@@ -92,6 +94,7 @@ function detectSocialPlatform($host) {
     if (strpos($host, 'twitter.com') !== false || strpos($host, 'x.com') !== false) return 'twitter';
     if (strpos($host, 'tiktok.com') !== false) return 'tiktok';
     if (strpos($host, 'facebook.com') !== false) return 'facebook';
+    if (strpos($host, 't.me') !== false || strpos($host, 'telegram.me') !== false) return 'telegram';
     return '';
 }
 
@@ -533,6 +536,8 @@ function handleSocialBladeIntegration() {
         error_log('Social Blade integration error: ' . $e->getMessage());
         Response::error('Failed to fetch Social Blade data', 500);
     }
+}
+
 function getRapidApiKey() {
     $envKey = getenv('RAPIDAPI_KEY');
     if ($envKey) return $envKey;
@@ -806,6 +811,45 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
         }
         if (preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
             $result['profilePicture'] = $m[1];
+        }
+    }
+
+    if (!empty($verificationCode)) {
+        $code = trim($verificationCode);
+        $result['codeVerified'] = !empty($result['description']) && (stripos($result['description'], $code) !== false);
+    } else {
+        $result['codeVerified'] = true;
+    }
+
+function fetchTelegramProfileData($url, $verificationCode = '') {
+    $result = [
+        'title'            => null,
+        'channelName'      => null,
+        'profilePicture'   => null,
+        'subscribers'      => 0,
+        'followers'        => 0,
+        'description'      => null,
+        'codeVerified'     => false,
+        'verificationCode' => $verificationCode
+    ];
+
+    $html = fetchTextUrl($url);
+    if ($html) {
+        if (preg_match('/<meta property="og:title" content="([^"]+)"/i', $html, $m)) {
+            $title = html_entity_decode($m[1], ENT_QUOTES);
+            $result['title']       = $title;
+            $result['channelName'] = $title;
+        }
+        if (preg_match('/<meta property="og:description" content="([^"]+)"/i', $html, $m)) {
+            $result['description'] = html_entity_decode($m[1], ENT_QUOTES);
+        }
+        if (preg_match('/<meta property="og:image" content="([^"]+)"/i', $html, $m)) {
+            $result['profilePicture'] = $m[1];
+        }
+        if (preg_match('/([0-9\s,]+)\s*(?:subscribers|members)/i', $html, $m)) {
+            $count = (int)preg_replace('/[^0-9]/', '', $m[1]);
+            $result['subscribers'] = $count;
+            $result['followers']   = $count;
         }
     }
 

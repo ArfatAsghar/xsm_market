@@ -58,7 +58,7 @@ export const getImageUrl = (
       ? imagePath
       : imagePath.url || imagePath.data || imagePath.thumbnail || imagePath.path || '';
 
-  if (!normalizedPath || normalizedPath === '0' || normalizedPath === 'NULL') {
+  if (!normalizedPath || normalizedPath === '0' || normalizedPath === 'NULL' || normalizedPath === 'null') {
     return null;
   }
 
@@ -70,29 +70,25 @@ export const getImageUrl = (
   }
 
   if (normalizedPath.startsWith('http://') || normalizedPath.startsWith('https://')) {
-    const apiUploadsIndex = normalizedPath.indexOf('/api/uploads/');
-    if (apiUploadsIndex !== -1) {
-      return normalizedPath.substring(apiUploadsIndex + 4); // /uploads/...
-    }
-
+    // If it's an uploaded file from our own backend that was formatted with /uploads/ instead of /api/uploads/
     const uploadsIndex = normalizedPath.indexOf('/uploads/');
-    if (uploadsIndex !== -1) {
-      return normalizedPath.substring(uploadsIndex); // /uploads/...
+    const apiUploadsIndex = normalizedPath.indexOf('/api/uploads/');
+    if (uploadsIndex !== -1 && apiUploadsIndex === -1) {
+      return normalizedPath.replace('/uploads/', '/api/uploads/');
     }
-
     return normalizedPath;
   }
 
   if (normalizedPath.startsWith('/api/uploads/')) {
-    return normalizedPath.replace('/api/uploads/', '/uploads/');
-  }
-
-  if (normalizedPath.startsWith('/uploads/')) {
     return normalizedPath;
   }
 
+  if (normalizedPath.startsWith('/uploads/')) {
+    return `/api${normalizedPath}`;
+  }
+
   if (normalizedPath.startsWith('uploads/')) {
-    return `/${normalizedPath}`;
+    return `/api/${normalizedPath}`;
   }
 
   return normalizedPath;

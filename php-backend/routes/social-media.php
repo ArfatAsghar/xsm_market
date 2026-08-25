@@ -753,9 +753,55 @@ function fetchTwitterProfileData($url, $verificationCode = '') {
     $followerFound = false;
 
     // ======================================================
-    // SOURCE 1: RapidAPI Twitter scrapers (most accurate)
+    // SOURCE 1: FixTwitter & VxTwitter Public APIs (Fast & Free)
     // ======================================================
-    if ($apiKey) {
+    $fxApis = [
+        'https://api.fxtwitter.com/' . urlencode($handle),
+        'https://api.vxtwitter.com/' . urlencode($handle),
+    ];
+    foreach ($fxApis as $fxUrl) {
+        $chFx = curl_init();
+        curl_setopt_array($chFx, [
+            CURLOPT_URL            => $fxUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 6,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            CURLOPT_HTTPHEADER     => ['Accept: application/json']
+        ]);
+        $fxResponse = curl_exec($chFx);
+        curl_close($chFx);
+        if ($fxResponse) {
+            $json = json_decode($fxResponse, true);
+            $user = $json['user'] ?? $json ?? [];
+            if (!empty($user) && is_array($user)) {
+                $name   = $user['name'] ?? null;
+                $sname  = $user['screen_name'] ?? null;
+                $desc   = $user['description'] ?? null;
+                $avatar = $user['avatar_url'] ?? $user['profile_image_url'] ?? $user['profile_image_url_https'] ?? null;
+                $fc     = $user['followers'] ?? $user['followers_count'] ?? null;
+
+                if ($name)   { $result['title']         = $name; }
+                if ($sname)  { $result['channelName']   = '@' . $sname; }
+                if ($desc)   { $result['description']   = $desc; $htmlContent .= ' ' . $desc; }
+                if ($avatar) { $result['profilePicture'] = str_replace('_normal', '_400x400', $avatar); }
+                if ($fc !== null) {
+                    $result['subscribers'] = (int)$fc;
+                    $result['followers']   = (int)$fc;
+                    $followerFound = true;
+                }
+                if (!empty($result['description']) && $followerFound) {
+                    break;
+                }
+            }
+        }
+    }
+
+    // ======================================================
+    // SOURCE 2: RapidAPI Twitter scrapers (most accurate)
+    // ======================================================
+    if ((empty($result['description']) || !$followerFound) && $apiKey) {
         $rapidApis = [
             ['url'  => 'https://twitter-api45.p.rapidapi.com/screenname.php?username=' . urlencode($handle),
              'host' => 'twitter-api45.p.rapidapi.com'],

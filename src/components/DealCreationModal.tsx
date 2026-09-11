@@ -421,21 +421,23 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                       onClick={() => setSelectedTransactionType('safest')}
                       className={`relative flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
                         selectedTransactionType === 'safest'
-                          ? 'border-xsm-yellow bg-xsm-yellow/15 shadow-sm'
-                          : 'hover:border-xsm-yellow/40'
+                          ? 'border-amber-500 bg-amber-500/15 shadow-sm ring-1 ring-amber-500/30'
+                          : 'hover:border-amber-500/40 opacity-75 hover:opacity-100'
                       }`}
                       style={selectedTransactionType !== 'safest' ? { borderColor: 'var(--xsm-border)', background: 'var(--xsm-medium-gray)' } : {}}
                     >
-                      <span className="text-base shrink-0">🛡️</span>
+                      <div className="w-6 h-6 rounded-md bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 text-xs">
+                        🛡️
+                      </div>
                       <div className="min-w-0 flex-1 pr-3">
-                        <div className="flex items-center gap-1">
-                          <span className="text-[11px] font-bold leading-tight" style={{ color: selectedTransactionType === 'safest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Verified Transfer</span>
-                          <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-500 font-bold">Recommended</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11.5px] font-bold leading-tight" style={{ color: selectedTransactionType === 'safest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Verified Transfer</span>
+                          <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-500 font-extrabold uppercase tracking-wide leading-none">Safe</span>
                         </div>
-                        <p className="text-[9px] leading-tight truncate mt-0.5" style={{ color: 'var(--xsm-light-gray)' }}>7-day hold for maximum protection</p>
+                        <p className="text-[9px] leading-tight truncate mt-0.5" style={{ color: 'var(--xsm-light-gray)' }}>7-day hold • Max protection</p>
                       </div>
                       {selectedTransactionType === 'safest' && (
-                        <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[8px] font-black">✓</span>
+                        <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-amber-500 text-black flex items-center justify-center text-[8px] font-black">✓</span>
                       )}
                     </button>
                     <button
@@ -443,18 +445,23 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                       onClick={() => setSelectedTransactionType('fastest')}
                       className={`relative flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
                         selectedTransactionType === 'fastest'
-                          ? 'border-xsm-yellow bg-xsm-yellow/15 shadow-sm'
-                          : 'hover:border-xsm-yellow/40'
+                          ? 'border-amber-500 bg-amber-500/15 shadow-sm ring-1 ring-amber-500/30'
+                          : 'hover:border-amber-500/40 opacity-75 hover:opacity-100'
                       }`}
                       style={selectedTransactionType !== 'fastest' ? { borderColor: 'var(--xsm-border)', background: 'var(--xsm-medium-gray)' } : {}}
                     >
-                      <span className="text-base shrink-0">⚡</span>
+                      <div className="w-6 h-6 rounded-md bg-amber-500/20 text-amber-500 flex items-center justify-center shrink-0 text-xs">
+                        ⚡
+                      </div>
                       <div className="min-w-0 flex-1 pr-3">
-                        <p className="text-[11px] font-bold leading-tight" style={{ color: selectedTransactionType === 'fastest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Express Transfer</p>
-                        <p className="text-[9px] leading-tight truncate mt-0.5" style={{ color: 'var(--xsm-light-gray)' }}>Immediate handoff on payment</p>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11.5px] font-bold leading-tight" style={{ color: selectedTransactionType === 'fastest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Express Transfer</span>
+                          <span className="text-[8px] px-1 py-0.2 rounded bg-blue-500/20 text-blue-400 font-extrabold uppercase tracking-wide leading-none">Fast</span>
+                        </div>
+                        <p className="text-[9px] leading-tight truncate mt-0.5" style={{ color: 'var(--xsm-light-gray)' }}>Immediate ownership handoff</p>
                       </div>
                       {selectedTransactionType === 'fastest' && (
-                        <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[8px] font-black">✓</span>
+                        <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-amber-500 text-black flex items-center justify-center text-[8px] font-black">✓</span>
                       )}
                     </button>
                   </div>
@@ -463,10 +470,11 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
               {/* Payment Methods Selection */}
               <div className="mb-2">
-                <p className="text-[11px] mb-1" style={{ color: 'var(--xsm-light-gray)' }}>
-                  Select payment methods you can use to pay the seller:
-                </p>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5 mb-1.5">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--xsm-light-gray)' }}>Select Payment Methods</p>
+                  <span className="text-[9.5px]" style={{ color: 'var(--xsm-light-gray)' }}>{selectedPaymentMethods.length} selected</span>
+                </div>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
                   {paymentMethods.map((method) => {
                     const isSelected = selectedPaymentMethods.includes(method.id);
                     return (
@@ -474,10 +482,10 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                         key={method.id}
                         type="button"
                         onClick={() => handlePaymentMethodToggle(method.id)}
-                        className={`py-1.5 px-1 rounded-lg border transition-all flex flex-col items-center justify-center gap-0.5 relative cursor-pointer ${
+                        className={`py-1 px-1 rounded-lg border transition-all flex flex-col items-center justify-center relative cursor-pointer ${
                           isSelected
-                            ? 'border-xsm-yellow bg-xsm-yellow/15 shadow-sm'
-                            : 'hover:border-xsm-yellow/60'
+                            ? 'border-amber-500 bg-amber-500/15 shadow-sm ring-1 ring-amber-500/30'
+                            : 'hover:border-amber-500/50 opacity-80 hover:opacity-100'
                         }`}
                         style={{
                           background: isSelected ? undefined : 'var(--xsm-medium-gray)',
@@ -486,11 +494,11 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                         }}
                       >
                         {isSelected && (
-                          <span className="absolute top-1 right-1 w-3 h-3 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[7px] font-black">
+                          <span className="absolute top-0.5 right-0.5 w-3 h-3 rounded-full bg-amber-500 text-black flex items-center justify-center text-[7px] font-black">
                             ✓
                           </span>
                         )}
-                        <span className="text-base leading-none">{method.icon}</span>
+                        <span className="text-sm leading-none mb-0.5">{method.icon}</span>
                         <span className="text-[9px] font-semibold text-center leading-tight truncate w-full px-0.5">
                           {method.name}
                         </span>
@@ -500,90 +508,186 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                 </div>
               </div>
 
-              {/* Transaction Instructions — platform-specific, compact */}
+              {/* Transaction Instructions — platform-specific, clean 2-column layout */}
               <div className="mb-2 border rounded-lg overflow-hidden" style={{ borderColor: 'var(--xsm-border)' }}>
                 {/* Platform header badge */}
-                <div className="flex items-center gap-2 px-2.5 py-1.5 border-b" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                <div className="flex items-center gap-2 px-2.5 py-1 border-b" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
                   <span className="text-xs">{platformMeta[activePlatform].emoji}</span>
                   <span className="text-[11px] font-bold" style={{ color: platformMeta[activePlatform].color }}>
-                    {platformMeta[activePlatform].label}
+                    {platformMeta[activePlatform].label} Escrow Guide
                   </span>
-                  <span className="ml-auto text-[9px] font-medium px-2 py-0.2 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--xsm-yellow, #f59e0b)' }}>
-                    Transfer Guide
+                  <span className="ml-auto text-[8.5px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--xsm-yellow, #f59e0b)' }}>
+                    Escrow Protected
                   </span>
                 </div>
                 <div className="p-2" style={{ background: 'var(--xsm-medium-gray)' }}>
                   {activePlatform === 'youtube' && (
-                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
-                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>Seller designates website agent as <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager</strong> of the YouTube channel.</li>
-                      <li>Agent remains Manager for <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>7 days</strong> before primary ownership handoff.</li>
-                      <li>After 7 days, seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to website agent.</li>
-                      <li>Agent verifies channel, removes seller's access, and notifies buyer to pay seller.</li>
-                      <li>After seller confirms payment, agent assigns Primary Ownership to buyer.</li>
-                    </ol>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <span>Buyer deposits escrow fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>).</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <span>Seller invites agent as <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager</strong>.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <span>Agent remains Manager for <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>7 days</strong>.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                        <span>Seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to agent.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                        <span>Agent verifies channel & notifies buyer to pay.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">6</span>
+                        <span>Seller confirms payment → Agent transfers to buyer.</span>
+                      </div>
+                    </div>
                   )}
                   {activePlatform === 'tiktok' && (
-                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
-                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>Seller shares login credentials with agent via secure chat.</li>
-                      <li>Agent updates recovery email, links new phone, and logs out sessions.</li>
-                      <li>Agent verifies details and notifies buyer to pay seller.</li>
-                      <li>After seller confirms payment, agent transfers credentials to buyer.</li>
-                    </ol>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <span>Buyer pays escrow fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>).</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <span>Seller shares credentials via secure chat.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <span>Agent updates recovery email & phone.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                        <span>Agent verifies and notifies buyer to pay.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5 col-span-1 sm:col-span-2">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                        <span>Seller confirms funds → Agent releases credentials to buyer.</span>
+                      </div>
+                    </div>
                   )}
                   {activePlatform === 'facebook' && (
-                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
-                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>Seller invites website agent as <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Admin</strong> of the Facebook Page.</li>
-                      <li>Agent accepts, removes seller's admin access, and notifies buyer to pay.</li>
-                      <li>After seller confirms payment, agent invites buyer as Admin.</li>
-                    </ol>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <span>Buyer pays escrow fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>).</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <span>Seller invites agent as Page <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Admin</strong>.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <span>Agent secures roles & instructs buyer to pay.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                        <span>Seller confirms payment receipt.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5 col-span-1 sm:col-span-2">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                        <span>Agent appoints buyer as Admin and exits.</span>
+                      </div>
+                    </div>
                   )}
                   {activePlatform === 'instagram' && (
-                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
-                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>Seller updates Instagram account email to agent's secure transfer email.</li>
-                      <li>Agent resets password, configures 2FA, and notifies buyer to pay.</li>
-                      <li>After seller confirms payment, agent transfers credentials to buyer.</li>
-                    </ol>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <span>Buyer pays escrow fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>).</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <span>Seller routes email to agent transfer inbox.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <span>Agent resets password & sets 2FA.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                        <span>Agent verifies & notifies buyer to pay seller.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5 col-span-1 sm:col-span-2">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                        <span>Seller confirms funds → Agent reassigns to buyer.</span>
+                      </div>
+                    </div>
                   )}
                   {activePlatform === 'twitter' && (
-                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
-                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>Seller updates Twitter (X) email to website agent's secure email.</li>
-                      <li>Agent resets password, configures 2FA, and notifies buyer to pay.</li>
-                      <li>After seller confirms payment, agent transfers credentials to buyer.</li>
-                    </ol>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <span>Buyer pays escrow fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>).</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <span>Seller links Twitter (X) to agent's inbox.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <span>Agent secures password & clears sessions.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                        <span>Agent directs buyer to send payment.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5 col-span-1 sm:col-span-2">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                        <span>Seller confirms payment → Agent hands over.</span>
+                      </div>
+                    </div>
                   )}
                   {activePlatform === 'telegram' && (
-                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
-                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>Seller adds website agent as Administrator with full rights.</li>
-                      <li>Seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to website agent.</li>
-                      <li>Agent confirms ownership and notifies buyer to pay seller.</li>
-                      <li>After seller confirms payment, agent transfers ownership to buyer.</li>
-                    </ol>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <span>Buyer pays escrow fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>).</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <span>Seller adds agent as Administrator.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <span>Seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to agent.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                        <span>Agent verifies & notifies buyer to pay seller.</span>
+                      </div>
+                      <div className="flex items-start gap-1.5 col-span-1 sm:col-span-2">
+                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                        <span>Seller confirms funds → Ownership assigned to buyer.</span>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
 
               {/* Security Notice */}
               <div className="mb-2">
-                <div className="py-1 px-2.5 rounded-lg border flex items-center gap-2" style={{ background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
-                  <span className="text-amber-500 text-xs shrink-0">⚠️</span>
-                  <p className="text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
-                    All messages must be sent through the website chat system. Communication outside the platform may void transaction protection.
+                <div className="py-1 px-2.5 rounded-lg border flex items-center gap-1.5" style={{ background: 'rgba(245, 158, 11, 0.08)', borderColor: 'rgba(245, 158, 11, 0.25)' }}>
+                  <span className="text-amber-500 text-xs shrink-0">🔒</span>
+                  <p className="text-[9.5px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                    All communication must stay within platform chat. Off-platform contact voids transaction protection.
                   </p>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex space-x-2.5">
+              <div className="flex space-x-2">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 py-1.5 px-3 text-xs sm:text-sm rounded-lg border transition-colors hover:opacity-80 font-medium cursor-pointer"
+                  className="flex-1 py-1.5 px-3 text-xs rounded-lg border transition-colors hover:opacity-80 font-semibold cursor-pointer"
                   style={{
                     background: 'var(--xsm-medium-gray)',
                     borderColor: 'var(--xsm-border)',
@@ -596,7 +700,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                   type="button"
                   onClick={handleCreateDeal}
                   disabled={selectedPaymentMethods.length === 0}
-                  className="flex-1 py-1.5 px-3 text-xs sm:text-sm bg-xsm-yellow text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md cursor-pointer"
+                  className="flex-1 py-1.5 px-3 text-xs bg-xsm-yellow text-black font-extrabold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md cursor-pointer"
                 >
                   Continue
                 </button>

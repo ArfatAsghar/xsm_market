@@ -232,18 +232,18 @@ const Navbar: React.FC = () => {
 
                   {showNotifications && (
                     <div
-                      className="absolute right-0 top-full mt-3 w-[320px] rounded-xl overflow-hidden z-50"
+                      className="absolute right-0 top-full mt-3 w-[320px] rounded-xl overflow-hidden z-50 border shadow-2xl"
                       style={{
-                        background: 'linear-gradient(145deg, #111111, #0d0d0d)',
-                        border: '1px solid rgba(255,255,255,0.07)',
-                        boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(255,208,0,0.06)',
+                        background: 'var(--xsm-dark-gray)',
+                        borderColor: 'var(--xsm-border)',
+                        color: 'var(--xsm-text)'
                       }}
                     >
                       {/* Panel header */}
-                      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+                      <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: 'var(--xsm-border)' }}>
                         <div className="flex items-center gap-2">
                           <FaBell className="text-xsm-yellow text-sm" />
-                          <span className="text-sm font-bold text-white tracking-wide">Notifications</span>
+                          <span className="text-sm font-bold tracking-wide" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Notifications</span>
                           {unreadBellCount > 0 && (
                             <span className="bg-xsm-yellow text-black text-[10px] font-extrabold px-1.5 py-0.5 rounded-full">
                               {unreadBellCount}
@@ -297,8 +297,8 @@ const Navbar: React.FC = () => {
                                 else navigateTo('/notifications');
                                 setShowNotifications(false);
                               }}
-                              className={`flex items-start gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-white/[0.04] ${!n.isRead ? 'bg-xsm-yellow/[0.03]' : ''}`}
-                              style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
+                              className={`flex items-start gap-3 w-full px-4 py-3 text-left transition-colors hover:bg-black/5 dark:hover:bg-white/[0.04] ${!n.isRead ? 'bg-xsm-yellow/[0.03]' : ''}`}
+                              style={{ borderBottom: '1px solid var(--xsm-border)' }}
                             >
                               <div className={`mt-0.5 w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
                                 n.type === 'ban' ? 'bg-red-500/20' :
@@ -319,8 +319,8 @@ const Navbar: React.FC = () => {
                                   n.type === 'unban' ? 'text-emerald-400' :
                                   !n.isRead ? 'text-xsm-yellow' : 'text-gray-300'
                                 }`}>{n.title}</p>
-                                <p className={`text-xs leading-snug truncate ${!n.isRead ? 'text-white font-medium' : 'text-gray-400'}`}>{n.message}</p>
-                                <p className="text-[10px] text-gray-600 mt-0.5">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                <p className={`text-xs leading-snug truncate ${!n.isRead ? 'font-medium' : 'text-gray-400'}`} style={{ color: 'var(--xsm-text)' }}>{n.message}</p>
+                                <p className="text-[10px] text-gray-500 mt-0.5">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                               </div>
                               {!n.isRead && <span className="w-2 h-2 bg-xsm-yellow rounded-full mt-1.5 flex-shrink-0" />}
                             </button>
@@ -331,7 +331,7 @@ const Navbar: React.FC = () => {
                       <button
                         onClick={() => { navigateTo('/notifications'); setShowNotifications(false); }}
                         className="block w-full px-4 py-2.5 text-xs font-semibold text-xsm-yellow hover:text-yellow-400 text-center transition-colors"
-                        style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}
+                        style={{ borderTop: '1px solid var(--xsm-border)' }}
                       >
                         See All Notifications →
                       </button>
@@ -341,7 +341,7 @@ const Navbar: React.FC = () => {
               )}
 
               {/* Divider */}
-              {isLoggedIn && <div className="w-px h-6 bg-white/10" />}
+              {isLoggedIn && <div className="w-px h-6" style={{ background: 'var(--xsm-border)' }} />}
 
               {/* Profile Dropdown or Login */}
               {isLoggedIn ? (
@@ -429,7 +429,7 @@ const Navbar: React.FC = () => {
 
                     {isUserAdmin && (
                       <>
-                        <DropdownMenuSeparator className="my-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                        <DropdownMenuSeparator className="my-1" style={{ background: 'var(--xsm-border)' }} />
                         <DropdownMenuItem
                           onClick={() => navigateTo('/admin-dashboard')}
                           className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 focus:bg-blue-500/10 focus:text-blue-300 transition-colors"
@@ -440,7 +440,7 @@ const Navbar: React.FC = () => {
                       </>
                     )}
 
-                    <DropdownMenuSeparator className="my-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                    <DropdownMenuSeparator className="my-1" style={{ background: 'var(--xsm-border)' }} />
 
                     <DropdownMenuItem
                       onClick={() => setShowVipModal(true)}

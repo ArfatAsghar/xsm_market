@@ -178,37 +178,37 @@
     --ring: 350 89% 60%;
   }
 
-  /* 6. Soft Low-Brightness Light Theme (Muted Daylight - Zero Glare, Perfect Nav & Footer Blend) */
+  /* 6. Soft Low-Brightness Light Theme (Muted Daylight - Zero Glare, Crisp High-Contrast) */
   [data-theme="light"] {
     --xsm-primary: #d97706;
     --xsm-primary-hover: #b45309;
     --xsm-primary-glow: rgba(217, 119, 6, 0.25);
-    --xsm-bg: #e8ebef;
-    --xsm-bg-gradient: linear-gradient(180deg, #e8ebef 0%, #dfe3e8 100%);
-    --xsm-nav-bg: linear-gradient(135deg, rgba(232, 235, 239, 0.98) 0%, rgba(223, 227, 232, 0.98) 100%);
-    --xsm-dark-gray: #f5f7fa;
-    --xsm-medium-gray: #cbd3dc;
-    --xsm-light-gray: #64748b;
-    --xsm-text: #111827;
+    --xsm-bg: #eef2f6;
+    --xsm-bg-gradient: linear-gradient(180deg, #eef2f6 0%, #e2e8f0 100%);
+    --xsm-nav-bg: linear-gradient(135deg, rgba(248, 250, 252, 0.98) 0%, rgba(241, 245, 249, 0.98) 100%);
+    --xsm-dark-gray: #ffffff;
+    --xsm-medium-gray: #e2e8f0;
+    --xsm-light-gray: #475569;
+    --xsm-text: #0f172a;
     --xsm-heading: #0f172a;
-    --xsm-border: rgba(0, 0, 0, 0.08);
+    --xsm-border: rgba(0, 0, 0, 0.12);
 
-    --background: 215 16% 92%;
+    --background: 215 16% 94%;
     --foreground: 222 47% 11%;
-    --card: 210 25% 97%;
+    --card: 0 0% 100%;
     --card-foreground: 222 47% 11%;
-    --popover: 210 25% 97%;
+    --popover: 0 0% 100%;
     --popover-foreground: 222 47% 11%;
     --primary: 38 92% 44%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 214 15% 86%;
+    --secondary: 214 15% 90%;
     --secondary-foreground: 222 47% 11%;
-    --muted: 214 15% 84%;
+    --muted: 214 15% 88%;
     --muted-foreground: 215 16% 40%;
     --accent: 38 92% 44%;
     --accent-foreground: 0 0% 100%;
-    --border: 214 15% 78%;
-    --input: 214 15% 78%;
+    --border: 214 15% 80%;
+    --input: 214 15% 80%;
     --ring: 38 92% 44%;
   }
 }
@@ -236,7 +236,7 @@
   }
 
   [data-theme="light"] body {
-    color: #111827;
+    color: #0f172a;
   }
 
   /* Ensure text inside cards, labels, tables, modals defaults to readable dark text in light theme */
@@ -251,22 +251,38 @@
 
   /* Automatically map hardcoded text-white to readable dark text when in light mode,
      EXCEPT when it is on colored badges, primary action buttons, or dark pills */
-  [data-theme="light"] .text-white:not(button):not(.keep-white):not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-amber"]):not([class*="bg-purple"]):not([class*="bg-orange"]) {
-    color: #111827 !important;
+  [data-theme="light"] .text-white:not(button):not(.keep-white):not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-amber"]):not([class*="bg-purple"]):not([class*="bg-orange"]):not([class*="bg-emerald"]) {
+    color: #0f172a !important;
+  }
+
+  /* Prevent text-only buttons or transparent buttons from keeping white text in light mode */
+  [data-theme="light"] button.text-white:not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-amber"]):not([class*="bg-purple"]):not([class*="bg-orange"]):not([class*="bg-emerald"]):not(.keep-white) {
+    color: #0f172a !important;
+  }
+
+  [data-theme="light"] a.text-white:not([class*="bg-"]) {
+    color: #0f172a !important;
   }
 
   [data-theme="light"] .text-gray-100,
-  [data-theme="light"] .text-gray-200,
+  [data-theme="light"] .text-gray-200 {
+    color: #1e293b !important;
+  }
+
   [data-theme="light"] .text-gray-300:not([class*="bg-"]) {
-    color: #374151 !important;
+    color: #334155 !important;
   }
 
   [data-theme="light"] .text-gray-400:not([class*="bg-"]) {
-    color: #4b5563 !important;
+    color: #475569 !important;
+  }
+
+  [data-theme="light"] .text-gray-500 {
+    color: #64748b !important;
   }
 
   [data-theme="light"] .text-xsm-light-gray {
-    color: #4b5563 !important;
+    color: #475569 !important;
   }
 
   /* In light theme, ensure input fields have clean white backgrounds with dark text and crisp borders */
@@ -278,13 +294,25 @@
   [data-theme="light"] textarea,
   [data-theme="light"] select {
     background-color: #ffffff !important;
-    border-color: rgba(0, 0, 0, 0.14) !important;
-    color: #111827 !important;
+    border-color: rgba(0, 0, 0, 0.16) !important;
+    color: #0f172a !important;
   }
 
   [data-theme="light"] input::placeholder,
   [data-theme="light"] textarea::placeholder {
-    color: #9ca3af !important;
+    color: #94a3b8 !important;
+  }
+
+  /* Hover states for light theme */
+  [data-theme="light"] .hover\:text-white:hover {
+    color: #d97706 !important;
+  }
+
+  [data-theme="light"] .hover\:bg-white\/\[0\.04\]:hover,
+  [data-theme="light"] .hover\:bg-white\/\[0\.05\]:hover,
+  [data-theme="light"] .hover\:bg-white\/\[0\.06\]:hover,
+  [data-theme="light"] .hover\:bg-white\/10:hover {
+    background-color: rgba(0, 0, 0, 0.05) !important;
   }
 }
 

@@ -336,7 +336,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
           </button>
         </div>
 
-        <div className="p-3.5 overflow-y-auto flex-1 custom-scrollbar">
+        <div className="p-3 overflow-y-auto flex-1 custom-scrollbar">
           {step === 'fee-selection' && (
             <>
               <div className="flex items-center justify-between mb-2">
@@ -411,48 +411,51 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
           {step === 'payment-selection' && (
             <>
-              {/* Transfer Mode — YouTube only (safest uses 7-day manager hold; fastest skips it) */}
+              {/* Transfer Mode — YouTube only */}
               {activePlatform === 'youtube' && (
-                <div className="mb-3">
-                  <p className="text-[10px] uppercase tracking-wider font-semibold mb-1.5" style={{ color: 'var(--xsm-light-gray)' }}>Transfer Mode</p>
+                <div className="mb-2">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold mb-1" style={{ color: 'var(--xsm-light-gray)' }}>Transfer Mode</p>
                   <div className="grid grid-cols-2 gap-2">
                     <button
+                      type="button"
                       onClick={() => setSelectedTransactionType('safest')}
-                      className={`relative flex flex-col items-start gap-1 px-3 py-2.5 rounded-lg border-2 text-left transition-all cursor-pointer ${
+                      className={`relative flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
                         selectedTransactionType === 'safest'
-                          ? 'border-xsm-yellow bg-xsm-yellow/10'
+                          ? 'border-xsm-yellow bg-xsm-yellow/15 shadow-sm'
                           : 'hover:border-xsm-yellow/40'
                       }`}
-                      style={selectedTransactionType !== 'safest' ? {
-                        borderColor: 'var(--xsm-border)',
-                        background: 'var(--xsm-medium-gray)'
-                      } : {}}
+                      style={selectedTransactionType !== 'safest' ? { borderColor: 'var(--xsm-border)', background: 'var(--xsm-medium-gray)' } : {}}
                     >
+                      <span className="text-base shrink-0">🛡️</span>
+                      <div className="min-w-0 flex-1 pr-3">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-bold leading-tight" style={{ color: selectedTransactionType === 'safest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Verified Transfer</span>
+                          <span className="text-[8px] px-1 py-0.2 rounded bg-amber-500/20 text-amber-500 font-bold">Recommended</span>
+                        </div>
+                        <p className="text-[9px] leading-tight truncate mt-0.5" style={{ color: 'var(--xsm-light-gray)' }}>7-day hold for maximum protection</p>
+                      </div>
                       {selectedTransactionType === 'safest' && (
-                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[9px] font-black">✓</span>
+                        <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[8px] font-black">✓</span>
                       )}
-                      <span className="text-base">🛡️</span>
-                      <span className="text-xs font-bold" style={{ color: selectedTransactionType === 'safest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Verified Transfer</span>
-                      <span className="text-[10px] leading-snug" style={{ color: 'var(--xsm-light-gray)' }}>7-day manager hold before ownership transfer — maximum protection.</span>
                     </button>
                     <button
+                      type="button"
                       onClick={() => setSelectedTransactionType('fastest')}
-                      className={`relative flex flex-col items-start gap-1 px-3 py-2.5 rounded-lg border-2 text-left transition-all cursor-pointer ${
+                      className={`relative flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-left transition-all cursor-pointer ${
                         selectedTransactionType === 'fastest'
-                          ? 'border-xsm-yellow bg-xsm-yellow/10'
+                          ? 'border-xsm-yellow bg-xsm-yellow/15 shadow-sm'
                           : 'hover:border-xsm-yellow/40'
                       }`}
-                      style={selectedTransactionType !== 'fastest' ? {
-                        borderColor: 'var(--xsm-border)',
-                        background: 'var(--xsm-medium-gray)'
-                      } : {}}
+                      style={selectedTransactionType !== 'fastest' ? { borderColor: 'var(--xsm-border)', background: 'var(--xsm-medium-gray)' } : {}}
                     >
+                      <span className="text-base shrink-0">⚡</span>
+                      <div className="min-w-0 flex-1 pr-3">
+                        <p className="text-[11px] font-bold leading-tight" style={{ color: selectedTransactionType === 'fastest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Express Transfer</p>
+                        <p className="text-[9px] leading-tight truncate mt-0.5" style={{ color: 'var(--xsm-light-gray)' }}>Immediate handoff on payment</p>
+                      </div>
                       {selectedTransactionType === 'fastest' && (
-                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[9px] font-black">✓</span>
+                        <span className="absolute top-1.5 right-1.5 w-3.5 h-3.5 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[8px] font-black">✓</span>
                       )}
-                      <span className="text-base">⚡</span>
-                      <span className="text-xs font-bold" style={{ color: selectedTransactionType === 'fastest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Express Transfer</span>
-                      <span className="text-[10px] leading-snug" style={{ color: 'var(--xsm-light-gray)' }}>Immediate ownership handoff once funds are confirmed.</span>
                     </button>
                   </div>
                 </div>
@@ -460,10 +463,10 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
               {/* Payment Methods Selection */}
               <div className="mb-2">
-                <p className="text-xs mb-2" style={{ color: 'var(--xsm-light-gray)' }}>
-                  Select payment methods you can use to pay the seller. More options = better chance of matching the seller.
+                <p className="text-[11px] mb-1" style={{ color: 'var(--xsm-light-gray)' }}>
+                  Select payment methods you can use to pay the seller:
                 </p>
-                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-2">
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5 mb-1.5">
                   {paymentMethods.map((method) => {
                     const isSelected = selectedPaymentMethods.includes(method.id);
                     return (
@@ -471,7 +474,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                         key={method.id}
                         type="button"
                         onClick={() => handlePaymentMethodToggle(method.id)}
-                        className={`p-2 rounded-lg border-2 transition-all flex flex-col items-center justify-center gap-1 relative cursor-pointer ${
+                        className={`py-1.5 px-1 rounded-lg border transition-all flex flex-col items-center justify-center gap-0.5 relative cursor-pointer ${
                           isSelected
                             ? 'border-xsm-yellow bg-xsm-yellow/15 shadow-sm'
                             : 'hover:border-xsm-yellow/60'
@@ -483,12 +486,12 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                         }}
                       >
                         {isSelected && (
-                          <span className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[8px] font-black">
+                          <span className="absolute top-1 right-1 w-3 h-3 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[7px] font-black">
                             ✓
                           </span>
                         )}
-                        <span className="text-lg">{method.icon}</span>
-                        <span className="text-[10px] font-semibold text-center leading-tight truncate w-full px-0.5">
+                        <span className="text-base leading-none">{method.icon}</span>
+                        <span className="text-[9px] font-semibold text-center leading-tight truncate w-full px-0.5">
                           {method.name}
                         </span>
                       </button>
@@ -497,93 +500,90 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                 </div>
               </div>
 
-              {/* Transaction Instructions — platform-specific, no tabs */}
+              {/* Transaction Instructions — platform-specific, compact */}
               <div className="mb-2 border rounded-lg overflow-hidden" style={{ borderColor: 'var(--xsm-border)' }}>
                 {/* Platform header badge */}
-                <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
-                  <span className="text-sm">{platformMeta[activePlatform].emoji}</span>
-                  <span className="text-xs font-bold" style={{ color: platformMeta[activePlatform].color }}>
+                <div className="flex items-center gap-2 px-2.5 py-1.5 border-b" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                  <span className="text-xs">{platformMeta[activePlatform].emoji}</span>
+                  <span className="text-[11px] font-bold" style={{ color: platformMeta[activePlatform].color }}>
                     {platformMeta[activePlatform].label}
                   </span>
-                  <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--xsm-yellow, #f59e0b)' }}>
+                  <span className="ml-auto text-[9px] font-medium px-2 py-0.2 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--xsm-yellow, #f59e0b)' }}>
                     Transfer Guide
                   </span>
                 </div>
-                <div className="p-3" style={{ background: 'var(--xsm-medium-gray)' }}>
+                <div className="p-2" style={{ background: 'var(--xsm-medium-gray)' }}>
                   {activePlatform === 'youtube' && (
-                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate the escrow process.</li>
-                      <li>The seller designates the website agent's email as a <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager</strong> of the YouTube channel.</li>
-                      <li>The website agent must remain a Manager for <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>7 days</strong> before primary ownership can be transferred.</li>
-                      <li>After 7 days, the seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to the website agent.</li>
-                      <li>The agent verifies the channel, removes seller's access, and notifies the buyer to pay the seller.</li>
-                      <li>After seller confirms payment, the agent assigns Primary Ownership to the buyer.</li>
+                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
+                      <li>Seller designates website agent as <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager</strong> of the YouTube channel.</li>
+                      <li>Agent remains Manager for <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>7 days</strong> before primary ownership handoff.</li>
+                      <li>After 7 days, seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to website agent.</li>
+                      <li>Agent verifies channel, removes seller's access, and notifies buyer to pay seller.</li>
+                      <li>After seller confirms payment, agent assigns Primary Ownership to buyer.</li>
                     </ol>
                   )}
                   {activePlatform === 'tiktok' && (
-                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>The seller shares login credentials with the agent via secure chat.</li>
-                      <li>The agent updates recovery email, links new phone, and logs out of all sessions.</li>
-                      <li>The agent verifies details and notifies the buyer to pay the seller.</li>
+                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
+                      <li>Seller shares login credentials with agent via secure chat.</li>
+                      <li>Agent updates recovery email, links new phone, and logs out sessions.</li>
+                      <li>Agent verifies details and notifies buyer to pay seller.</li>
                       <li>After seller confirms payment, agent transfers credentials to buyer.</li>
                     </ol>
                   )}
                   {activePlatform === 'facebook' && (
-                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>The seller invites the website agent as an <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Admin</strong> of the Facebook Page.</li>
-                      <li>The agent accepts, checks for other owners, and removes seller's admin access.</li>
-                      <li>The agent verifies all roles and notifies buyer to pay seller.</li>
-                      <li>After seller confirms payment, agent invites buyer as Admin and removes themselves.</li>
+                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
+                      <li>Seller invites website agent as <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Admin</strong> of the Facebook Page.</li>
+                      <li>Agent accepts, removes seller's admin access, and notifies buyer to pay.</li>
+                      <li>After seller confirms payment, agent invites buyer as Admin.</li>
                     </ol>
                   )}
                   {activePlatform === 'instagram' && (
-                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>The seller updates Instagram account email to the agent's secure transfer email.</li>
-                      <li>The agent resets the password and updates 2FA settings.</li>
-                      <li>The agent verifies the account is secured and notifies buyer to pay seller.</li>
-                      <li>After seller confirms payment, agent changes email to buyer's and hands over credentials.</li>
+                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
+                      <li>Seller updates Instagram account email to agent's secure transfer email.</li>
+                      <li>Agent resets password, configures 2FA, and notifies buyer to pay.</li>
+                      <li>After seller confirms payment, agent transfers credentials to buyer.</li>
                     </ol>
                   )}
                   {activePlatform === 'twitter' && (
-                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>The seller updates the Twitter (X) account email to the website agent's secure email.</li>
-                      <li>The agent resets the password, configures 2FA, and disconnects all active sessions.</li>
-                      <li>The agent verifies full account security and instructs the buyer to pay the seller.</li>
-                      <li>After seller confirms payment, the agent updates credentials to the buyer's email and transfers access.</li>
+                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
+                      <li>Seller updates Twitter (X) email to website agent's secure email.</li>
+                      <li>Agent resets password, configures 2FA, and notifies buyer to pay.</li>
+                      <li>After seller confirms payment, agent transfers credentials to buyer.</li>
                     </ol>
                   )}
                   {activePlatform === 'telegram' && (
-                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
-                      <li>The seller adds the website agent as Administrator with full rights to the Telegram channel/group.</li>
-                      <li>The seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> of the channel/group to the website agent.</li>
-                      <li>The agent confirms ownership transfer, removes previous admins, and notifies buyer to pay seller.</li>
-                      <li>After seller confirms payment, the agent transfers Primary Ownership directly to the buyer.</li>
+                    <ol className="space-y-1 list-decimal list-inside text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                      <li>Buyer pays service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
+                      <li>Seller adds website agent as Administrator with full rights.</li>
+                      <li>Seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to website agent.</li>
+                      <li>Agent confirms ownership and notifies buyer to pay seller.</li>
+                      <li>After seller confirms payment, agent transfers ownership to buyer.</li>
                     </ol>
                   )}
                 </div>
               </div>
 
               {/* Security Notice */}
-              <div className="mb-3">
-                <div className="p-2.5 rounded-lg border flex items-center gap-2" style={{ background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
-                  <span className="text-amber-500 text-xs">⚠️</span>
-                  <p className="text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+              <div className="mb-2">
+                <div className="py-1 px-2.5 rounded-lg border flex items-center gap-2" style={{ background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
+                  <span className="text-amber-500 text-xs shrink-0">⚠️</span>
+                  <p className="text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
                     All messages must be sent through the website chat system. Communication outside the platform may void transaction protection.
                   </p>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex space-x-3">
+              <div className="flex space-x-2.5">
                 <button
                   type="button"
                   onClick={onClose}
-                  className="flex-1 py-2 px-4 text-sm rounded-lg border transition-colors hover:opacity-80 font-medium cursor-pointer"
+                  className="flex-1 py-1.5 px-3 text-xs sm:text-sm rounded-lg border transition-colors hover:opacity-80 font-medium cursor-pointer"
                   style={{
                     background: 'var(--xsm-medium-gray)',
                     borderColor: 'var(--xsm-border)',
@@ -596,7 +596,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                   type="button"
                   onClick={handleCreateDeal}
                   disabled={selectedPaymentMethods.length === 0}
-                  className="flex-1 py-2 px-4 text-sm bg-xsm-yellow text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md cursor-pointer"
+                  className="flex-1 py-1.5 px-3 text-xs sm:text-sm bg-xsm-yellow text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md cursor-pointer"
                 >
                   Continue
                 </button>

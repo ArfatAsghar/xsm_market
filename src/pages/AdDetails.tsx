@@ -1050,8 +1050,10 @@ const AdDetails: React.FC = () => {
           channelPrice={channel.price}
           channelTitle={channel.name}
           sellerId={channel.seller.id.toString()}
+          platform={channel.platform as any}
           onNavigateToChat={() => navigate('/chat')}
         />
+
       )}
 
       {/* Pull Up / Bump Modal */}

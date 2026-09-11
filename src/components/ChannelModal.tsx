@@ -481,6 +481,7 @@ const ChannelModal: React.FC<ChannelModalProps> = ({ channel, isOpen, onClose, o
           channelPrice={channel.price}
           channelTitle={channel.name}
           sellerId={channel.seller.id.toString()}
+          platform={channel.platform as any}
           onNavigateToChat={onNavigateToChat}
         />
       )}

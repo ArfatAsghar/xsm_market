@@ -26,14 +26,26 @@ interface PaymentMethod {
   category: 'bank' | 'digital' | 'crypto' | 'other';
 }
 
+type SupportedPlatform = 'youtube' | 'tiktok' | 'facebook' | 'instagram' | 'twitter' | 'telegram';
+
 interface DealCreationModalProps {
   isOpen: boolean;
   onClose: () => void;
   channelPrice: number;
   channelTitle: string;
   sellerId: string;
+  platform?: SupportedPlatform;
   onNavigateToChat?: () => void;
 }
+
+const platformMeta: Record<SupportedPlatform, { label: string; color: string; emoji: string }> = {
+  youtube:   { label: 'YouTube',    color: '#FF0000', emoji: '▶️' },
+  tiktok:    { label: 'TikTok',     color: '#010101', emoji: '🎵' },
+  facebook:  { label: 'Facebook',   color: '#1877F2', emoji: '🔵' },
+  instagram: { label: 'Instagram',  color: '#E1306C', emoji: '📸' },
+  twitter:   { label: 'Twitter (X)', color: '#1DA1F2', emoji: '🐦' },
+  telegram:  { label: 'Telegram',   color: '#2AABEE', emoji: '✈️' },
+};
 
 const DealCreationModal: React.FC<DealCreationModalProps> = ({
   isOpen,
@@ -41,8 +53,15 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
   channelPrice,
   channelTitle,
   sellerId,
+  platform = 'youtube',
   onNavigateToChat
 }) => {
+  // Normalize to our supported set
+  const activePlatform: SupportedPlatform = (
+    ['youtube','tiktok','facebook','instagram','twitter','telegram'].includes(platform)
+      ? platform
+      : 'youtube'
+  ) as SupportedPlatform;
   const navigate = useNavigate();
   const { user, isLoggedIn } = useAuth();
   const { toast } = useToast();
@@ -53,7 +72,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isCreatingDeal, setIsCreatingDeal] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
-  const [activeInstructionTab, setActiveInstructionTab] = useState<'youtube' | 'tiktok' | 'facebook' | 'instagram' | 'twitter' | 'telegram'>('youtube');
+  const [activeInstructionTab, setActiveInstructionTab] = useState<SupportedPlatform>(activePlatform);
   const [buyerTier, setBuyerTier] = useState<'standard' | 'repeat' | 'vip' | 'vip_repeat'>('standard');
   const [buyerIsVip, setBuyerIsVip] = useState(false);
   const [countdown, setCountdown] = useState<number>(3);
@@ -73,7 +92,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
     setAgreedToTerms(false);
     setIsCreatingDeal(false);
     setShowInfo(false);
-    setActiveInstructionTab('youtube');
+    setActiveInstructionTab(activePlatform);
   };
 
   const redirectToChat = () => {
@@ -392,41 +411,52 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
           {step === 'payment-selection' && (
             <>
-              {/* Transaction Type Selection */}
-              <div className="mb-2">
-                <div className="flex justify-center space-x-3 mb-2">
-                  <button
-                    onClick={() => setSelectedTransactionType('safest')}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                      selectedTransactionType === 'safest'
-                        ? 'bg-xsm-yellow text-black shadow-md'
-                        : 'hover:opacity-80'
-                    }`}
-                    style={selectedTransactionType !== 'safest' ? {
-                      border: '1px solid var(--xsm-border)',
-                      color: 'var(--xsm-text)',
-                      background: 'transparent'
-                    } : {}}
-                  >
-                    Safest transaction
-                  </button>
-                  <button
-                    onClick={() => setSelectedTransactionType('fastest')}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                      selectedTransactionType === 'fastest'
-                        ? 'bg-xsm-yellow text-black shadow-md'
-                        : 'hover:opacity-80'
-                    }`}
-                    style={selectedTransactionType !== 'fastest' ? {
-                      border: '1px solid var(--xsm-border)',
-                      color: 'var(--xsm-text)',
-                      background: 'transparent'
-                    } : {}}
-                  >
-                    Fastest transaction
-                  </button>
+              {/* Transfer Mode — YouTube only (safest uses 7-day manager hold; fastest skips it) */}
+              {activePlatform === 'youtube' && (
+                <div className="mb-3">
+                  <p className="text-[10px] uppercase tracking-wider font-semibold mb-1.5" style={{ color: 'var(--xsm-light-gray)' }}>Transfer Mode</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      onClick={() => setSelectedTransactionType('safest')}
+                      className={`relative flex flex-col items-start gap-1 px-3 py-2.5 rounded-lg border-2 text-left transition-all cursor-pointer ${
+                        selectedTransactionType === 'safest'
+                          ? 'border-xsm-yellow bg-xsm-yellow/10'
+                          : 'hover:border-xsm-yellow/40'
+                      }`}
+                      style={selectedTransactionType !== 'safest' ? {
+                        borderColor: 'var(--xsm-border)',
+                        background: 'var(--xsm-medium-gray)'
+                      } : {}}
+                    >
+                      {selectedTransactionType === 'safest' && (
+                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[9px] font-black">✓</span>
+                      )}
+                      <span className="text-base">🛡️</span>
+                      <span className="text-xs font-bold" style={{ color: selectedTransactionType === 'safest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Verified Transfer</span>
+                      <span className="text-[10px] leading-snug" style={{ color: 'var(--xsm-light-gray)' }}>7-day manager hold before ownership transfer — maximum protection.</span>
+                    </button>
+                    <button
+                      onClick={() => setSelectedTransactionType('fastest')}
+                      className={`relative flex flex-col items-start gap-1 px-3 py-2.5 rounded-lg border-2 text-left transition-all cursor-pointer ${
+                        selectedTransactionType === 'fastest'
+                          ? 'border-xsm-yellow bg-xsm-yellow/10'
+                          : 'hover:border-xsm-yellow/40'
+                      }`}
+                      style={selectedTransactionType !== 'fastest' ? {
+                        borderColor: 'var(--xsm-border)',
+                        background: 'var(--xsm-medium-gray)'
+                      } : {}}
+                    >
+                      {selectedTransactionType === 'fastest' && (
+                        <span className="absolute top-2 right-2 w-4 h-4 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[9px] font-black">✓</span>
+                      )}
+                      <span className="text-base">⚡</span>
+                      <span className="text-xs font-bold" style={{ color: selectedTransactionType === 'fastest' ? 'var(--xsm-yellow, #f59e0b)' : 'var(--xsm-heading, var(--xsm-text))' }}>Express Transfer</span>
+                      <span className="text-[10px] leading-snug" style={{ color: 'var(--xsm-light-gray)' }}>Immediate ownership handoff once funds are confirmed.</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Payment Methods Selection */}
               <div className="mb-2">
@@ -467,30 +497,22 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                 </div>
               </div>
 
-              {/* Transaction Steps by Platform */}
-              <div className="mb-2 border rounded-lg p-3" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
-                <h3 className="text-xs font-semibold mb-2" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Transaction Instructions by Platform:</h3>
-                <div className="flex border-b mb-2 gap-1 overflow-x-auto" style={{ borderColor: 'var(--xsm-border)' }}>
-                  {(['youtube', 'tiktok', 'facebook', 'instagram', 'twitter', 'telegram'] as const).map((platform) => (
-                    <button
-                      key={platform}
-                      type="button"
-                      onClick={() => setActiveInstructionTab(platform)}
-                      className={`px-3 py-1 text-xs font-semibold capitalize border-b-2 transition-all whitespace-nowrap cursor-pointer ${
-                        activeInstructionTab === platform
-                          ? 'border-xsm-yellow text-xsm-yellow bg-xsm-yellow/10 font-bold'
-                          : 'border-transparent hover:opacity-80'
-                      }`}
-                      style={activeInstructionTab !== platform ? { color: 'var(--xsm-light-gray)' } : {}}
-                    >
-                      {platform === 'twitter' ? 'Twitter (X)' : platform}
-                    </button>
-                  ))}
+              {/* Transaction Instructions — platform-specific, no tabs */}
+              <div className="mb-2 border rounded-lg overflow-hidden" style={{ borderColor: 'var(--xsm-border)' }}>
+                {/* Platform header badge */}
+                <div className="flex items-center gap-2 px-3 py-2 border-b" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                  <span className="text-sm">{platformMeta[activePlatform].emoji}</span>
+                  <span className="text-xs font-bold" style={{ color: platformMeta[activePlatform].color }}>
+                    {platformMeta[activePlatform].label}
+                  </span>
+                  <span className="ml-auto text-[10px] font-medium px-2 py-0.5 rounded-full" style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--xsm-yellow, #f59e0b)' }}>
+                    Transfer Guide
+                  </span>
                 </div>
-                <div>
-                  {activeInstructionTab === 'youtube' && (
-                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate the escrow process.</li>
+                <div className="p-3" style={{ background: 'var(--xsm-medium-gray)' }}>
+                  {activePlatform === 'youtube' && (
+                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate the escrow process.</li>
                       <li>The seller designates the website agent's email as a <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager</strong> of the YouTube channel.</li>
                       <li>The website agent must remain a Manager for <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>7 days</strong> before primary ownership can be transferred.</li>
                       <li>After 7 days, the seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to the website agent.</li>
@@ -498,45 +520,45 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                       <li>After seller confirms payment, the agent assigns Primary Ownership to the buyer.</li>
                     </ol>
                   )}
-                  {activeInstructionTab === 'tiktok' && (
-                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
+                  {activePlatform === 'tiktok' && (
+                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
                       <li>The seller shares login credentials with the agent via secure chat.</li>
                       <li>The agent updates recovery email, links new phone, and logs out of all sessions.</li>
                       <li>The agent verifies details and notifies the buyer to pay the seller.</li>
                       <li>After seller confirms payment, agent transfers credentials to buyer.</li>
                     </ol>
                   )}
-                  {activeInstructionTab === 'facebook' && (
-                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
+                  {activePlatform === 'facebook' && (
+                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
                       <li>The seller invites the website agent as an <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Admin</strong> of the Facebook Page.</li>
                       <li>The agent accepts, checks for other owners, and removes seller's admin access.</li>
                       <li>The agent verifies all roles and notifies buyer to pay seller.</li>
                       <li>After seller confirms payment, agent invites buyer as Admin and removes themselves.</li>
                     </ol>
                   )}
-                  {activeInstructionTab === 'instagram' && (
-                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
+                  {activePlatform === 'instagram' && (
+                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
                       <li>The seller updates Instagram account email to the agent's secure transfer email.</li>
                       <li>The agent resets the password and updates 2FA settings.</li>
                       <li>The agent verifies the account is secured and notifies buyer to pay seller.</li>
                       <li>After seller confirms payment, agent changes email to buyer's and hands over credentials.</li>
                     </ol>
                   )}
-                  {activeInstructionTab === 'twitter' && (
-                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
+                  {activePlatform === 'twitter' && (
+                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
                       <li>The seller updates the Twitter (X) account email to the website agent's secure email.</li>
                       <li>The agent resets the password, configures 2FA, and disconnects all active sessions.</li>
                       <li>The agent verifies full account security and instructs the buyer to pay the seller.</li>
                       <li>After seller confirms payment, the agent updates credentials to the buyer's email and transfers access.</li>
                     </ol>
                   )}
-                  {activeInstructionTab === 'telegram' && (
-                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
-                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
+                  {activePlatform === 'telegram' && (
+                    <ol className="space-y-1.5 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                      <li>The buyer pays the service fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>) to initiate escrow.</li>
                       <li>The seller adds the website agent as Administrator with full rights to the Telegram channel/group.</li>
                       <li>The seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> of the channel/group to the website agent.</li>
                       <li>The agent confirms ownership transfer, removes previous admins, and notifies buyer to pay seller.</li>

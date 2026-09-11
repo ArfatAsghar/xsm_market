@@ -541,6 +541,7 @@ const AdList: React.FC<AdListProps> = ({
           channelPrice={selectedAd.price}
           channelTitle={selectedAd.title}
           sellerId={selectedAd.seller.id.toString()}
+          platform={selectedAd.platform as any}
           onNavigateToChat={() => onNavigateToChat && onNavigateToChat('')}
         />
       )}

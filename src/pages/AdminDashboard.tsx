@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Activity, Users, ShoppingBag, Settings, MessageSquare, FileText, Bell, DollarSign, TrendingUp, Crown, CreditCard, ShieldCheck, PieChart } from 'lucide-react';
+import { Activity, Users, ShoppingBag, Settings, MessageSquare, FileText, Bell, DollarSign, TrendingUp, Crown, CreditCard, ShieldCheck, PieChart, Mail } from 'lucide-react';
 import ManageUsers from '@/components/admin/ManageUsers';
 import ReviewListings from '@/components/admin/ReviewListings';
 import ReviewChats from '@/components/admin/ReviewChats';
 import ReviewDeals from '@/components/admin/ReviewDeals';
 import FinancialRecords from '@/components/admin/FinancialRecords';
 import AdminWebsiteUpdates from '@/components/admin/AdminWebsiteUpdates';
+import EmailPoolManager from '@/components/admin/EmailPoolManager';
 import { getDashboardStats, getFinancialStats } from '@/services/admin';
 import { useAuth } from '@/context/useAuth';
 
@@ -133,6 +134,8 @@ const AdminDashboard: React.FC = () => {
         return <ReviewChats initialChatId={selectedChatId} />;
       case 'review-deals':
         return <ReviewDeals />;
+      case 'email-pool':
+        return <EmailPoolManager />;
       case 'financial-records':
         return <FinancialRecords />;
       case 'website-updates':
@@ -152,20 +155,21 @@ const AdminDashboard: React.FC = () => {
                     <div className="flex items-center justify-between mb-4">
                       <stat.icon className="h-8 w-8 text-xsm-yellow" />
                     </div>
-                    <h3 className="text-lg text-xsm-light-gray mb-2">{stat.title}</h3>
-                    <p className="text-2xl font-bold">{stat.value}</p>
+                    <h3 className="text-sm font-medium text-muted-foreground mb-1">{stat.title}</h3>
+                    <p className="text-2xl font-bold text-foreground">{stat.value}</p>
                   </div>
                 ))
               )}
             </div>
 
             {/* Quick Actions Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-4">
               {[
                 { name: 'Manage Users', view: 'manage-users' },
                 { name: 'Review Listings', view: 'review-listings' },
                 { name: 'Review Chats', view: 'review-chats', icon: MessageSquare, badge: supportRequestCount },
                 { name: 'Review Deals', view: 'review-deals', icon: FileText },
+                ...(isCurrentUserAdmin || isCurrentUserManager ? [{ name: 'Email Pool', view: 'email-pool', icon: Mail }] : []),
                 { name: 'Website Updates', view: 'website-updates', icon: Bell },
                 ...(isCurrentUserAdmin ? [{ name: 'Financial Records', view: 'financial-records', icon: DollarSign, isSpecial: true }] : [])
               ].map((action: any, index) => (
@@ -175,7 +179,7 @@ const AdminDashboard: React.FC = () => {
                   className={`p-4 rounded-lg transition-colors text-left flex items-center gap-2 relative border ${
                     action.isSpecial
                       ? 'bg-gradient-to-r from-xsm-dark-gray to-xsm-medium-gray/60 border-xsm-yellow/50 hover:border-xsm-yellow text-xsm-yellow font-bold shadow-lg'
-                      : 'bg-xsm-dark-gray border-xsm-medium-gray hover:bg-xsm-medium-gray text-white'
+                      : 'bg-xsm-dark-gray border-xsm-medium-gray/50 hover:bg-xsm-medium-gray/30 text-foreground font-medium'
                   }`}
                 >
                   {action.icon && <action.icon className={`h-5 w-5 ${action.isSpecial ? 'text-xsm-yellow font-bold' : 'text-xsm-yellow'}`} />}
@@ -195,7 +199,7 @@ const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-xsm-black text-white p-6">
+    <div className="min-h-screen bg-xsm-black text-foreground p-6 transition-colors duration-300">
       {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <h1 className="text-2xl font-bold text-xsm-yellow">
@@ -207,7 +211,7 @@ const AdminDashboard: React.FC = () => {
           {activeView !== 'dashboard' && (
             <button
               onClick={() => setActiveView('dashboard')}
-              className="px-4 py-2 bg-xsm-medium-gray hover:bg-xsm-medium-gray/80 rounded-lg transition-colors"
+              className="px-4 py-2 bg-xsm-dark-gray hover:bg-xsm-medium-gray/40 border border-xsm-medium-gray/40 text-foreground rounded-lg transition-colors font-medium text-sm"
             >
               Back to Dashboard
             </button>

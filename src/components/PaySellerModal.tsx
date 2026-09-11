@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, DollarSign, CheckCircle, Shield } from 'lucide-react';
+import DealAlertModal, { DealAlertModalProps } from './DealAlertModal';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
@@ -32,30 +33,13 @@ const PaySellerModal: React.FC<PaySellerModalProps> = ({
   onPaymentConfirmed 
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<Omit<DealAlertModalProps, 'onClose'> | null>(null);
 
   if (!isOpen) return null;
 
-  const handleConfirmPayment = async () => {
+  const executeConfirmPayment = async () => {
     try {
       setIsProcessing(true);
-      
-      const confirmed = window.confirm(
-        '💰 CONFIRM PAYMENT TO SELLER\n\n' +
-        'Please confirm that you have successfully paid the seller.\n\n' +
-        '⚠️ IMPORTANT:\n' +
-        '• Only confirm if payment was completed successfully\n' +
-        '• You have received payment confirmation from your payment provider\n' +
-        '• The seller should receive the funds\n\n' +
-        'This will notify the seller and complete the transaction.\n\n' +
-        'Continue?'
-      );
-
-      if (!confirmed) {
-        setIsProcessing(false);
-        return;
-      }
-
-      // Call the API to confirm payment
       const token = localStorage.getItem('token');
       const response = await fetch(`${getBaseUrl()}/deals/${deal.id}/buyer-paid-seller`, {
         method: 'POST',
@@ -68,80 +52,97 @@ const PaySellerModal: React.FC<PaySellerModalProps> = ({
       const result = await response.json();
       
       if (response.ok) {
-        alert(`✅ Payment Confirmation Successful!
-
-🎉 Transaction Complete!
-
-✓ Payment to seller confirmed
-✓ Chat message sent to notify seller
-✓ Deal status updated
-
-Thank you for using our secure marketplace!`);
-        
         onPaymentConfirmed(deal.id);
         onClose();
       } else {
         throw new Error(result.message || 'Failed to confirm payment');
       }
-      
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error confirming payment:', error);
-      alert(`Failed to confirm payment: ${error.message}\n\nPlease try again or contact support.`);
+      setAlertConfig({
+        title: 'Payment Confirmation Error',
+        message: error?.message || 'Failed to confirm payment to seller. Please try again or contact support.',
+        type: 'error'
+      });
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const handleConfirmPayment = () => {
+    setAlertConfig({
+      title: 'Confirm Payment to Seller',
+      message: 'Please confirm that you have sent the required funds to the seller. This will notify the seller and prompt the agent to finalize account transfer.',
+      type: 'info',
+      confirmText: 'Yes, I Have Paid',
+      cancelText: 'Cancel',
+      details: [
+        { label: 'Channel', value: deal.channel_title },
+        { label: 'Amount', value: `$${deal.channel_price}` },
+        { label: 'Seller', value: deal.seller_name || 'Seller' }
+      ],
+      onConfirm: executeConfirmPayment
+    });
+  };
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-xsm-dark-gray rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto">
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+      <div 
+        className="rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border shadow-2xl transition-all"
+        style={{
+          background: 'var(--xsm-dark-gray)',
+          borderColor: 'var(--xsm-border)',
+          color: 'var(--xsm-text)'
+        }}
+      >
         <div className="p-6">
           {/* Header */}
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-white flex items-center">
-              <DollarSign className="mr-3 text-xsm-yellow" size={28} />
+          <div className="flex items-center justify-between mb-6 pb-4 border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+            <h2 className="text-xl font-bold flex items-center" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>
+              <DollarSign className="mr-2.5 text-emerald-500" size={24} />
               Confirm Payment to Seller
             </h2>
             <button
               onClick={onClose}
-              className="text-gray-400 hover:text-white transition-colors"
+              className="p-1.5 rounded-lg border transition-colors hover:opacity-80"
+              style={{ borderColor: 'var(--xsm-border)', color: 'var(--xsm-light-gray)' }}
+              title="Close"
             >
-              <X size={24} />
+              <X size={20} />
             </button>
           </div>
 
           {/* Deal Info */}
-          <div className="bg-xsm-medium-gray rounded-lg p-4 mb-6">
-            <h3 className="text-white font-medium mb-2">Deal Details</h3>
+          <div className="rounded-xl p-4 mb-6 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+            <h3 className="font-bold text-xs uppercase tracking-wider mb-3" style={{ color: 'var(--xsm-primary)' }}>Deal Details</h3>
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
-                <span className="text-gray-400">Channel:</span>
-                <p className="text-white font-medium">{deal.channel_title}</p>
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Channel:</span>
+                <p className="font-semibold" style={{ color: 'var(--xsm-text)' }}>{deal.channel_title}</p>
               </div>
               <div>
-                <span className="text-gray-400">Amount:</span>
-                <p className="text-green-400 font-bold text-lg">${typeof deal.channel_price === 'number' ? deal.channel_price.toFixed(2) : parseFloat(deal.channel_price || '0').toFixed(2)}</p>
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Amount:</span>
+                <p className="text-emerald-500 font-bold text-lg">${typeof deal.channel_price === 'number' ? deal.channel_price.toFixed(2) : parseFloat(deal.channel_price || '0').toFixed(2)}</p>
               </div>
               <div>
-                <span className="text-gray-400">Seller:</span>
-                <p className="text-white">{deal.seller_name || deal.seller_email}</p>
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Seller:</span>
+                <p className="font-medium" style={{ color: 'var(--xsm-text)' }}>{deal.seller_name || deal.seller_email}</p>
               </div>
               <div>
-                <span className="text-gray-400">Transaction ID:</span>
-                <p className="text-gray-300 font-mono text-xs">{deal.transaction_id || `#${deal.id}`}</p>
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Transaction ID:</span>
+                <p className="font-mono text-xs font-bold" style={{ color: 'var(--xsm-text)' }}>{deal.transaction_id || `#${deal.id}`}</p>
               </div>
             </div>
           </div>
 
           {/* Security Notice */}
-          <div className="bg-green-900 border border-green-700 rounded-lg p-4 mb-6">
+          <div className="rounded-xl p-4 mb-6 border" style={{ background: 'rgba(34, 197, 94, 0.08)', borderColor: 'rgba(34, 197, 94, 0.25)' }}>
             <div className="flex items-start space-x-3">
-              <Shield className="text-green-400 mt-1" size={20} />
+              <Shield className="text-emerald-500 shrink-0 mt-0.5" size={20} />
               <div>
-                <h4 className="text-green-300 font-medium mb-1">Secure Payment Process</h4>
-                <p className="text-green-200 text-sm">
-                  Our agent now has full control of the channel. You can safely proceed with payment as the 
-                  account is secured and ready for transfer.
+                <h4 className="text-emerald-500 font-bold text-xs uppercase tracking-wider mb-1">Secure Payment Process</h4>
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                  By confirming payment, you certify that you have transferred the agreed funds to the seller. The website agent will proceed with the final ownership transfer once verified.
                 </p>
               </div>
             </div>
@@ -195,6 +196,19 @@ Thank you for using our secure marketplace!`);
           </div>
         </div>
       </div>
+
+      {/* Custom Theme-Adaptive Alert Modal */}
+      {alertConfig && (
+        <DealAlertModal
+          {...alertConfig}
+          onClose={() => {
+            if (alertConfig.onClose) {
+              alertConfig.onClose();
+            }
+            setAlertConfig(null);
+          }}
+        />
+      )}
     </div>
   );
 };

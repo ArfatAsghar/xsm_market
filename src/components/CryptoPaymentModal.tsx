@@ -252,68 +252,86 @@ const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
   console.log('CryptoPaymentModal rendering:', { isOpen, deal, currencies: currencies.length });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-xsm-dark-bg border border-gray-700 rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+      <div 
+        className="border rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl transition-all"
+        style={{
+          background: 'var(--xsm-dark-gray)',
+          borderColor: 'var(--xsm-border)',
+          color: 'var(--xsm-text)'
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-white flex items-center">
-            <Bitcoin className="mr-3 text-orange-400" size={24} />
+        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>
+            <Bitcoin className="text-amber-500" size={24} />
             Cryptocurrency Payment
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg border transition-colors hover:opacity-80"
+            style={{ borderColor: 'var(--xsm-border)', color: 'var(--xsm-light-gray)' }}
+            title="Close"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-5">
           {!paymentData ? (
             <>
               {/* Deal Summary */}
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-xsm-yellow mb-3">Payment Details</h3>
+              <div className="rounded-xl p-4 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--xsm-primary)' }}>Payment Details</h3>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-white">
-                    <span>Channel:</span>
-                    <span>{deal.channel_title}</span>
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Channel:</span>
+                    <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>{deal.channel_title}</span>
                   </div>
-                  <div className="flex justify-between text-white border-t border-gray-600 pt-2 font-semibold">
-                    <span>Escrow Fee:</span>
-                    <span className="text-xsm-yellow">${Number(deal.escrow_fee).toFixed(2)} USD</span>
+                  <div className="flex justify-between border-t pt-2 font-semibold" style={{ borderColor: 'var(--xsm-border)' }}>
+                    <span style={{ color: 'var(--xsm-text)' }}>Escrow Fee:</span>
+                    <span className="font-bold text-base" style={{ color: 'var(--xsm-primary)' }}>${Number(deal.escrow_fee).toFixed(2)} USD</span>
                   </div>
                 </div>
               </div>
 
               {/* Currency Selection */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-4">Select Cryptocurrency</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--xsm-text)' }}>Select Cryptocurrency</h3>
                 <div className="grid grid-cols-2 gap-3">
                   {currencies.map((currency) => (
                     <button
                       key={currency.code}
                       onClick={() => setSelectedCurrency(currency.code)}
-                      className={`p-3 rounded-lg border text-left transition-all ${
+                      className={`p-3 rounded-xl border text-left transition-all ${
                         selectedCurrency === currency.code
-                          ? 'border-orange-400 bg-orange-400/10 text-orange-400'
-                          : 'border-gray-600 bg-gray-800 text-white hover:border-gray-500'
+                          ? 'ring-2 ring-amber-500 font-bold'
+                          : 'hover:opacity-90'
                       }`}
+                      style={{
+                        background: selectedCurrency === currency.code ? 'rgba(234, 179, 8, 0.12)' : 'var(--xsm-bg)',
+                        borderColor: selectedCurrency === currency.code ? 'var(--xsm-primary)' : 'var(--xsm-border)',
+                        color: 'var(--xsm-text)'
+                      }}
                     >
-                      <div className="font-semibold">{currency.code.toUpperCase()}</div>
-                      <div className="text-sm text-gray-400">{currency.name}</div>
+                      <div className="font-semibold text-sm" style={{ color: selectedCurrency === currency.code ? 'var(--xsm-primary)' : 'var(--xsm-text)' }}>
+                        {currency.code.toUpperCase()}
+                      </div>
+                      <div className="text-xs mt-0.5 truncate" style={{ color: 'var(--xsm-light-gray)' }}>
+                        {currency.name}
+                      </div>
                     </button>
                   ))}
                 </div>
               </div>
 
               {/* Important Notice */}
-              <div className="bg-orange-900/20 border border-orange-700 rounded-lg p-4">
+              <div className="rounded-xl border p-4" style={{ background: 'rgba(234, 179, 8, 0.08)', borderColor: 'rgba(234, 179, 8, 0.25)' }}>
                 <div className="flex items-start space-x-3">
-                  <AlertTriangle className="text-orange-400 mt-0.5" size={20} />
+                  <AlertTriangle className="text-amber-500 shrink-0 mt-0.5" size={18} />
                   <div>
-                    <h4 className="text-orange-400 font-medium mb-2">Important Notice</h4>
-                    <ul className="text-orange-200 text-sm space-y-1">
+                    <h4 className="font-bold text-xs uppercase tracking-wider mb-1.5" style={{ color: 'var(--xsm-primary)' }}>Important Notice</h4>
+                    <ul className="text-xs space-y-1" style={{ color: 'var(--xsm-text)' }}>
                       <li>• Send the exact amount to the provided address</li>
                       <li>• Payment will be confirmed automatically</li>
                       <li>• Do not close this window until payment is complete</li>
@@ -324,12 +342,12 @@ const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
               </div>
 
               {error && (
-                <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-                  <div className="flex items-center space-x-2 text-red-400">
+                <div className="rounded-xl border p-4" style={{ background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                  <div className="flex items-center space-x-2 text-rose-500">
                     <AlertTriangle size={16} />
-                    <span className="font-medium">Error</span>
+                    <span className="font-bold text-xs uppercase tracking-wider">Error</span>
                   </div>
-                  <p className="text-red-200 text-sm mt-1">{error}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--xsm-text)' }}>{error}</p>
                 </div>
               )}
 
@@ -337,7 +355,8 @@ const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
               <button
                 onClick={createPayment}
                 disabled={isCreating}
-                className="w-full bg-orange-600 text-white py-3 px-6 rounded-lg hover:bg-orange-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                className="w-full font-bold py-3 px-6 rounded-xl hover:brightness-105 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-sm shadow-md"
+                style={{ background: 'var(--xsm-primary)', color: '#000000' }}
               >
                 {isCreating ? (
                   <>
@@ -355,47 +374,51 @@ const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
           ) : (
             <>
               {/* Payment Status */}
-              <div className="bg-gray-800 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-semibold text-white">Payment Status</h3>
+              <div className="rounded-xl p-4 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--xsm-text)' }}>Payment Status</h3>
                   <button
                     onClick={checkPaymentStatus}
                     disabled={isChecking}
-                    className="p-2 text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+                    className="p-1.5 rounded-lg border transition-colors hover:opacity-80 disabled:opacity-50"
+                    style={{ borderColor: 'var(--xsm-border)', color: 'var(--xsm-light-gray)' }}
+                    title="Refresh status"
                   >
-                    <RefreshCw className={`w-4 h-4 ${isChecking ? 'animate-spin' : ''}`} />
+                    <RefreshCw className={`w-3.5 h-3.5 ${isChecking ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
-                <div className={`flex items-center space-x-3 p-3 rounded-lg ${getStatusColor(paymentData.status)}`}>
+                <div className={`flex items-center space-x-3 p-3 rounded-xl ${getStatusColor(paymentData.status)}`}>
                   {getStatusIcon(paymentData.status)}
-                  <span className="font-medium">{getStatusText(paymentData.status)}</span>
+                  <span className="font-semibold text-sm">{getStatusText(paymentData.status)}</span>
                 </div>
               </div>
 
               {/* Payment Information */}
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-white mb-3">Payment Information</h3>
-                <div className="space-y-3">
+              <div className="rounded-xl p-4 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+                <h3 className="text-xs font-bold uppercase tracking-wider mb-3" style={{ color: 'var(--xsm-text)' }}>Payment Information</h3>
+                <div className="space-y-2.5 text-sm">
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Amount:</span>
-                    <span className="text-white font-mono">
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Amount:</span>
+                    <span className="font-mono font-bold" style={{ color: 'var(--xsm-text)' }}>
                       ${paymentData.amount} {paymentData.currency.toUpperCase()}
                       {paymentData.pay_amount && (
-                        <span className="text-orange-400 ml-2">
+                        <span className="ml-2 font-bold" style={{ color: 'var(--xsm-primary)' }}>
                           ≈ {paymentData.pay_amount} {paymentData.pay_currency.toUpperCase()}
                         </span>
                       )}
                     </span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-gray-400">Payment ID:</span>
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Payment ID:</span>
                     <div className="flex items-center space-x-2">
-                      <span className="text-white font-mono text-sm">{paymentData.payment_id}</span>
+                      <span className="font-mono text-xs font-bold" style={{ color: 'var(--xsm-text)' }}>{paymentData.payment_id}</span>
                       <button
                         onClick={() => copyToClipboard(paymentData.payment_id)}
-                        className="text-gray-400 hover:text-white transition-colors"
+                        className="p-1 rounded hover:opacity-80 transition-opacity"
+                        style={{ color: 'var(--xsm-primary)' }}
+                        title="Copy payment ID"
                       >
-                        <Copy className="w-4 h-4" />
+                        <Copy className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -409,21 +432,22 @@ const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
                     href={paymentData.payment_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center space-x-2"
+                    className="w-full font-bold py-3 px-6 rounded-xl hover:brightness-105 transition-all flex items-center justify-center space-x-2 text-sm shadow-md"
+                    style={{ background: 'var(--xsm-primary)', color: '#000000' }}
                   >
                     <ExternalLink className="w-4 h-4" />
                     <span>Open Payment Page</span>
                   </a>
                   
                   {paymentData.qr_code_url && (
-                    <div className="text-center">
+                    <div className="text-center p-4 rounded-xl border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
                       <img
                         src={paymentData.qr_code_url}
                         alt="Payment QR Code"
-                        className="mx-auto rounded-lg bg-white p-2"
-                        style={{ maxWidth: '200px' }}
+                        className="mx-auto rounded-lg bg-white p-2 shadow-md"
+                        style={{ maxWidth: '180px' }}
                       />
-                      <p className="text-sm text-gray-400 mt-2">Scan with your crypto wallet</p>
+                      <p className="text-xs mt-2 font-medium" style={{ color: 'var(--xsm-light-gray)' }}>Scan with your crypto wallet</p>
                     </div>
                   )}
                 </div>
@@ -431,12 +455,12 @@ const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
 
               {/* Success Message */}
               {['finished', 'confirmed'].includes(paymentData.status) && (
-                <div className="bg-green-900/20 border border-green-700 rounded-lg p-4">
-                  <div className="flex items-center space-x-2 text-green-400">
-                    <CheckCircle size={20} />
-                    <span className="font-medium">Payment Completed!</span>
+                <div className="rounded-xl border p-4" style={{ background: 'rgba(34, 197, 94, 0.1)', borderColor: 'rgba(34, 197, 94, 0.3)' }}>
+                  <div className="flex items-center space-x-2 text-emerald-500">
+                    <CheckCircle size={18} />
+                    <span className="font-bold text-xs uppercase tracking-wider">Payment Completed!</span>
                   </div>
-                  <p className="text-green-200 text-sm mt-1">
+                  <p className="text-xs mt-1" style={{ color: 'var(--xsm-text)' }}>
                     Your escrow fee has been successfully paid. The deal will now proceed to the next stage.
                   </p>
                 </div>
@@ -444,12 +468,12 @@ const CryptoPaymentModal: React.FC<CryptoPaymentModalProps> = ({
 
               {/* Failure Message */}
               {['failed', 'expired'].includes(paymentData.status) && (
-                <div className="bg-red-900/20 border border-red-700 rounded-lg p-4">
-                  <div className="flex items-center space-x-2 text-red-400">
-                    <AlertTriangle size={20} />
-                    <span className="font-medium">Payment {paymentData.status === 'failed' ? 'Failed' : 'Expired'}</span>
+                <div className="rounded-xl border p-4" style={{ background: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.3)' }}>
+                  <div className="flex items-center space-x-2 text-rose-500">
+                    <AlertTriangle size={18} />
+                    <span className="font-bold text-xs uppercase tracking-wider">Payment {paymentData.status === 'failed' ? 'Failed' : 'Expired'}</span>
                   </div>
-                  <p className="text-red-200 text-sm mt-1">
+                  <p className="text-xs mt-1" style={{ color: 'var(--xsm-text)' }}>
                     {paymentData.status === 'failed' 
                       ? 'The payment could not be processed. Please try again or contact support.'
                       : 'The payment has expired. Please create a new payment to continue.'

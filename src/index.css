@@ -1,50 +1,215 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* XSM Market Design System - Black and Yellow Theme */
+/* XSM Market Multi-Theme System */
 
 @layer base {
-  :root {
-    --background: 0 0% 0%;
-    --foreground: 60 100% 50%;
+  /* 1. Default: Executive Gold Theme (Classic XSM Signature) */
+  :root, [data-theme="gold"] {
+    --xsm-primary: #f5c518;
+    --xsm-primary-hover: #eab308;
+    --xsm-primary-glow: rgba(245, 197, 24, 0.25);
+    --xsm-bg: #080808;
+    --xsm-bg-gradient: linear-gradient(180deg, #080808 0%, #0d0d0e 100%);
+    --xsm-nav-bg: linear-gradient(135deg, rgba(10,10,10,0.98) 0%, rgba(18,18,18,0.98) 50%, rgba(10,10,10,0.98) 100%);
+    --xsm-dark-gray: #121214;
+    --xsm-medium-gray: #222225;
+    --xsm-light-gray: #888888;
+    --xsm-text: #ffffff;
+    --xsm-heading: #f5c518;
+    --xsm-border: rgba(255, 255, 255, 0.08);
 
-    --card: 0 0% 10%;
+    --background: 0 0% 3%;
+    --foreground: 48 95% 52%;
+    --card: 0 0% 7%;
     --card-foreground: 0 0% 100%;
-
-    --popover: 0 0% 10%;
-    --popover-foreground: 60 100% 50%;
-
-    --primary: 60 100% 50%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 48 95% 52%;
+    --primary: 48 95% 52%;
     --primary-foreground: 0 0% 0%;
-
-    --secondary: 0 0% 10%;
-    --secondary-foreground: 60 100% 50%;
-
-    --muted: 0 0% 20%;
-    --muted-foreground: 0 0% 80%;
-
-    --accent: 60 100% 50%;
+    --secondary: 0 0% 11%;
+    --secondary-foreground: 48 95% 52%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 48 95% 52%;
     --accent-foreground: 0 0% 0%;
-
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-
-    --border: 0 0% 20%;
-    --input: 0 0% 20%;
-    --ring: 60 100% 50%;
-
+    --border: 0 0% 16%;
+    --input: 0 0% 16%;
+    --ring: 48 95% 52%;
     --radius: 0.5rem;
+  }
 
-    --sidebar-background: 0 0% 5%;
-    --sidebar-foreground: 0 0% 80%;
-    --sidebar-primary: 60 100% 50%;
-    --sidebar-primary-foreground: 0 0% 0%;
-    --sidebar-accent: 0 0% 15%;
-    --sidebar-accent-foreground: 0 0% 90%;
-    --sidebar-border: 0 0% 15%;
-    --sidebar-ring: 60 100% 50%;
+  /* 2. Nordic Sapphire (Corporate Fintech Blue) */
+  [data-theme="ocean"] {
+    --xsm-primary: #0ea5e9;
+    --xsm-primary-hover: #0284c7;
+    --xsm-primary-glow: rgba(14, 165, 233, 0.25);
+    --xsm-bg: #070a0f;
+    --xsm-bg-gradient: linear-gradient(180deg, #070a0f 0%, #0c111a 100%);
+    --xsm-nav-bg: linear-gradient(135deg, rgba(8,12,18,0.98) 0%, rgba(14,20,30,0.98) 50%, rgba(8,12,18,0.98) 100%);
+    --xsm-dark-gray: #101622;
+    --xsm-medium-gray: #1e2638;
+    --xsm-light-gray: #7fa1c9;
+    --xsm-text: #f8fafc;
+    --xsm-heading: #38bdf8;
+    --xsm-border: rgba(255, 255, 255, 0.08);
+
+    --background: 218 36% 4%;
+    --foreground: 199 89% 48%;
+    --card: 218 36% 10%;
+    --card-foreground: 210 100% 98%;
+    --popover: 218 36% 10%;
+    --popover-foreground: 199 89% 48%;
+    --primary: 199 89% 48%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 218 30% 14%;
+    --secondary-foreground: 199 89% 48%;
+    --muted: 218 25% 18%;
+    --muted-foreground: 218 20% 70%;
+    --accent: 199 89% 48%;
+    --accent-foreground: 0 0% 100%;
+    --border: 218 30% 20%;
+    --input: 218 30% 20%;
+    --ring: 199 89% 48%;
+  }
+
+  /* 3. Emerald Prestige (Wealth & Security Dark) */
+  [data-theme="emerald"] {
+    --xsm-primary: #10b981;
+    --xsm-primary-hover: #059669;
+    --xsm-primary-glow: rgba(16, 185, 129, 0.25);
+    --xsm-bg: #070a08;
+    --xsm-bg-gradient: linear-gradient(180deg, #070a08 0%, #0c120e 100%);
+    --xsm-nav-bg: linear-gradient(135deg, rgba(8,12,9,0.98) 0%, rgba(13,20,15,0.98) 50%, rgba(8,12,9,0.98) 100%);
+    --xsm-dark-gray: #0f1712;
+    --xsm-medium-gray: #1c2b21;
+    --xsm-light-gray: #7fbfa0;
+    --xsm-text: #f0fdf4;
+    --xsm-heading: #34d399;
+    --xsm-border: rgba(255, 255, 255, 0.08);
+
+    --background: 140 18% 4%;
+    --foreground: 160 84% 39%;
+    --card: 140 22% 10%;
+    --card-foreground: 140 100% 98%;
+    --popover: 140 22% 10%;
+    --popover-foreground: 160 84% 39%;
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 140 20% 14%;
+    --secondary-foreground: 160 84% 39%;
+    --muted: 140 16% 18%;
+    --muted-foreground: 140 15% 70%;
+    --accent: 160 84% 39%;
+    --accent-foreground: 0 0% 0%;
+    --border: 140 20% 19%;
+    --input: 140 20% 19%;
+    --ring: 160 84% 39%;
+  }
+
+  /* 4. Royal Amethyst (Luxury Modern Violet) */
+  [data-theme="cyberpunk"] {
+    --xsm-primary: #a855f7;
+    --xsm-primary-hover: #9333ea;
+    --xsm-primary-glow: rgba(168, 85, 247, 0.25);
+    --xsm-bg: #08070c;
+    --xsm-bg-gradient: linear-gradient(180deg, #08070c 0%, #0d0b14 100%);
+    --xsm-nav-bg: linear-gradient(135deg, rgba(9,7,14,0.98) 0%, rgba(16,13,24,0.98) 50%, rgba(9,7,14,0.98) 100%);
+    --xsm-dark-gray: #120f1b;
+    --xsm-medium-gray: #241e35;
+    --xsm-light-gray: #a79cb8;
+    --xsm-text: #faf5ff;
+    --xsm-heading: #c084fc;
+    --xsm-border: rgba(255, 255, 255, 0.08);
+
+    --background: 260 25% 4%;
+    --foreground: 270 91% 65%;
+    --card: 260 26% 10%;
+    --card-foreground: 270 100% 98%;
+    --popover: 260 26% 10%;
+    --popover-foreground: 270 91% 65%;
+    --primary: 270 91% 65%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 260 22% 14%;
+    --secondary-foreground: 270 91% 65%;
+    --muted: 260 18% 18%;
+    --muted-foreground: 260 15% 70%;
+    --accent: 270 91% 65%;
+    --accent-foreground: 0 0% 0%;
+    --border: 260 22% 20%;
+    --input: 260 22% 20%;
+    --ring: 270 91% 65%;
+  }
+
+  /* 5. Crimson Noir (Dynamic Elite Ruby) */
+  [data-theme="crimson"] {
+    --xsm-primary: #f43f5e;
+    --xsm-primary-hover: #e11d48;
+    --xsm-primary-glow: rgba(244, 63, 94, 0.25);
+    --xsm-bg: #090708;
+    --xsm-bg-gradient: linear-gradient(180deg, #090708 0%, #0f0b0d 100%);
+    --xsm-nav-bg: linear-gradient(135deg, rgba(10,8,9,0.98) 0%, rgba(18,13,15,0.98) 50%, rgba(10,8,9,0.98) 100%);
+    --xsm-dark-gray: #140f11;
+    --xsm-medium-gray: #2a1b20;
+    --xsm-light-gray: #b88a95;
+    --xsm-text: #fff1f2;
+    --xsm-heading: #fb7185;
+    --xsm-border: rgba(255, 255, 255, 0.08);
+
+    --background: 340 20% 4%;
+    --foreground: 350 89% 60%;
+    --card: 340 22% 10%;
+    --card-foreground: 345 100% 98%;
+    --popover: 340 22% 10%;
+    --popover-foreground: 350 89% 60%;
+    --primary: 350 89% 60%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 340 20% 14%;
+    --secondary-foreground: 350 89% 60%;
+    --muted: 340 16% 18%;
+    --muted-foreground: 340 15% 70%;
+    --accent: 350 89% 60%;
+    --accent-foreground: 0 0% 0%;
+    --border: 340 20% 19%;
+    --input: 340 20% 19%;
+    --ring: 350 89% 60%;
+  }
+
+  /* 6. Soft Low-Brightness Light Theme (Muted Daylight - Zero Glare, Perfect Nav & Footer Blend) */
+  [data-theme="light"] {
+    --xsm-primary: #d97706;
+    --xsm-primary-hover: #b45309;
+    --xsm-primary-glow: rgba(217, 119, 6, 0.25);
+    --xsm-bg: #e8ebef;
+    --xsm-bg-gradient: linear-gradient(180deg, #e8ebef 0%, #dfe3e8 100%);
+    --xsm-nav-bg: linear-gradient(135deg, rgba(232, 235, 239, 0.98) 0%, rgba(223, 227, 232, 0.98) 100%);
+    --xsm-dark-gray: #f5f7fa;
+    --xsm-medium-gray: #cbd3dc;
+    --xsm-light-gray: #64748b;
+    --xsm-text: #111827;
+    --xsm-heading: #0f172a;
+    --xsm-border: rgba(0, 0, 0, 0.08);
+
+    --background: 215 16% 92%;
+    --foreground: 222 47% 11%;
+    --card: 210 25% 97%;
+    --card-foreground: 222 47% 11%;
+    --popover: 210 25% 97%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 38 92% 44%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 214 15% 86%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 214 15% 84%;
+    --muted-foreground: 215 16% 40%;
+    --accent: 38 92% 44%;
+    --accent-foreground: 0 0% 100%;
+    --border: 214 15% 78%;
+    --input: 214 15% 78%;
+    --ring: 38 92% 44%;
   }
 }
 
@@ -54,39 +219,147 @@
   }
 
   body {
-    @apply bg-xsm-black text-white font-sans;
-    background: linear-gradient(135deg, #000000 0%, #1a1a1a 100%);
+    background: var(--xsm-bg-gradient);
+    color: var(--xsm-text);
+    font-family: inherit;
     min-height: 100vh;
+    transition: background 0.3s ease, color 0.3s ease;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    @apply text-xsm-yellow;
+    color: var(--xsm-heading);
+  }
+
+  /* Light theme high-contrast readability rules */
+  [data-theme="light"] {
+    color-scheme: light;
+  }
+
+  [data-theme="light"] body {
+    color: #111827;
+  }
+
+  /* Ensure text inside cards, labels, tables, modals defaults to readable dark text in light theme */
+  [data-theme="light"] .xsm-card,
+  [data-theme="light"] .xsm-card label,
+  [data-theme="light"] .xsm-card p,
+  [data-theme="light"] table,
+  [data-theme="light"] th,
+  [data-theme="light"] td {
+    color: var(--xsm-text);
+  }
+
+  /* Automatically map hardcoded text-white to readable dark text when in light mode,
+     EXCEPT when it is on colored badges, primary action buttons, or dark pills */
+  [data-theme="light"] .text-white:not(button):not(.keep-white):not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-amber"]):not([class*="bg-purple"]):not([class*="bg-orange"]) {
+    color: #111827 !important;
+  }
+
+  [data-theme="light"] .text-gray-100,
+  [data-theme="light"] .text-gray-200,
+  [data-theme="light"] .text-gray-300:not([class*="bg-"]) {
+    color: #374151 !important;
+  }
+
+  [data-theme="light"] .text-gray-400:not([class*="bg-"]) {
+    color: #4b5563 !important;
+  }
+
+  [data-theme="light"] .text-xsm-light-gray {
+    color: #4b5563 !important;
+  }
+
+  /* In light theme, ensure input fields have clean white backgrounds with dark text and crisp borders */
+  [data-theme="light"] .xsm-input,
+  [data-theme="light"] input[type="text"],
+  [data-theme="light"] input[type="number"],
+  [data-theme="light"] input[type="email"],
+  [data-theme="light"] input[type="password"],
+  [data-theme="light"] textarea,
+  [data-theme="light"] select {
+    background-color: #ffffff !important;
+    border-color: rgba(0, 0, 0, 0.14) !important;
+    color: #111827 !important;
+  }
+
+  [data-theme="light"] input::placeholder,
+  [data-theme="light"] textarea::placeholder {
+    color: #9ca3af !important;
   }
 }
 
 @layer components {
   .xsm-card {
-    @apply bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg p-6 hover:border-xsm-yellow transition-all duration-300 hover:shadow-lg hover:shadow-xsm-yellow/20;
+    background-color: var(--xsm-dark-gray);
+    border: 1px solid var(--xsm-medium-gray);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .xsm-card:hover {
+    border-color: var(--xsm-primary);
+    box-shadow: 0 10px 25px -5px var(--xsm-primary-glow);
   }
 
   .xsm-button {
-    @apply bg-xsm-yellow text-xsm-black px-6 py-3 rounded-lg font-semibold hover:bg-yellow-400 transition-all duration-200 transform hover:scale-105;
+    background-color: var(--xsm-primary);
+    color: #000000;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .xsm-button:hover {
+    background-color: var(--xsm-primary-hover);
+    transform: scale(1.03);
+    box-shadow: 0 4px 14px 0 var(--xsm-primary-glow);
   }
 
   .xsm-button-secondary {
-    @apply bg-transparent border-2 border-xsm-yellow text-xsm-yellow px-6 py-3 rounded-lg font-semibold hover:bg-xsm-yellow hover:text-xsm-black transition-all duration-200;
+    background-color: transparent;
+    border: 2px solid var(--xsm-primary);
+    color: var(--xsm-primary);
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+  .xsm-button-secondary:hover {
+    background-color: var(--xsm-primary);
+    color: #000000;
   }
 
   .xsm-input {
-    @apply bg-xsm-dark-gray border border-xsm-medium-gray text-white px-4 py-3 rounded-lg focus:border-xsm-yellow focus:ring-2 focus:ring-xsm-yellow/20 transition-all duration-200;
+    background-color: var(--xsm-dark-gray);
+    border: 1px solid var(--xsm-medium-gray);
+    color: var(--xsm-text);
+    padding: 0.75rem 1rem;
+    border-radius: 0;
+    transition: all 0.2s ease;
+  }
+  .xsm-input:focus {
+    border-color: var(--xsm-primary);
+    box-shadow: 0 0 0 2px var(--xsm-primary-glow);
+    outline: none;
   }
 
   .xsm-badge {
-    @apply bg-xsm-yellow text-xsm-black px-3 py-1 rounded-full text-sm font-semibold;
+    background-color: var(--xsm-primary);
+    color: #000000;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 600;
   }
 
   .xsm-badge-premium {
-    @apply bg-gradient-to-r from-yellow-400 to-yellow-600 text-black px-3 py-1 rounded-full text-sm font-bold shadow-lg;
+    background: linear-gradient(135deg, var(--xsm-primary) 0%, var(--xsm-primary-hover) 100%);
+    color: #000000;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.875rem;
+    font-weight: 700;
+    box-shadow: 0 4px 12px var(--xsm-primary-glow);
   }
 }
 
@@ -107,7 +380,7 @@
   100% { opacity: 1; transform: scale(1); }
 }
 
-/* Custom Scrollbar Website Theme (Black & Yellow) */
+/* Dynamic Scrollbar Theme */
 .custom-scrollbar::-webkit-scrollbar,
 ::-webkit-scrollbar {
   width: 6px;
@@ -116,26 +389,25 @@
 
 .custom-scrollbar::-webkit-scrollbar-track,
 ::-webkit-scrollbar-track {
-  background: #121212;
+  background: var(--xsm-dark-gray);
   border-radius: 8px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb,
 ::-webkit-scrollbar-thumb {
-  background: #FFD700;
+  background: var(--xsm-primary);
   border-radius: 8px;
-  box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+  box-shadow: 0 0 6px var(--xsm-primary-glow);
 }
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover,
 ::-webkit-scrollbar-thumb:hover {
-  background: #E6C200;
-  box-shadow: 0 0 10px rgba(255, 215, 0, 0.7);
+  background: var(--xsm-primary-hover);
+  box-shadow: 0 0 10px var(--xsm-primary-glow);
 }
 
 /* Firefox scrollbar support */
 .custom-scrollbar {
   scrollbar-width: thin;
-  scrollbar-color: #FFD700 #121212;
+  scrollbar-color: var(--xsm-primary) var(--xsm-dark-gray);
 }
-

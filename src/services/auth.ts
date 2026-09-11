@@ -114,6 +114,11 @@ const clearTokenData = () => {
   localStorage.removeItem(USER_KEY);
 };
 
+// Helper function to get current auth token
+export const getAuthToken = (): string | null => {
+  return localStorage.getItem(TOKEN_KEY) || sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem('token') || sessionStorage.getItem('token');
+};
+
 // ─── Ban state helpers ───────────────────────────────────────────────────────
 const BAN_DATA_KEY = 'xsm_ban_data';
 
@@ -1077,7 +1082,7 @@ export const buyVip = async (months: 1 | 2 | 3): Promise<{
   months: number;
 }> => {
   const token = getAuthToken();
-  if (!token) throw new Error('Not authenticated');
+  if (!token) throw new Error('Please sign in to purchase VIP membership.');
 
   const response = await fetch(`${API_URL}/user/buy-vip`, {
     method: 'POST',
@@ -1093,7 +1098,23 @@ export const buyVip = async (months: 1 | 2 | 3): Promise<{
     throw new Error(err.message || 'Failed to activate VIP');
   }
 
-  return response.json();
+  const data = await response.json();
+
+  // Keep local user session in sync with new VIP status
+  try {
+    const current = getCurrentUser();
+    if (current) {
+      const updated = {
+        ...current,
+        isVip: true,
+        vipUntil: data.vipUntil
+      };
+      setCurrentUser(updated as any);
+      window.dispatchEvent(new Event('storage'));
+    }
+  } catch { /* ignore */ }
+
+  return data;
 };
 
 // ── VIP: Get Buyer Stats (VIP + Repeat Buyer tier) ───────────────────────────
@@ -1106,7 +1127,9 @@ export const getBuyerStats = async (): Promise<{
   tier: 'standard' | 'repeat' | 'vip' | 'vip_repeat';
 }> => {
   const token = getAuthToken();
-  if (!token) throw new Error('Not authenticated');
+  if (!token) {
+    return { success: false, isVip: false, vipUntil: null, completedDeals: 0, isRepeatBuyer: false, tier: 'standard' };
+  }
 
   const response = await fetch(`${API_URL}/user/buyer-stats`, {
     method: 'GET',
@@ -1121,5 +1144,81 @@ export const getBuyerStats = async (): Promise<{
   }
 
   return response.json();
+};
+
+// ── VIP: Create Crypto Payment via NOWPayments ──────────────────────────
+export interface VipCryptoPaymentResponse {
+  success: boolean;
+  payment: {
+    payment_id: string;
+    pay_address?: string;
+    pay_amount?: number;
+    pay_currency: string;
+    price_amount: number;
+    price_currency: string;
+    order_id: string;
+    status: string;
+    payment_url?: string;
+    qr_code_url?: string;
+  };
+}
+
+export const createVipCryptoPayment = async (months: 1 | 2 | 3, payCurrency = 'usdttrc20'): Promise<VipCryptoPaymentResponse> => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Please sign in to purchase VIP membership.');
+
+  const response = await fetch(`${API_URL}/user/vip-crypto-payment`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ months, pay_currency: payCurrency })
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to initialize crypto payment');
+  }
+
+  return response.json();
+};
+
+// ── VIP: Check Crypto Payment Status ────────────────────────────────────
+export const getVipPaymentStatus = async (paymentId: string): Promise<{
+  success: boolean;
+  status: string;
+  isVip?: boolean;
+  vipUntil?: string | null;
+  actually_paid?: number;
+  pay_currency?: string;
+}> => {
+  const token = getAuthToken();
+  if (!token) throw new Error('Not authenticated');
+
+  const response = await fetch(`${API_URL}/user/vip-payment-status/${paymentId}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.message || 'Failed to check payment status');
+  }
+
+  const data = await response.json();
+
+  if (data.isVip && data.vipUntil) {
+    try {
+      const current = getCurrentUser();
+      if (current) {
+        setCurrentUser({ ...current, isVip: true, vipUntil: data.vipUntil } as any);
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch { /* ignore */ }
+  }
+
+  return data;
 };
 

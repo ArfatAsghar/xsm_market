@@ -25,31 +25,32 @@ export default {
 				background: 'hsl(var(--background))',
 				foreground: 'hsl(var(--foreground))',
 				primary: {
-					DEFAULT: '#ffd000',
+					DEFAULT: 'var(--xsm-primary)',
 					foreground: '#000000'
 				},
 				secondary: {
-					DEFAULT: '#1A1A1A',
-					foreground: '#FFFF00'
+					DEFAULT: 'var(--xsm-dark-gray)',
+					foreground: 'var(--xsm-primary)'
 				},
 				destructive: {
 					DEFAULT: 'hsl(var(--destructive))',
 					foreground: 'hsl(var(--destructive-foreground))'
 				},
 				muted: {
-					DEFAULT: '#333333',
-					foreground: '#CCCCCC'
+					DEFAULT: 'var(--xsm-medium-gray)',
+					foreground: 'var(--xsm-light-gray)'
 				},
 				accent: {
-					DEFAULT: '#ffd000',
+					DEFAULT: 'var(--xsm-primary)',
 					foreground: '#000000'
-				},					popover: {
-					DEFAULT: '#1A1A1A',
-					foreground: '#ffd000'
+				},
+				popover: {
+					DEFAULT: 'var(--xsm-dark-gray)',
+					foreground: 'var(--xsm-primary)'
 				},
 				card: {
-					DEFAULT: '#1A1A1A',
-					foreground: '#FFFFFF'
+					DEFAULT: 'var(--xsm-dark-gray)',
+					foreground: 'var(--xsm-text)'
 				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
@@ -62,11 +63,11 @@ export default {
 					ring: 'hsl(var(--sidebar-ring))'
 				},
 				xsm: {
-					black: '#000000',
-					yellow: '#ffd000',
-					'dark-gray': '#1A1A1A',
-					'medium-gray': '#333333',
-					'light-gray': '#666666'
+					black: 'var(--xsm-bg)',
+					yellow: 'var(--xsm-primary)',
+					'dark-gray': 'var(--xsm-dark-gray)',
+					'medium-gray': 'var(--xsm-medium-gray)',
+					'light-gray': 'var(--xsm-light-gray)'
 				}
 			},
 			borderRadius: {

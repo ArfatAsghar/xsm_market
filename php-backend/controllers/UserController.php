@@ -1449,6 +1449,154 @@ public function getUserByUsername($username) {
         }
     }
 
+    // ── VIP: Create Crypto Payment via NOWPayments ──────────────────────────
+    public function createVipCryptoPayment() {
+        try {
+            $user = AuthMiddleware::authenticate();
+            $input = json_decode(file_get_contents('php://input'), true);
+            $months = (int)($input['months'] ?? 1);
+            $payCurrency = strtolower(trim($input['pay_currency'] ?? 'usdttrc20'));
+
+            if (!in_array($months, [1, 2, 3])) {
+                Response::error('Invalid subscription duration. Choose 1, 2, or 3 months.', 400);
+                return;
+            }
+
+            $prices = [1 => 10.00, 2 => 18.00, 3 => 25.00];
+            $price = $prices[$months];
+
+            require_once __DIR__ . '/../utils/NOWPaymentsAPI.php';
+            $nowPayments = new NOWPaymentsAPI();
+            $orderId = "vip_{$user['id']}_{$months}_" . time();
+
+            $paymentData = [
+                'price_amount' => $price,
+                'price_currency' => 'usd',
+                'pay_currency' => $payCurrency,
+                'order_id' => $orderId,
+                'order_description' => "XSM Market VIP Membership ({$months} Month" . ($months > 1 ? 's' : '') . ")",
+                'customer_email' => $user['email'] ?? null,
+                'case' => 'success'
+            ];
+
+            $paymentResponse = $nowPayments->createPayment($paymentData);
+
+            $pdo = Database::getConnection();
+            $stmt = $pdo->prepare("
+                INSERT INTO vip_purchases 
+                (user_id, months, amount, payment_id, payment_status, pay_currency, pay_amount, pay_address, payment_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
+            $stmt->execute([
+                $user['id'],
+                $months,
+                $price,
+                $paymentResponse['payment_id'] ?? null,
+                $paymentResponse['payment_status'] ?? 'waiting',
+                $paymentResponse['pay_currency'] ?? $payCurrency,
+                $paymentResponse['pay_amount'] ?? null,
+                $paymentResponse['pay_address'] ?? null,
+                $paymentResponse['payment_url'] ?? null
+            ]);
+
+            Response::json([
+                'success' => true,
+                'payment' => [
+                    'payment_id' => $paymentResponse['payment_id'] ?? null,
+                    'pay_address' => $paymentResponse['pay_address'] ?? null,
+                    'pay_amount' => $paymentResponse['pay_amount'] ?? null,
+                    'pay_currency' => $paymentResponse['pay_currency'] ?? $payCurrency,
+                    'price_amount' => $price,
+                    'price_currency' => 'usd',
+                    'order_id' => $orderId,
+                    'status' => $paymentResponse['payment_status'] ?? 'waiting',
+                    'payment_url' => $paymentResponse['payment_url'] ?? null,
+                    'qr_code_url' => $paymentResponse['qr_code_url'] ?? null
+                ]
+            ]);
+        } catch (Exception $e) {
+            error_log('createVipCryptoPayment error: ' . $e->getMessage());
+            Response::error('Failed to initialize crypto payment: ' . $e->getMessage(), 500);
+        }
+    }
+
+    // ── VIP: Check Crypto Payment Status ────────────────────────────────────
+    public function getVipPaymentStatus($paymentId) {
+        try {
+            $user = AuthMiddleware::authenticate();
+            $pdo = Database::getConnection();
+
+            $stmt = $pdo->prepare("SELECT * FROM vip_purchases WHERE payment_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1");
+            $stmt->execute([$paymentId, $user['id']]);
+            $purchase = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$purchase) {
+                Response::error('Payment record not found', 404);
+                return;
+            }
+
+            require_once __DIR__ . '/../utils/NOWPaymentsAPI.php';
+            $nowPayments = new NOWPaymentsAPI();
+            $statusRes = $nowPayments->getPaymentStatus($paymentId);
+            $status = $statusRes['payment_status'] ?? $purchase['payment_status'] ?? 'waiting';
+
+            $newVipUntil = null;
+            $activated = false;
+
+            if (in_array($status, ['finished', 'confirmed'])) {
+                // If not already marked finished in our db, activate VIP now
+                if ($purchase['payment_status'] !== 'finished') {
+                    $uStmt = $pdo->prepare("SELECT vipUntil FROM users WHERE id = ?");
+                    $uStmt->execute([$user['id']]);
+                    $uRow = $uStmt->fetch(PDO::FETCH_ASSOC);
+
+                    $currentVipUntil = $uRow['vipUntil'] ?? null;
+                    if (!empty($currentVipUntil) && strtotime($currentVipUntil) > time()) {
+                        $base = new DateTime($currentVipUntil);
+                    } else {
+                        $base = new DateTime();
+                    }
+                    $base->modify("+{$purchase['months']} months");
+                    $newVipUntil = $base->format('Y-m-d H:i:s');
+
+                    $pdo->prepare("UPDATE users SET vipUntil = ? WHERE id = ?")->execute([$newVipUntil, $user['id']]);
+                    $pdo->prepare("UPDATE vip_purchases SET payment_status = ? WHERE payment_id = ?")->execute([$status, $paymentId]);
+
+                    // Notification
+                    try {
+                        $pdo->prepare("
+                            INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                            VALUES (?, 'vip', 'VIP Status Activated 👑',
+                                    'Crypto payment confirmed! Your VIP membership is now active until {$newVipUntil}.',
+                                    '/profile', 0, NOW())
+                        ")->execute([(int)$user['id']]);
+                    } catch (Throwable $e) {}
+
+                    $activated = true;
+                } else {
+                    $uStmt = $pdo->prepare("SELECT vipUntil FROM users WHERE id = ?");
+                    $uStmt->execute([$user['id']]);
+                    $newVipUntil = $uStmt->fetchColumn();
+                    $activated = true;
+                }
+            } else {
+                $pdo->prepare("UPDATE vip_purchases SET payment_status = ? WHERE payment_id = ?")->execute([$status, $paymentId]);
+            }
+
+            Response::json([
+                'success' => true,
+                'status' => $status,
+                'isVip' => $activated,
+                'vipUntil' => $newVipUntil,
+                'actually_paid' => $statusRes['actually_paid'] ?? null,
+                'pay_currency' => $statusRes['pay_currency'] ?? $purchase['pay_currency']
+            ]);
+        } catch (Exception $e) {
+            error_log('getVipPaymentStatus error: ' . $e->getMessage());
+            Response::error('Failed to check payment status: ' . $e->getMessage(), 500);
+        }
+    }
+
     // ── VIP: Get Buyer Stats (VIP status + repeat buyer) ─────────────────────
     public function getBuyerStats() {
         try {

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle, DollarSign, User, Eye, Calendar, TrendingUp, Send, Search, X } from 'lucide-react';
+import { Clock, CheckCircle, DollarSign, User, Eye, Calendar, TrendingUp, Send, Search, X, ShieldAlert } from 'lucide-react';
 import { getAllDeals, markPrimaryOwnerMade, updateDealStatusAdmin } from '@/services/admin';
 import { useAuth } from '@/context/useAuth';
+import DealAlertModal, { DealAlertModalProps } from '../DealAlertModal';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
@@ -75,6 +76,7 @@ const ReviewDeals: React.FC = () => {
   const [sendingMessage, setSendingMessage] = useState<number | null>(null);
   const [searchTxnId, setSearchTxnId] = useState('');
   const [selectedStatusTab, setSelectedStatusTab] = useState('All');
+  const [alertConfig, setAlertConfig] = useState<Omit<DealAlertModalProps, 'onClose'> | null>(null);
 
   // Auto-open deal modal when exact transaction ID is typed/found
   // Auto-open deal modal when exact transaction ID is typed/found
@@ -186,6 +188,62 @@ const ReviewDeals: React.FC = () => {
     }
   };
 
+  const handleBypassFee = (deal: Deal) => {
+    setAlertConfig({
+      title: '⚡ Bypass Escrow Fee (Admin Override)',
+      message: `Are you sure you want to bypass the escrow fee for Deal #${deal.id} (${deal.channel_title})?\n\nThis will mark the transaction fee as paid, allocate an agent Gmail from the pool, notify the seller in chat to grant permissions, and advance the deal to "agent_access_pending".`,
+      type: 'warning',
+      confirmText: 'Bypass Escrow Fee',
+      cancelText: 'Cancel',
+      details: [
+        { label: 'Transaction ID', value: deal.transaction_id || `#${deal.id}` },
+        { label: 'Channel', value: deal.channel_title },
+        { label: 'Escrow Fee', value: `$${deal.price ? (deal.price * 0.1).toFixed(2) : '0'}` }
+      ],
+      onConfirm: async () => {
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch(`${API_URL}/api/deals/${deal.id}/admin-bypass-fee`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              reason: 'Bypassed from Admin Review Deals panel'
+            })
+          });
+          const res = await response.json();
+          if (res.success) {
+            fetchDeals();
+            setSelectedDeal(prev => prev && prev.id === deal.id ? {
+              ...prev,
+              transaction_fee_paid: true,
+              transaction_fee_paid_at: new Date().toISOString(),
+              transaction_fee_payment_method: 'admin_bypass',
+              transaction_fee_paid_by: 'admin_bypass',
+              status: 'agent_access_pending'
+            } : prev);
+            setAlertConfig({
+              title: '✅ Escrow Fee Bypassed',
+              message: res.message || 'Escrow fee bypassed successfully! Deal is now advancing.',
+              type: 'success',
+              confirmText: 'Done'
+            });
+          } else {
+            throw new Error(res.message || 'Bypass failed');
+          }
+        } catch (err: any) {
+          setAlertConfig({
+            title: 'Bypass Failed',
+            message: err.message || 'Could not bypass escrow fee.',
+            type: 'error'
+          });
+        }
+      }
+    });
+  };
+
   const getStatusColor = (status: string) => {
     const category = mapStatusToCategory(status);
     switch (category) {
@@ -243,7 +301,7 @@ const ReviewDeals: React.FC = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-white">Deal Management</h2>
+        <h2 className="text-2xl font-bold text-foreground">Deal Management</h2>
         <button
           onClick={fetchDeals}
           className="px-4 py-2 bg-xsm-yellow text-black rounded-lg hover:bg-yellow-400 transition-colors"
@@ -259,7 +317,7 @@ const ReviewDeals: React.FC = () => {
             <TrendingUp className="w-6 h-6 text-xsm-yellow" />
             <div>
               <p className="text-sm text-gray-400">Total Deals</p>
-              <p className="text-xl font-bold text-white">{deals.length}</p>
+              <p className="text-xl font-bold text-foreground">{deals.length}</p>
             </div>
           </div>
         </div>
@@ -330,7 +388,7 @@ const ReviewDeals: React.FC = () => {
           value={searchTxnId}
           onChange={e => setSearchTxnId(e.target.value)}
           placeholder="Search by Transaction ID (e.g. 000001)"
-          className="w-full bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg pl-10 pr-10 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-xsm-yellow transition-colors text-sm"
+          className="w-full bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg pl-10 pr-10 py-2.5 text-foreground placeholder-muted-foreground focus:outline-none focus:border-xsm-yellow transition-colors text-sm"
         />
         {searchTxnId && (
           <button
@@ -384,8 +442,8 @@ const ReviewDeals: React.FC = () => {
                   </td>
                   <td className="px-4 py-3">
                     <div>
-                      <p className="text-sm font-medium text-white">{deal.channel_title}</p>
-                      <p className="text-xs text-gray-400">{deal.platform}</p>
+                      <p className="text-sm font-medium text-foreground">{deal.channel_title}</p>
+                      <p className="text-xs text-muted-foreground">{deal.platform}</p>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-sm font-medium text-green-400">
@@ -393,14 +451,14 @@ const ReviewDeals: React.FC = () => {
                   </td>
                   <td className="px-4 py-3">
                     <div>
-                      <p className="text-sm text-white">{deal.buyer.username}</p>
-                      <p className="text-xs text-gray-400">{deal.buyer.email}</p>
+                      <p className="text-sm text-foreground">{deal.buyer.username}</p>
+                      <p className="text-xs text-muted-foreground">{deal.buyer.email}</p>
                     </div>
                   </td>
                   <td className="px-4 py-3">
                     <div>
-                      <p className="text-sm text-white">{deal.seller.username}</p>
-                      <p className="text-xs text-gray-400">{deal.seller.email}</p>
+                      <p className="text-sm text-foreground">{deal.seller.username}</p>
+                      <p className="text-xs text-muted-foreground">{deal.seller.email}</p>
                     </div>
                   </td>
                   <td className="px-4 py-3">
@@ -432,6 +490,18 @@ const ReviewDeals: React.FC = () => {
                         <Eye className="w-4 h-4" />
                       </button>
                       
+                      {/* Admin/Manager: Bypass Escrow Fee Button if fee not paid yet */}
+                      {!isCurrentUserViewer && !deal.transaction_fee_paid && deal.seller_agreed && (
+                        <button
+                          onClick={() => handleBypassFee(deal)}
+                          className="bg-red-600/90 hover:bg-red-600 text-white px-2.5 py-1 rounded text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 shadow-sm"
+                          title="Bypass Escrow Fee (No Payment Gateway)"
+                        >
+                          <ShieldAlert className="w-3 h-3" />
+                          Bypass Fee
+                        </button>
+                      )}
+
                       {/* Admin/Manager: "I HAVE MADE THE PRIMARY OWNER" Button — hidden for viewers */}
                       {!isCurrentUserViewer && deal.seller_gave_rights && !deal.seller_made_primary_owner && (
                         <button
@@ -590,6 +660,27 @@ const ReviewDeals: React.FC = () => {
                 </div>
               </div>
 
+              {/* Admin Escrow Fee Bypass Card — visible when fee is pending */}
+              {!isCurrentUserViewer && !selectedDeal.transaction_fee_paid && (
+                <div className="bg-red-950/40 border border-red-500/40 p-4 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="font-semibold text-red-400 text-sm flex items-center gap-1.5">
+                      <ShieldAlert className="w-4 h-4" /> Escrow Fee Pending (No Payment Gateway)
+                    </h4>
+                    <p className="text-xs text-gray-300 mt-0.5">
+                      No payment gateway available? You can waive/bypass the escrow fee to allocate an agent email and move this deal forward.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => handleBypassFee(selectedDeal)}
+                    className="px-3.5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg text-xs font-bold transition-all shadow-md shrink-0 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ShieldAlert className="w-3.5 h-3.5" />
+                    Bypass Escrow Fee
+                  </button>
+                </div>
+              )}
+
               {/* Admin Deal Status Force Override Dropdown */}
               {!isCurrentUserViewer && (
                 <div className="bg-xsm-medium-gray p-4 rounded-lg border border-xsm-medium-gray/50">
@@ -597,21 +688,47 @@ const ReviewDeals: React.FC = () => {
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                     <select
                       value={selectedDeal.status.toLowerCase()}
-                      onChange={async (e) => {
+                      onChange={(e) => {
                         const newStatus = e.target.value;
-                        const conf = window.confirm(`⚠️ WARNING: You are about to override this deal status to "${newStatus.toUpperCase()}". Do you want to proceed?`);
-                        if (conf) {
-                          try {
-                            const res = await updateDealStatusAdmin(selectedDeal.id, newStatus);
-                            if (res.success) {
-                              alert(`✅ Deal status successfully updated to "${newStatus.toUpperCase()}"`);
-                              fetchDeals(); // Refresh list
-                              setSelectedDeal(prev => prev ? { ...prev, status: newStatus } : null);
+                        setAlertConfig({
+                          title: 'Confirm Deal Status Override',
+                          message: `Are you sure you want to override the status of this deal to "${newStatus.toUpperCase()}"? This will update the database immediately.`,
+                          type: 'info',
+                          confirmText: 'Yes, Override Status',
+                          cancelText: 'Cancel',
+                          details: [
+                            { label: 'Transaction ID', value: selectedDeal.transaction_id || `#${selectedDeal.id}` },
+                            { label: 'Channel', value: selectedDeal.channel_title },
+                            { label: 'New Status', value: newStatus.toUpperCase() }
+                          ],
+                          onConfirm: async () => {
+                            try {
+                              const res = await updateDealStatusAdmin(selectedDeal.id, newStatus);
+                              if (res.success) {
+                                fetchDeals(); // Refresh list
+                                setSelectedDeal(prev => prev ? { ...prev, status: newStatus } : null);
+                                setAlertConfig({
+                                  title: 'Deal Status Updated',
+                                  message: `Deal #${selectedDeal.id} status was successfully updated to "${newStatus.toUpperCase()}".`,
+                                  type: 'success',
+                                  confirmText: 'Done',
+                                  details: [
+                                    { label: 'Transaction ID', value: selectedDeal.transaction_id || `#${selectedDeal.id}` },
+                                    { label: 'New Status', value: newStatus.toUpperCase() }
+                                  ]
+                                });
+                              } else {
+                                throw new Error(res.message || 'Status update returned an error');
+                              }
+                            } catch (err: any) {
+                              setAlertConfig({
+                                title: 'Status Update Failed',
+                                message: err.message || 'Could not update deal status. Please try again.',
+                                type: 'error'
+                              });
                             }
-                          } catch (err: any) {
-                            alert('❌ Status update failed: ' + err.message);
                           }
-                        }
+                        });
                       }}
                       className="bg-xsm-dark-gray text-white border border-xsm-medium-gray rounded-md px-3 py-2 text-sm focus:outline-none focus:border-xsm-yellow font-medium"
                     >
@@ -736,6 +853,19 @@ const ReviewDeals: React.FC = () => {
             )}
           </div>
         </div>
+      )}
+
+      {/* Custom Theme-Adaptive Alert Modal */}
+      {alertConfig && (
+        <DealAlertModal
+          {...alertConfig}
+          onClose={() => {
+            if (alertConfig.onClose) {
+              alertConfig.onClose();
+            }
+            setAlertConfig(null);
+          }}
+        />
       )}
     </div>
   );

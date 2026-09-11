@@ -20,7 +20,7 @@ interface DealCardMessageProps {
   dealData: DealCardData;
   isHighlighted?: boolean;
   messageRef?: React.RefObject<HTMLDivElement>;
-  onOpenDealModal?: (dealId: number | string) => void;
+  onOpenDealModal?: (dealId: number | string, contextData?: DealCardData) => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: React.ReactNode }> = {
@@ -89,8 +89,9 @@ const DealCardMessage: React.FC<DealCardMessageProps> = ({
   };
 
   const handleReviewClick = () => {
-    if (onOpenDealModal && dealData.deal_id) {
-      onOpenDealModal(dealData.deal_id);
+    const dealIdentifier = dealData.transaction_id || dealData.deal_id;
+    if (onOpenDealModal && dealIdentifier) {
+      onOpenDealModal(dealIdentifier, dealData);
     } else {
       navigate('/seller-deals');
     }
@@ -108,20 +109,30 @@ const DealCardMessage: React.FC<DealCardMessageProps> = ({
           isHighlighted
             ? 'border-xsm-yellow shadow-[0_0_30px_rgba(255,208,0,0.45)] ring-2 ring-xsm-yellow/60'
             : 'border-xsm-yellow/40 hover:border-xsm-yellow/70'
-        } bg-gradient-to-br from-[#1c1800] via-xsm-dark-gray to-[#0d0d0d]`}
+        }`}
+        style={{
+          background: 'var(--xsm-dark-gray)',
+          borderColor: isHighlighted ? 'var(--xsm-primary)' : 'var(--xsm-border)',
+        }}
       >
         {/* Yellow top accent bar */}
-        <div className="h-1 w-full bg-gradient-to-r from-xsm-yellow via-amber-400 to-yellow-600" />
+        <div className="h-1 w-full" style={{ background: 'var(--xsm-primary)' }} />
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b border-xsm-medium-gray/40 bg-black/40">
+        <div 
+          className="flex items-center justify-between px-4 pt-3.5 pb-2.5 border-b"
+          style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}
+        >
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-xsm-yellow/20 rounded-lg border border-xsm-yellow/40 text-xsm-yellow shadow">
+            <div 
+              className="p-1.5 rounded-lg border shadow-sm"
+              style={{ background: 'rgba(234, 179, 8, 0.1)', borderColor: 'rgba(234, 179, 8, 0.3)', color: 'var(--xsm-primary)' }}
+            >
               <Shield className="w-4 h-4" />
             </div>
             <div>
-              <p className="text-[11px] font-extrabold uppercase tracking-wider text-xsm-yellow">Deal Initiated</p>
-              <p className="text-[10px] text-gray-300 font-mono">
+              <p className="text-[11px] font-extrabold uppercase tracking-wider" style={{ color: 'var(--xsm-primary)' }}>Deal Initiated</p>
+              <p className="text-[10px] font-mono" style={{ color: 'var(--xsm-light-gray)' }}>
                 {dealData.transaction_id || `TXN${String(dealData.deal_id || 0).padStart(4, '0')}`}
               </p>
             </div>
@@ -134,32 +145,36 @@ const DealCardMessage: React.FC<DealCardMessageProps> = ({
 
         {/* Channel info */}
         <div className="px-4 py-3.5 space-y-3">
-          <p className="text-white font-bold text-sm leading-snug flex items-center gap-2">
-            <FileText className="w-4 h-4 text-xsm-yellow flex-shrink-0" />
+          <p className="font-bold text-sm leading-snug flex items-center gap-2" style={{ color: 'var(--xsm-text)' }}>
+            <FileText className="w-4 h-4 flex-shrink-0" style={{ color: 'var(--xsm-primary)' }} />
             <span>{dealData.channel_title}</span>
           </p>
 
           {/* Price row */}
           <div className="grid grid-cols-2 gap-2.5">
-            <div className="bg-xsm-black/80 rounded-xl p-2.5 border border-xsm-medium-gray/30 shadow-inner">
-              <p className="text-[10px] text-gray-400 font-medium mb-0.5">Sale Price</p>
-              <p className="text-base font-black text-xsm-yellow">${Number(dealData.channel_price || 0).toLocaleString()}</p>
+            <div className="rounded-xl p-2.5 border shadow-sm" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+              <p className="text-[10px] font-medium mb-0.5" style={{ color: 'var(--xsm-light-gray)' }}>Sale Price</p>
+              <p className="text-base font-black" style={{ color: 'var(--xsm-primary)' }}>${Number(dealData.channel_price || 0).toLocaleString()}</p>
             </div>
-            <div className="bg-xsm-black/80 rounded-xl p-2.5 border border-xsm-medium-gray/30 shadow-inner">
-              <p className="text-[10px] text-gray-400 font-medium mb-0.5">Escrow Fee</p>
-              <p className="text-base font-black text-white">${Number(dealData.escrow_fee || 0).toLocaleString()}</p>
+            <div className="rounded-xl p-2.5 border shadow-sm" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+              <p className="text-[10px] font-medium mb-0.5" style={{ color: 'var(--xsm-light-gray)' }}>Escrow Fee</p>
+              <p className="text-base font-black" style={{ color: 'var(--xsm-text)' }}>${Number(dealData.escrow_fee || 0).toLocaleString()}</p>
             </div>
           </div>
 
           {/* Payment methods */}
           {dealData.payment_methods && dealData.payment_methods.length > 0 && (
             <div>
-              <p className="text-[10px] text-gray-400 mb-1 flex items-center gap-1 font-medium">
-                <CreditCard className="w-3 h-3 text-xsm-yellow" /> Payment Methods
+              <p className="text-[10px] mb-1 flex items-center gap-1 font-medium" style={{ color: 'var(--xsm-light-gray)' }}>
+                <CreditCard className="w-3 h-3" style={{ color: 'var(--xsm-primary)' }} /> Payment Methods
               </p>
               <div className="flex flex-wrap gap-1">
                 {dealData.payment_methods.map((m, i) => (
-                  <span key={i} className="text-[10px] bg-xsm-yellow/10 border border-xsm-yellow/30 text-xsm-yellow px-2 py-0.5 rounded-md font-semibold">
+                  <span 
+                    key={i} 
+                    className="text-[10px] px-2 py-0.5 rounded-md font-semibold border"
+                    style={{ background: 'rgba(234, 179, 8, 0.1)', borderColor: 'rgba(234, 179, 8, 0.3)', color: 'var(--xsm-primary)' }}
+                  >
                     {m.name}
                   </span>
                 ))}
@@ -168,9 +183,9 @@ const DealCardMessage: React.FC<DealCardMessageProps> = ({
           )}
 
           {/* Date */}
-          <div className="flex items-center justify-between text-[10px] text-gray-400 pt-1">
+          <div className="flex items-center justify-between text-[10px] pt-1" style={{ color: 'var(--xsm-light-gray)' }}>
             <span className="flex items-center gap-1">
-              <Calendar className="w-3 h-3 text-gray-500" />
+              <Calendar className="w-3 h-3" />
               <span>Created {formatDate(dealData.created_at)}</span>
             </span>
           </div>
@@ -179,7 +194,8 @@ const DealCardMessage: React.FC<DealCardMessageProps> = ({
           <button
             type="button"
             onClick={handleReviewClick}
-            className="w-full flex items-center justify-center gap-2 bg-xsm-yellow text-black font-extrabold text-xs py-2.5 rounded-xl hover:bg-yellow-400 transition-all duration-200 shadow-lg shadow-xsm-yellow/20 hover:shadow-xsm-yellow/40 active:scale-98 cursor-pointer"
+            className="w-full flex items-center justify-center gap-2 font-extrabold text-xs py-2.5 rounded-xl transition-all duration-200 shadow-md hover:brightness-105 active:scale-98 cursor-pointer"
+            style={{ background: 'var(--xsm-primary)', color: '#000000' }}
           >
             <Eye className="w-4 h-4" />
             <span>Review Deal</span>

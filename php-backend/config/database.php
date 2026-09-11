@@ -172,6 +172,12 @@ class Database {
                 amount DECIMAL(10, 2) NOT NULL DEFAULT 10.00,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )");
+            self::addColumnIfMissing($pdo, 'vip_purchases', 'payment_id', 'VARCHAR(255) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'vip_purchases', 'payment_status', 'VARCHAR(50) NOT NULL DEFAULT "completed"');
+            self::addColumnIfMissing($pdo, 'vip_purchases', 'pay_currency', 'VARCHAR(50) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'vip_purchases', 'pay_amount', 'DECIMAL(20, 8) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'vip_purchases', 'pay_address', 'TEXT NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'vip_purchases', 'payment_url', 'TEXT NULL DEFAULT NULL');
         } catch (Throwable $e) {
             error_log('vip_purchases create warning: ' . $e->getMessage());
         }
@@ -213,6 +219,106 @@ class Database {
             $pdo->exec("ALTER TABLE notifications MODIFY COLUMN type VARCHAR(50) NOT NULL DEFAULT 'system'");
         } catch (Throwable $e) {
             error_log('notifications create warning: ' . $e->getMessage());
+        }
+
+        // ── Email Pool Manager tables ─────────────────────────────────────────────
+        try {
+            // 1. Primary email pool table
+            $pdo->exec("CREATE TABLE IF NOT EXISTS email_pool (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email_address VARCHAR(255) NOT NULL UNIQUE,
+                status ENUM('enabled', 'disabled') NOT NULL DEFAULT 'enabled',
+                platform ENUM('both', 'youtube', 'tiktok') NOT NULL DEFAULT 'both',
+                max_active_deals INT NOT NULL DEFAULT 5,
+                max_brand_accounts INT NOT NULL DEFAULT 5,
+                notes TEXT NULL DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_pool_status (status),
+                INDEX idx_pool_platform (platform)
+            )");
+
+            // 2. Active & historical deal allocations
+            $pdo->exec("CREATE TABLE IF NOT EXISTS email_pool_allocations (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email_id INT NOT NULL,
+                deal_id INT NOT NULL,
+                buyer_id INT NOT NULL,
+                platform ENUM('youtube', 'tiktok', 'other') NOT NULL DEFAULT 'youtube',
+                account_identifier VARCHAR(255) NULL DEFAULT NULL,
+                allocation_type ENUM('brand_account', 'tiktok_account', 'deal_general') NOT NULL DEFAULT 'deal_general',
+                status ENUM('active', 'completed', 'cancelled', 'reassigned') NOT NULL DEFAULT 'active',
+                assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at DATETIME NULL DEFAULT NULL,
+                reassigned_to_email_id INT NULL DEFAULT NULL,
+                reassignment_reason TEXT NULL DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_alloc_email_id (email_id),
+                INDEX idx_alloc_deal_id (deal_id),
+                INDEX idx_alloc_status (status)
+            )");
+
+            // 3. YouTube Brand accounts tracking
+            $pdo->exec("CREATE TABLE IF NOT EXISTS email_pool_brand_accounts (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email_id INT NOT NULL,
+                deal_id INT NOT NULL,
+                buyer_id INT NOT NULL,
+                brand_name VARCHAR(255) NOT NULL,
+                platform VARCHAR(50) NOT NULL DEFAULT 'youtube',
+                status ENUM('active', 'completed', 'transferred', 'removed') NOT NULL DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_brand_email_id (email_id),
+                INDEX idx_brand_deal_id (deal_id),
+                INDEX idx_brand_status (status)
+            )");
+
+            // 4. Audit history log
+            $pdo->exec("CREATE TABLE IF NOT EXISTS email_pool_history (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                email_id INT NOT NULL,
+                admin_id INT NULL DEFAULT NULL,
+                action VARCHAR(100) NOT NULL,
+                old_value TEXT NULL DEFAULT NULL,
+                new_value TEXT NULL DEFAULT NULL,
+                details TEXT NULL DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_hist_email_id (email_id)
+            )");
+
+            // 5. Settings table
+            $pdo->exec("CREATE TABLE IF NOT EXISTS email_pool_settings (
+                setting_key VARCHAR(100) PRIMARY KEY,
+                setting_value TEXT NOT NULL
+            )");
+
+            // Add columns to deals table if missing
+            if (self::tableExists($pdo, 'deals')) {
+                self::addColumnIfMissing($pdo, 'deals', 'assigned_email_id', 'INT NULL DEFAULT NULL');
+                self::addColumnIfMissing($pdo, 'deals', 'assigned_email', 'VARCHAR(255) NULL DEFAULT NULL');
+            }
+
+            // Seed default settings if empty
+            $settingsCount = $pdo->query("SELECT COUNT(*) FROM email_pool_settings")->fetchColumn();
+            if ($settingsCount == 0) {
+                $defaults = [
+                    ['default_max_capacity', '5'],
+                    ['default_max_brand_accounts', '5'],
+                    ['allocation_method', 'least_used'], // least_used, first_available, round_robin
+                    ['auto_assignment_enabled', '1'],
+                    ['allow_manager_access', '0'],
+                    ['low_capacity_threshold', '1'],
+                    ['no_available_email_alert', '1']
+                ];
+                $setStmt = $pdo->prepare("INSERT INTO email_pool_settings (setting_key, setting_value) VALUES (?, ?) ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)");
+                foreach ($defaults as $pair) {
+                    $setStmt->execute($pair);
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('email_pool tables create warning: ' . $e->getMessage());
         }
     }
 

@@ -173,6 +173,51 @@ try {
         exit();
     }
 
+    // Check if order ID is for VIP subscription (format: vip_{userId}_{months}_{timestamp})
+    if (preg_match('/^vip_(\d+)_(\d+)_\d+$/', $orderId, $vipMatches)) {
+        $vipUserId = intval($vipMatches[1]);
+        $vipMonths = intval($vipMatches[2]);
+        $pdo = Database::getConnection();
+
+        logWebhook("Processing VIP webhook for user {$vipUserId}, months {$vipMonths}, status {$paymentStatus}");
+
+        if (in_array($paymentStatus, ['confirmed', 'finished'])) {
+            $stmt = $pdo->prepare("SELECT vipUntil FROM users WHERE id = ?");
+            $stmt->execute([$vipUserId]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $currentVipUntil = $row['vipUntil'] ?? null;
+            if (!empty($currentVipUntil) && strtotime($currentVipUntil) > time()) {
+                $base = new DateTime($currentVipUntil);
+            } else {
+                $base = new DateTime();
+            }
+            $base->modify("+{$vipMonths} months");
+            $newVipUntil = $base->format('Y-m-d H:i:s');
+
+            $pdo->prepare("UPDATE users SET vipUntil = ? WHERE id = ?")->execute([$newVipUntil, $vipUserId]);
+            $pdo->prepare("UPDATE vip_purchases SET payment_status = ?, actually_paid = ?, pay_currency = ? WHERE payment_id = ?")
+                ->execute([$paymentStatus, $actuallyPaid, $payCurrency, $paymentId]);
+
+            // Notification
+            try {
+                $pdo->prepare("
+                    INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                    VALUES (?, 'vip', 'VIP Status Activated 👑',
+                            'Your cryptocurrency payment has been confirmed! Your VIP membership is now active until {$newVipUntil}.',
+                            '/profile', 0, NOW())
+                ")->execute([$vipUserId]);
+            } catch (Throwable $e) {}
+
+            logWebhook("VIP activated via webhook for user {$vipUserId} until {$newVipUntil}");
+        } else {
+            $pdo->prepare("UPDATE vip_purchases SET payment_status = ? WHERE payment_id = ?")->execute([$paymentStatus, $paymentId]);
+        }
+
+        echo json_encode(['success' => true, 'message' => 'VIP webhook processed']);
+        exit();
+    }
+
     // Extract deal ID from order ID (format: deal_{dealId}_{timestamp})
     if (preg_match('/^deal_(\d+)_\d+$/', $orderId, $matches)) {
         $dealId = intval($matches[1]);

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle, AlertTriangle, User, DollarSign, Calendar, FileText, CreditCard } from 'lucide-react';
 import TransactionFeePayment from './TransactionFeePayment';
 import PaySellerModal from './PaySellerModal';
+import DealAlertModal, { DealAlertModalProps } from './DealAlertModal';
+import { useAuth } from '@/context/useAuth';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
@@ -58,6 +60,8 @@ interface Deal {
 }
 
 const BuyerDeals: React.FC = () => {
+  const { user } = useAuth();
+  const isCurrentUserAdmin = Boolean((user as any)?.isAdmin || (user as any)?.role === 'admin' || (user as any)?.role === 'manager');
   const [deals, setDeals] = useState<Deal[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
@@ -65,6 +69,7 @@ const BuyerDeals: React.FC = () => {
   const [showPaySellerModal, setShowPaySellerModal] = useState(false);
   const [selectedPayDeal, setSelectedPayDeal] = useState<Deal | null>(null);
   const [confirmingPayment, setConfirmingPayment] = useState<number | null>(null);
+  const [alertConfig, setAlertConfig] = useState<Omit<DealAlertModalProps, 'onClose'> | null>(null);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -213,30 +218,33 @@ const BuyerDeals: React.FC = () => {
       const result = await response.json();
       
       if (response.ok) {
-        alert(`✅ Payment Confirmation Successful!
-
-🎉 Transaction Complete!
-
-✓ Payment to seller confirmed
-✓ Chat notification sent
-✓ Agent will finalize account transfer
-
-Transaction ID: ${result.transaction_id || dealId}
-
-You will receive the final account details soon. Thank you for using our secure marketplace!`);
-
         // Close the modal if it's open
         setShowPaySellerModal(false);
         setSelectedPayDeal(null);
-        
         fetchDeals(); // Refresh deals
+
+        setAlertConfig({
+          title: 'Payment Confirmed Successfully',
+          message: 'Your payment to the seller has been confirmed! A chat notification has been sent and the agent will finalize the account transfer.',
+          type: 'success',
+          confirmText: 'Done',
+          details: [
+            { label: 'Transaction ID', value: result.transaction_id || String(dealId) },
+            { label: 'Status', value: 'Payment Confirmed' },
+            { label: 'Next Step', value: 'Agent finalizes ownership transfer' }
+          ]
+        });
       } else {
         throw new Error(result.message || 'Failed to confirm payment to seller');
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error confirming payment to seller:', error);
-      alert('Failed to confirm payment: ' + error.message);
+      setAlertConfig({
+        title: 'Confirmation Failed',
+        message: error?.message || 'Failed to confirm payment to seller. Please try again or contact support.',
+        type: 'error'
+      });
     } finally {
       setConfirmingPayment(null);
     }
@@ -494,8 +502,7 @@ You will receive the final account details soon. Thank you for using our secure 
                   <button
                     className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-500 transition-colors"
                     onClick={() => {
-                      // TODO: Implement chat or contact seller functionality
-                      alert('Chat functionality will be implemented soon');
+                      window.location.href = '/chat';
                     }}
                   >
                     Contact Seller
@@ -533,6 +540,19 @@ You will receive the final account details soon. Thank you for using our secure 
             transaction_id: selectedPayDeal.transaction_id
           }}
           onPaymentConfirmed={handleConfirmPaymentToSeller}
+        />
+      )}
+
+      {/* Custom Theme-Adaptive Alert Modal */}
+      {alertConfig && (
+        <DealAlertModal
+          {...alertConfig}
+          onClose={() => {
+            if (alertConfig.onClose) {
+              alertConfig.onClose();
+            }
+            setAlertConfig(null);
+          }}
         />
       )}
     </div>

@@ -4,7 +4,7 @@ import { getAllChats, adminSendMessage, adminDeleteMessage, adminDeleteChat, res
 import {
   Send, Trash2, MessageSquare, AlertTriangle, CheckCircle,
   Plus, Clipboard, Sparkles, Search, Shield,
-  Lock, UserCheck, RefreshCw, X
+  Lock, UserCheck, RefreshCw, X, Edit
 } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 
@@ -180,12 +180,11 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
         const formattedMessages = Array.isArray(messages) ? messages.map((m: any) => ({
           id: String(m.id),
           content: m.content,
-          sender: m.isStaffMessage
-            ? (m.staffDisplayName || m.sender?.displayName || m.sender?.username || 'Official Agent')
-            : (m.sender?.displayName || m.sender?.username || 'User'),
-          senderId: m.senderId,
+          // Always use real username regardless of staff flag
+          sender: m.sender?.username || m.sender?.displayName || m.staffDisplayName || m.senderUsername || 'User',
+          senderId: m.senderId || m.sender?.id,
           isStaffMessage: Boolean(m.isStaffMessage),
-          staffDisplayName: m.isStaffMessage ? (m.staffDisplayName || m.sender?.displayName || 'Official Agent') : undefined,
+          staffDisplayName: undefined, // suppress artificial label in admin view
           timestamp: m.createdAt
         })) : [];
         setSelectedChat(prev => prev && prev.id === chat.id ? { ...prev, messages: formattedMessages } : prev);
@@ -593,63 +592,49 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
               {/* Messages + Saved Replies Split */}
               <div className="flex-1 flex gap-0 overflow-hidden min-h-0">
                 {/* Messages Column */}
-                <div className="flex-1 flex flex-col min-h-0 p-4 bg-xsm-black/30">
+                <div className="flex-1 flex flex-col min-h-0 p-4" style={{ background: 'var(--xsm-dark-gray)' }}>
                   <div className="flex-1 space-y-3 overflow-y-auto pr-2 mb-4 h-[420px] min-h-[350px]">
                     {(selectedChat.messages || []).map((message) => {
-                      const isStaff = Boolean(message.isStaffMessage || message.staffDisplayName);
+                      // Determine sender name — always use real username, never artificial labels
+                      const senderName = message.sender || 'User';
 
-                      // Map participant index to color palette for user messages
-                      const participantIdx = (selectedChat.participants || []).findIndex(
-                        p => p.username === message.sender || String(p.id) === String(message.senderId)
+                      // Assign a stable color per unique sender name
+                      const allSenders = Array.from(
+                        new Set((selectedChat.messages || []).map(m => m.sender || 'User'))
                       );
-                      const colorScheme = PARTICIPANT_PALETTES[
-                        participantIdx >= 0 ? participantIdx % PARTICIPANT_PALETTES.length : 0
-                      ];
+                      const senderIdx = allSenders.indexOf(senderName);
+                      const colorScheme = PARTICIPANT_PALETTES[senderIdx >= 0 ? senderIdx % PARTICIPANT_PALETTES.length : 0];
 
-                      if (isStaff) {
-                        // Staff/Admin Dashboard message style
-                        const displayName = message.staffDisplayName || message.sender || 'Staff';
-                        return (
-                          <div key={message.id} className="flex justify-end w-full my-2">
-                            <div className="max-w-md bg-gradient-to-br from-teal-950/80 via-gray-900 to-gray-900 border border-teal-500/40 rounded-2xl rounded-tr-sm p-3.5 shadow-lg text-white">
-                              <div className="flex items-center justify-between gap-2 mb-1.5 border-b border-teal-500/20 pb-1">
-                                <div className="flex items-center gap-1.5">
-                                  <Shield className="w-3.5 h-3.5 text-teal-400" />
-                                  <span className="text-xs font-bold text-teal-300">{displayName}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-[10px] text-teal-400/60">{formatDate(message.timestamp)}</span>
-                                  {isCurrentUserAdmin && (
-                                    <button
-                                      onClick={() => handleDeleteMessage(message.id)}
-                                      className="p-1 hover:bg-red-500/20 text-teal-400 hover:text-red-400 rounded transition-colors"
-                                      title="Delete message"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                              <p className="text-sm leading-relaxed text-gray-100">{message.content}</p>
-                            </div>
-                          </div>
-                        );
-                      }
+                      // Align right if this sender is the current logged-in admin
+                      const isOwnMessage = String(message.senderId) === String((currentUser as any)?.id);
 
-                      // User message style (distinct by participant color)
                       return (
-                        <div key={message.id} className="flex justify-start w-full my-2">
-                          <div className={`max-w-md rounded-2xl rounded-tl-sm p-3.5 border shadow-md bg-xsm-black ${colorScheme.border}`}>
-                            <div className="flex items-center justify-between gap-2 mb-1.5 border-b border-white/10 pb-1">
-                              <span className={`text-xs font-bold ${colorScheme.text}`}>
-                                {message.sender}
+                        <div
+                          key={message.id}
+                          className={`flex w-full my-2 ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            className={`max-w-md rounded-2xl p-3.5 border shadow-md ${
+                              isOwnMessage
+                                ? 'rounded-tr-sm'
+                                : `rounded-tl-sm ${colorScheme.border}`
+                            }`}
+                            style={isOwnMessage
+                              ? { background: 'var(--xsm-bg)', borderColor: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' }
+                              : { background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' }
+                            }
+                          >
+                            <div className="flex items-center justify-between gap-2 mb-1.5 pb-1" style={{ borderBottom: '1px solid var(--xsm-border)' }}>
+                              <span className={`text-xs font-bold ${isOwnMessage ? 'text-xsm-yellow' : colorScheme.text}`}>
+                                {senderName}
                               </span>
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[10px] text-gray-400">{formatDate(message.timestamp)}</span>
+                                <span className="text-[10px] font-medium" style={{ color: 'var(--xsm-light-gray)' }}>{formatDate(message.timestamp)}</span>
                                 {isCurrentUserAdmin && (
                                   <button
                                     onClick={() => handleDeleteMessage(message.id)}
-                                    className="p-1 hover:bg-red-500/20 text-gray-400 hover:text-red-400 rounded transition-colors"
+                                    className="p-1 hover:bg-red-500/20 hover:text-red-400 rounded transition-colors"
+                                    style={{ color: 'var(--xsm-light-gray)' }}
                                     title="Delete message"
                                   >
                                     <Trash2 className="w-3 h-3" />
@@ -657,14 +642,14 @@ const ReviewChats: React.FC<ReviewChatsProps> = ({ initialChatId }) => {
                                 )}
                               </div>
                             </div>
-                            <p className="text-sm text-gray-200 leading-relaxed">{message.content}</p>
+                            <p className="text-sm font-medium leading-relaxed" style={{ color: 'var(--xsm-text)' }}>{message.content}</p>
                           </div>
                         </div>
                       );
                     })}
 
                     {(selectedChat.messages || []).length === 0 && (
-                      <div className="text-center text-gray-400 py-12 text-sm">No messages yet in this conversation</div>
+                      <div className="text-center py-12 text-sm" style={{ color: 'var(--xsm-light-gray)' }}>No messages yet in this conversation</div>
                     )}
                     <div ref={messagesEndRef} />
                   </div>

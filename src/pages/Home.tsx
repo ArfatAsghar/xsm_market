@@ -304,15 +304,15 @@ const Home: React.FC<HomeProps> = () => {
                     setHasNewUpdates(false);
                   }
                 }}
-                className="bg-gradient-to-r from-amber-950/80 via-xsm-black to-amber-950/80 border border-xsm-yellow/40 rounded-xl px-4 py-2 flex items-center gap-3 cursor-pointer hover:border-xsm-yellow transition-all shadow-md group mb-3.5 overflow-hidden"
+                className="bg-gradient-to-r from-amber-950/80 via-xsm-black to-amber-950/80 border border-xsm-yellow/40 px-4 py-2 flex items-center gap-3 cursor-pointer hover:border-xsm-yellow transition-all shadow-md group mb-3.5 overflow-hidden"
               >
-                <div className="flex items-center gap-1.5 bg-xsm-yellow text-black text-xs font-bold px-2.5 py-1 rounded-full shrink-0 uppercase tracking-wider shadow">
+                <div className="flex items-center gap-1.5 bg-xsm-yellow text-black text-xs font-bold px-2.5 py-1 shrink-0 uppercase tracking-wider shadow">
                   <Bell className="w-3.5 h-3.5" />
                   <span>Updates</span>
                 </div>
                 {/* NEW badge — only when there are unseen announcements */}
                 {hasNewUpdates && (
-                  <span className="text-[10px] bg-amber-500 text-black font-black px-2 py-0.5 rounded-full shadow animate-pulse shrink-0 uppercase tracking-wide">
+                  <span className="text-[10px] bg-amber-500 text-black font-black px-2 py-0.5 shadow animate-pulse shrink-0 uppercase tracking-wide">
                     NEW
                   </span>
                 )}
@@ -339,7 +339,7 @@ const Home: React.FC<HomeProps> = () => {
               </div>
             )}
 
-            <div className="bg-xsm-dark-gray rounded-xl p-3.5 sm:p-4 mb-5 shadow-lg border border-xsm-medium-gray/30 relative overflow-hidden">
+            <div className="bg-xsm-dark-gray p-3.5 sm:p-4 mb-5 shadow-lg border border-xsm-medium-gray/30 relative overflow-hidden">
             {/* Fade gradient effect for search section */}
             <div className="absolute inset-0 bg-gradient-radial from-xsm-yellow/10 via-xsm-dark-gray/80 to-xsm-dark-gray pointer-events-none"></div>
             
@@ -410,7 +410,7 @@ const Home: React.FC<HomeProps> = () => {
                     })}
                     <button
                       onClick={() => setSelectedPlatform('All Platforms')}
-                      className={`text-xs py-2 px-4 rounded-full border-2 shadow-md transition-all ${
+                      className={`text-xs py-2 px-4 border-2 shadow-md transition-all ${
                         selectedPlatform === 'All Platforms' 
                           ? 'bg-xsm-yellow text-black border-xsm-yellow font-bold' 
                           : 'bg-xsm-black text-white border-xsm-yellow/50 hover:bg-xsm-yellow/10 hover:border-xsm-yellow hover:text-xsm-yellow'
@@ -431,7 +431,7 @@ const Home: React.FC<HomeProps> = () => {
                           placeholder="Search channels..."
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
-                          className="xsm-input w-full pl-11 pr-4 py-3 rounded-xl border border-xsm-medium-gray/40 bg-xsm-black/70 text-white placeholder-xsm-light-gray focus:border-xsm-yellow transition-all"
+                          className="xsm-input w-full pl-11 pr-4 py-3 border border-xsm-medium-gray/40 bg-xsm-black/70 text-white placeholder-xsm-light-gray focus:border-xsm-yellow transition-all"
                         />
                       </div>
                     </div>
@@ -607,7 +607,7 @@ const Home: React.FC<HomeProps> = () => {
       {/* Website Updates History Modal per Revision 28 */}
       {showUpdatesModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-xsm-dark-gray border border-xsm-medium-gray/40 rounded-2xl max-w-2xl w-full p-6 max-h-[85vh] overflow-y-auto">
+          <div className="bg-xsm-dark-gray border border-xsm-medium-gray/40 max-w-2xl w-full p-6 max-h-[85vh] overflow-y-auto">
             <div className="flex items-center justify-between pb-4 border-b border-xsm-medium-gray/30 mb-6">
               <div className="flex items-center gap-2">
                 <Bell className="w-5 h-5 text-xsm-yellow" />
@@ -619,7 +619,7 @@ const Home: React.FC<HomeProps> = () => {
             </div>
             <div className="space-y-4">
               {updates.map((update) => (
-                <div key={update.id} className="p-4 bg-xsm-black/60 border border-xsm-medium-gray/20 rounded-xl">
+                <div key={update.id} className="p-4 border border-xsm-medium-gray/20" style={{ background: 'var(--xsm-bg)' }}>
                   <div className="flex items-center justify-between mb-1.5">
                     <h3 className="text-white font-bold text-base">{update.title}</h3>
                     <span className="text-xs text-xsm-light-gray">
@@ -634,13 +634,13 @@ const Home: React.FC<HomeProps> = () => {
         </div>
       )}
 
-      {/* Tagline Banner — themed with XSM yellow/black palette */}
+      {/* Tagline Banner — themed dynamically to match active theme */}
       <div
-        className="w-full relative overflow-hidden py-12 px-4 mt-2"
+        className="w-full relative overflow-hidden py-12 px-4 mt-2 transition-colors duration-300"
         style={{
-          background: 'linear-gradient(135deg, #0a0a0a 0%, #111111 50%, #0a0a0a 100%)',
-          borderTop: '1px solid rgba(255,208,0,0.12)',
-          borderBottom: '1px solid rgba(255,208,0,0.12)',
+          background: 'var(--xsm-dark-gray)',
+          borderTop: '1px solid var(--xsm-border)',
+          borderBottom: '1px solid var(--xsm-border)',
         }}
       >
         {/* Subtle gold ambient glow */}
@@ -650,7 +650,7 @@ const Home: React.FC<HomeProps> = () => {
         />
 
         {/* Headline */}
-        <h2 className="relative text-center text-white text-2xl sm:text-3xl md:text-4xl font-black tracking-tight leading-tight max-w-4xl mx-auto mb-3">
+        <h2 className="relative text-center text-foreground text-2xl sm:text-3xl md:text-4xl font-black tracking-tight leading-tight max-w-4xl mx-auto mb-3">
           The #1 Platform for{' '}
           <span
             className="relative inline-block"
@@ -666,7 +666,7 @@ const Home: React.FC<HomeProps> = () => {
         </h2>
 
         {/* Sub-tagline */}
-        <p className="relative text-center text-gray-400 text-sm sm:text-base max-w-2xl mx-auto mb-8 leading-relaxed">
+        <p className="relative text-center text-muted-foreground text-sm sm:text-base max-w-2xl mx-auto mb-8 leading-relaxed">
           XSM Market connects buyers and sellers of social media accounts through a fully managed escrow system — no scams, no middlemen, just safe verified deals.
         </p>
 
@@ -682,11 +682,11 @@ const Home: React.FC<HomeProps> = () => {
           ].map(({ icon, label }) => (
             <span
               key={label}
-              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border"
+              className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border shadow-sm transition-all"
               style={{
-                background: 'rgba(255,208,0,0.07)',
+                background: 'rgba(255,208,0,0.08)',
                 borderColor: 'rgba(255,208,0,0.25)',
-                color: '#FFD700',
+                color: 'var(--xsm-primary)',
               }}
             >
               <span>{icon}</span>

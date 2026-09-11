@@ -53,10 +53,12 @@ export const getImageUrl = (
 ): string | null => {
   if (!imagePath) return null;
 
-  const normalizedPath =
+  let normalizedPath =
     typeof imagePath === 'string'
       ? imagePath
       : imagePath.url || imagePath.data || imagePath.thumbnail || imagePath.path || '';
+
+  normalizedPath = (normalizedPath || '').trim().replace(/\\/g, '/');
 
   if (!normalizedPath || normalizedPath === '0' || normalizedPath === 'NULL' || normalizedPath === 'null') {
     return null;
@@ -70,12 +72,6 @@ export const getImageUrl = (
   }
 
   if (normalizedPath.startsWith('http://') || normalizedPath.startsWith('https://')) {
-    // If it's an uploaded file from our own backend that was formatted with /uploads/ instead of /api/uploads/
-    const uploadsIndex = normalizedPath.indexOf('/uploads/');
-    const apiUploadsIndex = normalizedPath.indexOf('/api/uploads/');
-    if (uploadsIndex !== -1 && apiUploadsIndex === -1) {
-      return normalizedPath.replace('/uploads/', '/api/uploads/');
-    }
     return normalizedPath;
   }
 
@@ -84,12 +80,36 @@ export const getImageUrl = (
   }
 
   if (normalizedPath.startsWith('/uploads/')) {
-    return `/api${normalizedPath}`;
+    return normalizedPath;
   }
 
   if (normalizedPath.startsWith('uploads/')) {
-    return `/api/${normalizedPath}`;
+    return `/${normalizedPath}`;
   }
 
-  return normalizedPath;
+  // Bare chat filename (e.g. thumb_66c...png or 66c...png)
+  if (!normalizedPath.includes('/') && /\.(jpe?g|png|gif|webp|mp4|webm|mov)$/i.test(normalizedPath)) {
+    return `/api/uploads/chat/${normalizedPath}`;
+  }
+
+  if (normalizedPath.startsWith('/')) {
+    return normalizedPath;
+  }
+
+  return `/${normalizedPath}`;
+};
+
+// Returns alternate fallback URL (e.g. swaps /api/uploads/ <-> /uploads/)
+export const getAlternateImageUrl = (url: string): string | null => {
+  if (!url) return null;
+  if (url.startsWith('/api/uploads/')) {
+    return url.replace('/api/uploads/', '/uploads/');
+  }
+  if (url.startsWith('/uploads/')) {
+    return url.replace('/uploads/', '/api/uploads/');
+  }
+  if (!url.startsWith('http') && !url.startsWith('blob:') && !url.startsWith('data:')) {
+    return `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+  }
+  return null;
 };

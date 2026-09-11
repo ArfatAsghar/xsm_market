@@ -1,18 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, CheckCircle, Clock, User, CreditCard, DollarSign, Calendar, FileText, Shield, Timer } from 'lucide-react';
 import TransactionFeePayment from './TransactionFeePayment';
-
-// Get API URL from environment variables
-const getApiUrl = () => {
-  return import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'https://xsmmarket.com/api');
-};
-
-const getBaseUrl = () => {
-  const apiUrl = getApiUrl();
-  return apiUrl.replace('/api', '');
-};
-
-const API_URL = getBaseUrl();
+import DealAlertModal, { DealAlertModalProps } from './DealAlertModal';
+import { API_URL } from '@/services/auth';
+import { useAuth } from '@/context/useAuth';
 
 interface PaymentMethod {
   id: string;
@@ -22,6 +13,7 @@ interface PaymentMethod {
 
 interface Deal {
   id: number;
+  deal_id?: number;
   transaction_id: string;
   buyer_id: number;
   seller_id: number;
@@ -47,7 +39,6 @@ interface Deal {
   agent_email_sent_at?: string | null;
   seller_gave_rights?: boolean;
   seller_gave_rights_at?: string | null;
-  // New agent rights fields
   platform_type?: string;
   rights_timer_started_at?: string | null;
   rights_timer_expires_at?: string | null;
@@ -58,6 +49,7 @@ interface Deal {
   buyer_paid_seller_at?: string | null;
   seller_confirmed_payment?: boolean;
   seller_confirmed_payment_at?: string | null;
+  assigned_email?: string | null;
 }
 
 interface SellerDealViewProps {
@@ -73,12 +65,23 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
   deal,
   onDealUpdate
 }) => {
+  const { user } = useAuth();
+  const isAdmin = Boolean((user as any)?.isAdmin || (user as any)?.role === 'admin' || (user as any)?.role === 'manager');
   const [isAgreeing, setIsAgreeing] = useState(false);
   const [isConfirmingRights, setIsConfirmingRights] = useState(false);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [showFeePayment, setShowFeePayment] = useState(false);
   const [dealStatus, setDealStatus] = useState<any>(null);
   const [timerInfo, setTimerInfo] = useState<any>(null);
+  const [alertConfig, setAlertConfig] = useState<Omit<DealAlertModalProps, 'onClose'> | null>(null);
+
+  const getDealIdentifier = () => {
+    if (!deal) return '';
+    if (deal.transaction_id && typeof deal.transaction_id === 'string' && deal.transaction_id.trim().toUpperCase().startsWith('TXN')) {
+      return deal.transaction_id.trim();
+    }
+    return deal.id || deal.deal_id || deal.transaction_id || '';
+  };
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -88,11 +91,12 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
   };
 
   const fetchDealStatus = async () => {
-    if (!deal?.id) return;
+    const id = getDealIdentifier();
+    if (!id) return;
     
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/deals/${deal.id}/status`, {
+      const response = await fetch(`${API_URL}/deals/${id}/status`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -100,7 +104,6 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
 
       if (response.ok) {
         const result = await response.json();
-        console.log('Deal status fetched:', result); // Debug logging
         setDealStatus(result);
         setTimerInfo(result);
       } else {
@@ -114,20 +117,20 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
   useEffect(() => {
     if (isOpen && deal) {
       fetchDealStatus();
-      // Refresh status every 30 seconds if deal is active
       const interval = setInterval(fetchDealStatus, 30000);
       return () => clearInterval(interval);
     }
-  }, [isOpen, deal?.id]);
+  }, [isOpen, deal?.id, deal?.transaction_id]);
 
   if (!isOpen || !deal) return null;
 
   const handleConfirmRights = async () => {
+    const id = getDealIdentifier();
     try {
       setIsConfirmingRights(true);
       
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/deals/${deal.id}/confirm-rights`, {
+      const response = await fetch(`${API_URL}/deals/${id}/confirm-rights`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,62 +138,59 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
         }
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
       
-      if (response.ok) {
-        let message = `✅ Rights Confirmation Successful!
-
-You have confirmed that you've given account access to our agent.
-
-Transaction ID: ${deal.transaction_id}
-Channel: ${deal.channel_title}
-Status: Agent Access Confirmed`;
-
-        // Add platform-specific messaging
+      if (response.ok && result.success !== false) {
+        let noticeMessage = `You have confirmed that you've given account access to our agent.`;
         if (result.platform_type === 'youtube') {
-          message += `
-
-⏰ YouTube Channel Timer Started
-Due to YouTube's requirements, you must wait 7 days before promoting our agent to Primary Owner. 
-
-Timer started: Now
-Timer expires: ${result.timer_expires_formatted || 'In 7 days'}
-
-You will be able to promote the agent to Primary Owner after the timer expires. We'll notify you when it's time!`;
+          noticeMessage += `\n\n⏰ YouTube Channel Timer Started\nDue to YouTube's requirements, you must wait 7 days before promoting our agent to Primary Owner. Timer expires: ${result.timer_expires_formatted || 'In 7 days'}.\n\nYou will be notified when the timer completes.`;
         } else {
-          message += `
-
-✅ Ready for Primary Owner Promotion
-Since this is not a YouTube channel, you can immediately promote our agent to Primary Owner when ready.`;
+          noticeMessage += `\n\n✅ Ready for Primary Owner Promotion\nYou can immediately promote our agent to Primary Owner when ready.`;
         }
+        noticeMessage += `\n\nOur agent will now verify the account access.`;
 
-        message += `
-
-Our agent will now verify the account access. Thank you for your cooperation in ensuring a secure transaction!`;
-
-        alert(message);
-
-        onDealUpdate();
-        fetchDealStatus(); // Refresh status to get timer info
-        onClose();
+        setAlertConfig({
+          title: 'Rights Confirmation Successful!',
+          message: noticeMessage,
+          type: 'success',
+          details: [
+            { label: 'Transaction ID', value: deal.transaction_id },
+            { label: 'Channel', value: deal.channel_title },
+            { label: 'Status', value: 'Agent Access Confirmed' }
+          ],
+          actionText: 'OK',
+          onAction: () => {
+            setAlertConfig(null);
+            onDealUpdate();
+            fetchDealStatus();
+            onClose();
+          }
+        });
       } else {
         throw new Error(result.message || 'Failed to confirm rights');
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error confirming rights:', error);
-      alert('Failed to confirm rights: ' + error.message);
+      setAlertConfig({
+        title: 'Rights Confirmation',
+        message: error.message || 'Failed to confirm rights. Please try again.',
+        type: 'error',
+        actionText: 'Close',
+        onAction: () => setAlertConfig(null)
+      });
     } finally {
       setIsConfirmingRights(false);
     }
   };
 
   const handleConfirmPaymentReceived = async () => {
+    const id = getDealIdentifier();
     try {
       setIsConfirmingPayment(true);
       
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/deals/${deal.id}/seller-confirmed-payment`, {
+      const response = await fetch(`${API_URL}/deals/${id}/seller-confirmed-payment`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -198,75 +198,97 @@ Our agent will now verify the account access. Thank you for your cooperation in 
         }
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
       
-      if (response.ok) {
-        alert(`✅ Payment Receipt Confirmed!
-
-You have successfully confirmed that you received payment from the buyer.
-
-Transaction ID: ${deal.transaction_id}
-Channel: ${deal.channel_title}
-Amount: $${deal.channel_price}
-
-🎉 Deal Status: Payment Complete!
-
-Both you and the buyer have now confirmed the payment. Our agent will complete the final account transfer and provide the buyer with final account credentials.
-
-Thank you for using our secure marketplace!`);
-
-        onDealUpdate();
-        fetchDealStatus(); // Refresh status
-        onClose();
+      if (response.ok && result.success !== false) {
+        setAlertConfig({
+          title: 'Payment Receipt Confirmed!',
+          message: `You have successfully confirmed that you received payment from the buyer.\n\n🎉 Deal Status: Payment Complete!\n\nBoth you and the buyer have now confirmed the payment. Our agent will complete the final account transfer and provide the buyer with final account credentials.`,
+          type: 'success',
+          details: [
+            { label: 'Transaction ID', value: deal.transaction_id },
+            { label: 'Channel', value: deal.channel_title },
+            { label: 'Amount', value: `$${deal.channel_price}` }
+          ],
+          actionText: 'Great!',
+          onAction: () => {
+            setAlertConfig(null);
+            onDealUpdate();
+            fetchDealStatus();
+            onClose();
+          }
+        });
       } else {
         throw new Error(result.message || 'Failed to confirm payment receipt');
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error confirming payment receipt:', error);
-      alert('Failed to confirm payment receipt: ' + error.message);
+      setAlertConfig({
+        title: 'Payment Confirmation',
+        message: error.message || 'Failed to confirm payment receipt. Please try again.',
+        type: 'error',
+        actionText: 'Close',
+        onAction: () => setAlertConfig(null)
+      });
     } finally {
       setIsConfirmingPayment(false);
     }
   };
 
   const handleAgreeToTerms = async () => {
+    const id = getDealIdentifier();
     try {
       setIsAgreeing(true);
       
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/api/deals/${deal.id}/seller-agree`, {
+      const response = await fetch(`${API_URL}/deals/${id}/seller-agree`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
-        }
+        },
+        body: JSON.stringify({
+          transaction_id: deal.transaction_id,
+          deal_id: deal.id || deal.deal_id,
+          channel_title: deal.channel_title,
+          channel_price: deal.channel_price
+        })
       });
 
-      const result = await response.json();
+      const result = await response.json().catch(() => ({}));
       
-      if (response.ok) {
-        alert(`✅ Deal Agreement Successful!
-
-You have successfully agreed to the terms for transaction ${deal.transaction_id}.
-
-Channel: ${deal.channel_title}
-Amount: $${deal.channel_price}
-Buyer: ${deal.buyer_username}
-
-The buyer will now be notified that you have accepted their payment methods. The transaction will proceed to the next step.
-
-Deal Status: Terms Agreed - Awaiting Escrow Payment`);
-
-        onDealUpdate();
-        onClose();
+      if (response.ok && result.success !== false) {
+        setAlertConfig({
+          title: 'Deal Agreement Successful!',
+          message: `You have successfully agreed to the terms for transaction ${deal.transaction_id}.\n\nThe buyer will now be notified that you have accepted their payment methods. The transaction will proceed to the next step.`,
+          type: 'success',
+          details: [
+            { label: 'Transaction ID', value: deal.transaction_id },
+            { label: 'Channel', value: deal.channel_title },
+            { label: 'Price', value: `$${deal.channel_price}` },
+            { label: 'Buyer', value: deal.buyer_username }
+          ],
+          actionText: 'Continue',
+          onAction: () => {
+            setAlertConfig(null);
+            onDealUpdate();
+            onClose();
+          }
+        });
       } else {
         throw new Error(result.message || 'Failed to agree to deal');
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error agreeing to deal:', error);
-      alert('Failed to agree to deal. Please try again.');
+      setAlertConfig({
+        title: 'Deal Agreement Notice',
+        message: error.message || 'Failed to agree to deal. Please try again.',
+        type: 'error',
+        actionText: 'Close',
+        onAction: () => setAlertConfig(null)
+      });
     } finally {
       setIsAgreeing(false);
     }
@@ -284,16 +306,18 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'pending': return 'text-yellow-500';
-      case 'terms_agreed': return 'text-green-500';
+      case 'pending': return 'text-amber-500';
+      case 'seller_reviewing': return 'text-amber-500';
+      case 'terms_agreed': return 'text-emerald-500';
       case 'completed': return 'text-blue-500';
-      default: return 'text-gray-500';
+      default: return 'text-gray-400';
     }
   };
 
   const getStatusText = (status: string) => {
     switch (status) {
       case 'pending': return 'Waiting for Your Review';
+      case 'seller_reviewing': return 'Waiting for Your Review';
       case 'terms_agreed': return 'Terms Agreed - Awaiting Payment';
       case 'agent_access_pending': return 'Awaiting Agent Access Confirmation';
       case 'waiting_promotion_timer': return 'Waiting for YouTube Timer (7 days)';
@@ -302,7 +326,7 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
       case 'buyer_paid_seller': return 'Buyer Confirmed Payment';
       case 'seller_confirmed_payment': return 'Payment Complete - Deal Finalized';
       case 'completed': return 'Deal Completed';
-      default: return status;
+      default: return status ? status.replace(/_/g, ' ') : 'Pending';
     }
   };
 
@@ -323,86 +347,100 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-xsm-dark-gray rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/75 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+      <div 
+        className="rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border shadow-2xl transition-colors duration-200"
+        style={{
+          background: 'var(--xsm-dark-gray)',
+          borderColor: 'var(--xsm-border)',
+          color: 'var(--xsm-text)'
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
+        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: 'var(--xsm-border)' }}>
           <div>
-            <h2 className="text-2xl font-bold text-white">Deal Review</h2>
-            <p className="text-xsm-light-gray">Transaction ID: {deal.transaction_id}</p>
+            <h2 className="text-2xl font-bold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Deal Review</h2>
+            <p className="text-sm font-mono mt-0.5" style={{ color: 'var(--xsm-light-gray)' }}>Transaction ID: {deal.transaction_id}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-xsm-light-gray hover:text-white transition-colors"
+            className="p-1.5 rounded-lg border transition-colors hover:opacity-80"
+            style={{ borderColor: 'var(--xsm-border)', color: 'var(--xsm-light-gray)' }}
+            title="Close"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Deal Status */}
-          <div className="bg-gray-800 rounded-lg p-4">
+        <div className="p-6 space-y-5">
+          {/* Deal Status Card */}
+          <div className="rounded-xl p-4 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
-                <Clock className="text-xsm-yellow" size={20} />
-                <span className="text-white font-medium">Deal Status</span>
+                <Clock className="w-5 h-5" style={{ color: 'var(--xsm-primary)' }} />
+                <span className="font-semibold text-sm" style={{ color: 'var(--xsm-text)' }}>Deal Status</span>
               </div>
-              <span className={`font-semibold ${getStatusColor(deal.deal_status)}`}>
+              <span className={`font-bold text-sm ${getStatusColor(deal.deal_status)}`}>
                 {getStatusText(deal.deal_status)}
               </span>
             </div>
           </div>
 
           {/* Channel Information */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-lg font-semibold text-xsm-yellow mb-3">Channel Details</h3>
-            <div className="space-y-2">
-              <div className="flex justify-between text-white">
-                <span>Channel:</span>
-                <span className="font-medium">{deal.channel_title}</span>
+          <div className="rounded-xl p-4 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+            <h3 className="text-base font-bold mb-3 flex items-center gap-2" style={{ color: 'var(--xsm-primary)' }}>
+              <FileText className="w-4 h-4" />
+              Channel Details
+            </h3>
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Channel:</span>
+                <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>{deal.channel_title}</span>
               </div>
-              <div className="flex justify-between text-white">
-                <span>Channel ID:</span>
-                <span className="font-mono text-sm">{deal.channel_id}</span>
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Channel ID:</span>
+                <span className="font-mono text-xs" style={{ color: 'var(--xsm-text)' }}>{deal.channel_id}</span>
               </div>
-              <div className="flex justify-between text-white">
-                <span>Sale Price:</span>
-                <span className="font-semibold text-green-400">${deal.channel_price}</span>
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Sale Price:</span>
+                <span className="font-bold text-emerald-500">${deal.channel_price}</span>
               </div>
-              <div className="flex justify-between text-white">
-                <span>Escrow Fee:</span>
-                <span>${deal.escrow_fee}</span>
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Escrow Fee:</span>
+                <span style={{ color: 'var(--xsm-text)' }}>${deal.escrow_fee}</span>
               </div>
-              <div className="flex justify-between text-white">
-                <span>Transaction Type:</span>
-                <span className="capitalize">{deal.transaction_type}</span>
+              <div className="flex justify-between">
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Transaction Type:</span>
+                <span className="capitalize" style={{ color: 'var(--xsm-text)' }}>{deal.transaction_type}</span>
               </div>
             </div>
           </div>
 
           {/* Buyer Information */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-lg font-semibold text-xsm-yellow mb-3">Buyer Information</h3>
-            <div className="space-y-2">
+          <div className="rounded-xl p-4 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+            <h3 className="text-base font-bold mb-3 flex items-center gap-2" style={{ color: 'var(--xsm-primary)' }}>
+              <User className="w-4 h-4" />
+              Buyer Information
+            </h3>
+            <div className="space-y-2 text-sm">
               <div className="flex items-center space-x-3">
-                <User className="text-xsm-light-gray" size={20} />
-                <span className="text-white font-medium">{deal.buyer_username}</span>
+                <User className="w-4 h-4" style={{ color: 'var(--xsm-light-gray)' }} />
+                <span className="font-semibold" style={{ color: 'var(--xsm-text)' }}>{deal.buyer_username}</span>
               </div>
               <div className="flex items-center space-x-3">
-                <Calendar className="text-xsm-light-gray" size={20} />
-                <span className="text-xsm-light-gray">Deal created: {formatDate(deal.created_at)}</span>
+                <Calendar className="w-4 h-4" style={{ color: 'var(--xsm-light-gray)' }} />
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Deal created: {formatDate(deal.created_at)}</span>
               </div>
-              {/* Note: Transfer email is hidden for seller privacy as requested */}
             </div>
           </div>
 
           {/* Payment Methods Selected by Buyer */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-lg font-semibold text-xsm-yellow mb-3">
-              <CreditCard className="inline mr-2" size={20} />
+          <div className="rounded-xl p-4 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+            <h3 className="text-base font-bold mb-2 flex items-center gap-2" style={{ color: 'var(--xsm-primary)' }}>
+              <CreditCard className="w-4 h-4" />
               Payment Methods Available
             </h3>
-            <p className="text-xsm-light-gray mb-4">
+            <p className="text-xs mb-3" style={{ color: 'var(--xsm-light-gray)' }}>
               The buyer has selected these payment methods. If you're comfortable with any of these options, click "I Agree to Terms" below.
             </p>
 
@@ -415,26 +453,27 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
 
               return (
                 <>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     {methods.map((method, index) => (
                       <div
                         key={index}
-                        className="flex items-center space-x-3 p-3 bg-gray-700 rounded-lg"
+                        className="flex items-center space-x-3 p-3 rounded-xl border"
+                        style={{ background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-border)' }}
                       >
-                        <div className="w-8 h-8 bg-xsm-yellow rounded-full flex items-center justify-center">
-                          <DollarSign size={16} className="text-black" />
+                        <div className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0" style={{ background: 'var(--xsm-primary)', color: '#000' }}>
+                          $
                         </div>
-                        <div>
-                          <div className="text-white font-medium">{method.name || method.id || 'Payment Method'}</div>
-                          {method.category && <div className="text-xsm-light-gray text-sm capitalize">{method.category}</div>}
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-xs truncate" style={{ color: 'var(--xsm-text)' }}>{method.name || method.id || 'Payment Method'}</div>
+                          {method.category && <div className="text-[11px] capitalize" style={{ color: 'var(--xsm-light-gray)' }}>{method.category}</div>}
                         </div>
                       </div>
                     ))}
                   </div>
 
                   {methods.length === 0 && (
-                    <div className="text-center py-4">
-                      <p className="text-xsm-light-gray">No payment methods selected</p>
+                    <div className="text-center py-3 text-xs" style={{ color: 'var(--xsm-light-gray)' }}>
+                      No payment methods selected
                     </div>
                   )}
                 </>
@@ -442,62 +481,69 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
             })()}
           </div>
 
-          {/* Transaction Process */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-lg font-semibold text-xsm-yellow mb-3">Transaction Process</h3>
-            <div className="space-y-3">
+          {/* Transaction Steps */}
+          <div className="rounded-xl p-4 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+            <h3 className="text-base font-bold mb-3 flex items-center gap-2" style={{ color: 'var(--xsm-primary)' }}>
+              <Shield className="w-4 h-4" />
+              Transaction Steps
+            </h3>
+            <div className="space-y-3 text-xs">
               <div className="flex items-center space-x-3">
-                <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
-                  <CheckCircle size={12} className="text-white" />
+                <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shrink-0 shadow-sm">
+                  <CheckCircle size={14} className="text-white" />
                 </div>
-                <span className="text-white">Buyer created deal and selected payment methods</span>
+                <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Buyer started deal and selected payment methods</span>
               </div>
               
-              <div className={`flex items-center space-x-3 ${deal.seller_agreed ? 'opacity-100' : 'opacity-60'}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                  deal.seller_agreed ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  {deal.seller_agreed ? <CheckCircle size={12} className="text-white" /> : <span className="text-white text-xs">2</span>}
+              <div className={`flex items-center space-x-3 ${deal.seller_agreed ? 'opacity-100' : 'opacity-85'}`}>
+                <div 
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                    deal.seller_agreed ? 'bg-emerald-500 text-white' : ''
+                  }`}
+                  style={!deal.seller_agreed ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                >
+                  {deal.seller_agreed ? <CheckCircle size={14} className="text-white" /> : <span>2</span>}
                 </div>
-                <span className="text-white">Seller agrees to payment methods</span>
-                {deal.seller_agreed_at && (
-                  <span className="text-xsm-light-gray text-sm">
-                    (Agreed: {formatDate(deal.seller_agreed_at)})
-                  </span>
-                )}
+                <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Seller agrees to payment methods</span>
               </div>
               
               <div className={`flex items-center space-x-3 ${(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? 'opacity-100' : 'opacity-60'}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                  (dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  {(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? <CheckCircle size={12} className="text-white" /> : <span className="text-white text-xs">3</span>}
+                <div 
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                    (dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? 'bg-emerald-500 text-white' : ''
+                  }`}
+                  style={!(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                >
+                  {(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? <CheckCircle size={14} className="text-white" /> : <span>3</span>}
                 </div>
-                <span className="text-white">Transaction fee paid</span>
+                <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Transaction fee paid</span>
               </div>
               
               <div className={`flex items-center space-x-3 ${(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? 'opacity-100' : 'opacity-60'}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                  (dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  {(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? <CheckCircle size={12} className="text-white" /> : <span className="text-white text-xs">4</span>}
+                <div 
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                    (dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? 'bg-emerald-500 text-white' : ''
+                  }`}
+                  style={!(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                >
+                  {(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? <CheckCircle size={14} className="text-white" /> : <span>4</span>}
                 </div>
-                <span className="text-white">Give agent manager access</span>
+                <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Give agent manager access</span>
               </div>
-
-              {/* YouTube Timer Step */}
+              
               {dealStatus?.platform_type === 'youtube' && (
                 <div className={`flex items-center space-x-3 ${dealStatus?.timer_completed ? 'opacity-100' : 'opacity-60'}`}>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                    dealStatus?.timer_completed ? 'bg-green-500' : dealStatus?.seller_gave_rights ? 'bg-yellow-500' : 'bg-gray-600'
-                  }`}>
-                    {dealStatus?.timer_completed ? <CheckCircle size={12} className="text-white" /> : 
-                     dealStatus?.seller_gave_rights ? <Timer size={12} className="text-white" /> : 
-                     <span className="text-white text-xs">5</span>}
+                  <div 
+                    className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                      dealStatus?.timer_completed ? 'bg-emerald-500 text-white' : ''
+                    }`}
+                    style={!dealStatus?.timer_completed ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                  >
+                    {dealStatus?.timer_completed ? <CheckCircle size={14} className="text-white" /> : <span>5</span>}
                   </div>
-                  <span className="text-white">Wait 7 days (YouTube requirement)</span>
-                  {dealStatus?.timer_remaining_seconds > 0 && (
-                    <span className="text-yellow-400 text-sm">
+                  <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>YouTube 7-day primary owner timer</span>
+                  {dealStatus?.seller_gave_rights && !dealStatus?.timer_completed && dealStatus?.timer_remaining_seconds > 0 && (
+                    <span className="text-amber-500 text-xs font-semibold">
                       ({formatTimeRemaining(dealStatus.timer_remaining_seconds)} remaining)
                     </span>
                   )}
@@ -505,36 +551,40 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
               )}
               
               <div className={`flex items-center space-x-3 ${dealStatus?.seller_made_primary_owner ? 'opacity-100' : 'opacity-60'}`}>
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                  dealStatus?.seller_made_primary_owner ? 'bg-green-500' : 'bg-gray-600'
-                }`}>
-                  {dealStatus?.seller_made_primary_owner ? <CheckCircle size={12} className="text-white" /> : 
-                   <span className="text-white text-xs">{dealStatus?.platform_type === 'youtube' ? '6' : '5'}</span>}
+                <div 
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                    dealStatus?.seller_made_primary_owner ? 'bg-emerald-500 text-white' : ''
+                  }`}
+                  style={!dealStatus?.seller_made_primary_owner ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                >
+                  {dealStatus?.seller_made_primary_owner ? <CheckCircle size={14} className="text-white" /> : 
+                   <span>{dealStatus?.platform_type === 'youtube' ? '6' : '5'}</span>}
                 </div>
-                <span className="text-white">Promote agent to primary owner</span>
+                <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Promote agent to primary owner</span>
               </div>
               
               <div className="flex items-center space-x-3 opacity-60">
-                <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">{dealStatus?.platform_type === 'youtube' ? '7' : '6'}</span>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm" style={{ background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' }}>
+                  <span>{dealStatus?.platform_type === 'youtube' ? '7' : '6'}</span>
                 </div>
-                <span className="text-white">Buyer pays you via selected method</span>
+                <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Buyer pays you via selected method</span>
               </div>
               
               <div className="flex items-center space-x-3 opacity-60">
-                <div className="w-6 h-6 bg-gray-600 rounded-full flex items-center justify-center">
-                  <span className="text-white text-xs">{dealStatus?.platform_type === 'youtube' ? '8' : '7'}</span>
+                <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm" style={{ background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' }}>
+                  <span>{dealStatus?.platform_type === 'youtube' ? '8' : '7'}</span>
                 </div>
-                <span className="text-white">Channel transferred to buyer</span>
+                <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Channel transferred to buyer</span>
               </div>
             </div>
           </div>
 
           {/* Action Buttons */}
-          <div className="flex space-x-4">
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
             <button
               onClick={onClose}
-              className="flex-1 bg-gray-700 text-white py-3 px-6 rounded-lg hover:bg-gray-600 transition-colors"
+              className="flex-1 py-3 px-6 rounded-xl font-semibold border transition-colors hover:opacity-80 text-sm"
+              style={{ background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)', borderColor: 'var(--xsm-border)' }}
             >
               Back
             </button>
@@ -543,79 +593,65 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
               <button
                 onClick={handleAgreeToTerms}
                 disabled={isAgreeing}
-                className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 shadow-lg shadow-emerald-900/30 text-sm"
               >
                 {isAgreeing ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                     <span>Agreeing...</span>
                   </>
                 ) : (
                   <>
-                    <CheckCircle size={20} />
+                    <CheckCircle size={18} />
                     <span>I Agree to Terms</span>
                   </>
                 )}
               </button>
             )}
             
-            {/* Show transaction fee payment button for seller if not paid yet - Use dealStatus for real-time data */}
             {(() => {
               const showPayButton = deal.seller_agreed && !(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid);
-              console.log('Pay Transaction Fee button - Show:', showPayButton, {
-                seller_agreed: deal.seller_agreed,
-                transaction_fee_paid_status: dealStatus?.transaction_fee_paid,
-                transaction_fee_paid_fallback: deal.transaction_fee_paid,
-                final_paid_value: (dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid)
-              });
               return showPayButton;
             })() && (
               <button
                 onClick={() => setShowFeePayment(true)}
-                className="flex-1 bg-xsm-yellow text-black py-3 px-6 rounded-lg hover:bg-yellow-500 transition-colors flex items-center justify-center space-x-2 font-semibold"
+                className="flex-1 font-bold py-3 px-6 rounded-xl hover:brightness-105 transition-all flex items-center justify-center space-x-2 text-sm shadow-md"
+                style={{ background: 'var(--xsm-primary)', color: '#000000' }}
               >
-                <DollarSign size={20} />
+                <DollarSign size={18} />
                 <span>Pay Transaction Fee</span>
               </button>
             )}
             
-            {/* Show rights confirmation button once fee is paid - Use dealStatus for real-time data */}
             {(() => {
               const showRightsButton = deal.seller_agreed && (dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && !(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights);
-              console.log('I Have Given The Rights button - Show:', showRightsButton, {
-                seller_agreed: deal.seller_agreed,
-                transaction_fee_paid_status: dealStatus?.transaction_fee_paid,
-                transaction_fee_paid_fallback: deal.transaction_fee_paid,
-                seller_gave_rights_status: dealStatus?.seller_gave_rights,
-                seller_gave_rights_fallback: deal.seller_gave_rights,
-                final_paid_value: (dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid),
-                final_rights_value: (dealStatus?.seller_gave_rights ?? deal.seller_gave_rights)
-              });
               return showRightsButton;
             })() && (
               <button
                 onClick={handleConfirmRights}
                 disabled={isConfirmingRights}
-                className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 font-semibold"
+                className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-sm shadow-lg shadow-blue-900/30"
               >
                 {isConfirmingRights ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                     <span>Confirming...</span>
                   </>
                 ) : (
                   <>
-                    <Shield size={20} />
+                    <Shield size={18} />
                     <span>I Have Given The Rights</span>
                   </>
                 )}
               </button>
             )}
             
-            {/* Show timer status for all platforms - YouTube shows countdown, others show waiting for admin */}
             {deal.seller_agreed && (dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && (dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) && !dealStatus?.seller_made_primary_owner && (
-              <div className="flex-1 bg-gray-600 text-white py-3 px-6 rounded-lg flex items-center justify-center space-x-2 opacity-75 cursor-not-allowed">
-                <Timer size={20} />
+              <div 
+                className="flex-1 py-3 px-6 rounded-xl flex items-center justify-center space-x-2 opacity-75 cursor-not-allowed border text-xs font-semibold"
+                style={{ background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)', borderColor: 'var(--xsm-border)' }}
+              >
+                <Timer size={16} />
                 {dealStatus?.platform_type === 'youtube' && dealStatus?.timer_remaining_seconds > 0 ? (
                   <span>Wait {Math.ceil((dealStatus.timer_remaining_seconds || 0) / (24 * 60 * 60))} More Days</span>
                 ) : (
@@ -625,8 +661,8 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
             )}
 
             {dealStatus?.seller_made_primary_owner && !dealStatus?.buyer_paid_seller && (
-              <div className="flex-1 bg-yellow-600 text-white py-3 px-6 rounded-lg flex items-center justify-center space-x-2">
-                <Clock size={20} />
+              <div className="flex-1 bg-amber-500/20 border border-amber-500/40 text-amber-400 py-3 px-6 rounded-xl flex items-center justify-center space-x-2 text-xs font-bold">
+                <Clock size={16} />
                 <span>Waiting for Buyer Payment</span>
               </div>
             )}
@@ -635,16 +671,16 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
               <button
                 onClick={handleConfirmPaymentReceived}
                 disabled={isConfirmingPayment}
-                className="flex-1 bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 font-semibold"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-sm shadow-lg shadow-emerald-900/30"
               >
                 {isConfirmingPayment ? (
                   <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                    <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
                     <span>Confirming...</span>
                   </>
                 ) : (
                   <>
-                    <DollarSign size={20} />
+                    <DollarSign size={18} />
                     <span>I Have Received The Payment</span>
                   </>
                 )}
@@ -652,8 +688,8 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
             )}
 
             {dealStatus?.seller_made_primary_owner && dealStatus?.buyer_paid_seller && dealStatus?.seller_confirmed_payment && (
-              <div className="flex-1 bg-blue-600 text-white py-3 px-6 rounded-lg flex items-center justify-center space-x-2">
-                <CheckCircle size={20} />
+              <div className="flex-1 bg-blue-500/20 border border-blue-500/40 text-blue-400 py-3 px-6 rounded-xl flex items-center justify-center space-x-2 text-xs font-bold">
+                <CheckCircle size={16} />
                 <span>Deal Complete - Both Payments Confirmed</span>
               </div>
             )}
@@ -661,9 +697,17 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
 
           {/* Payment Method Negotiation Note */}
           {!deal.seller_agreed && (
-            <div className="bg-blue-900 border border-blue-700 rounded-lg p-4">
-              <h4 className="text-blue-300 font-medium mb-2">Payment Method Negotiation</h4>
-              <p className="text-blue-200 text-sm">
+            <div 
+              className="rounded-xl p-4 border"
+              style={{
+                background: 'rgba(59, 130, 246, 0.08)',
+                borderColor: 'rgba(59, 130, 246, 0.25)'
+              }}
+            >
+              <h4 className="font-bold text-sm mb-1.5 flex items-center gap-2" style={{ color: 'var(--xsm-primary, #3b82f6)' }}>
+                💬 Payment Method Negotiation
+              </h4>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
                 If none of the buyer's selected payment methods work for you, you can contact them through the chat system to discuss alternative payment methods. Once you both agree on a method, come back here and click "I Agree to Terms".
               </p>
             </div>
@@ -671,39 +715,49 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
 
           {/* Next Steps for Transaction Fee */}
           {deal.seller_agreed && !(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && (
-            <div className="bg-xsm-yellow bg-opacity-10 border border-xsm-yellow rounded-lg p-4">
-              <h4 className="text-xsm-yellow font-medium mb-2 flex items-center">
-                <FileText size={16} className="mr-2" />
+            <div 
+              className="rounded-xl p-4 border"
+              style={{
+                background: 'rgba(234, 179, 8, 0.08)',
+                borderColor: 'rgba(234, 179, 8, 0.3)'
+              }}
+            >
+              <h4 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ color: 'var(--xsm-primary)' }}>
+                <FileText size={16} />
                 Transaction Fee Payment Required
               </h4>
-              <p className="text-yellow-200 text-sm mb-3">
+              <p className="text-xs mb-3" style={{ color: 'var(--xsm-text)' }}>
                 The transaction fee ({formatCurrency(deal.escrow_fee)}) needs to be paid to proceed with the deal. 
                 Either you or the buyer can pay this fee to move forward.
               </p>
-              <div className="bg-yellow-800 rounded-lg p-3 space-y-2">
-                <p className="text-yellow-200 text-sm font-medium">💰 Payment Options:</p>
-                <ul className="text-yellow-200 text-xs space-y-1 ml-4">
+              <div className="rounded-lg p-3 space-y-1.5 text-xs border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+                <p className="font-bold" style={{ color: 'var(--xsm-text)' }}>💰 Payment Options:</p>
+                <ul className="space-y-1 ml-3" style={{ color: 'var(--xsm-light-gray)' }}>
                   <li>• Buyer pays (most common)</li>
                   <li>• You pay (if agreed upon)</li>
                   <li>• Either party can proceed</li>
                 </ul>
               </div>
-              <div className="mt-3 p-3 bg-yellow-800 rounded-lg">
-                <p className="text-yellow-200 text-xs">
-                  💡 Once either party pays the fee, the "I Have Given The Rights" button will appear automatically.
-                </p>
-              </div>
+              <p className="text-[11px] mt-2.5 italic" style={{ color: 'var(--xsm-light-gray)' }}>
+                💡 Once either party pays the fee, the "I Have Given The Rights" button will appear automatically.
+              </p>
             </div>
           )}
 
           {/* Transaction Fee Paid Status */}
           {(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && (
-            <div className="bg-green-900 border border-green-700 rounded-lg p-4">
-              <h4 className="text-green-300 font-medium mb-2 flex items-center">
-                <CheckCircle size={16} className="mr-2" />
+            <div 
+              className="rounded-xl p-4 border"
+              style={{
+                background: 'rgba(34, 197, 94, 0.08)',
+                borderColor: 'rgba(34, 197, 94, 0.3)'
+              }}
+            >
+              <h4 className="text-emerald-500 font-bold text-sm mb-1.5 flex items-center gap-2">
+                <CheckCircle size={16} />
                 Transaction Fee Paid
               </h4>
-              <p className="text-green-200 text-sm">
+              <p className="text-xs" style={{ color: 'var(--xsm-text)' }}>
                 The transaction fee has been paid by {(dealStatus?.transaction_fee_paid_by ?? deal.transaction_fee_paid_by) === 'seller' ? 'you' : 'the buyer'} 
                 via {(dealStatus?.transaction_fee_payment_method ?? deal.transaction_fee_payment_method)}. The deal will now proceed to the next stage.
               </p>
@@ -712,44 +766,54 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
 
           {/* Agent Email and Rights Instructions */}
           {(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && (dealStatus?.agent_email_sent ?? deal.agent_email_sent) && !(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) && (
-            <div className="bg-blue-900 border border-blue-700 rounded-lg p-4">
-              <h4 className="text-blue-300 font-medium mb-3 flex items-center">
-                <Shield size={16} className="mr-2" />
+            <div 
+              className="rounded-xl p-4 border"
+              style={{
+                background: 'rgba(59, 130, 246, 0.08)',
+                borderColor: 'rgba(59, 130, 246, 0.3)'
+              }}
+            >
+              <h4 className="font-bold text-sm mb-3 flex items-center gap-2" style={{ color: 'var(--xsm-primary, #3b82f6)' }}>
+                <Shield size={16} />
                 Give Account Rights to Agent
               </h4>
               <div className="space-y-3">
-                <div className="bg-blue-800 rounded-lg p-3">
-                  <p className="text-blue-200 text-sm font-medium mb-1">📧 Agent Email:</p>
-                  <p className="text-blue-100 font-mono text-sm bg-blue-700 p-2 rounded">
-                    rebirthcar63@gmail.com
+                <div className="rounded-lg p-3 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+                  <p className="text-xs font-bold mb-1" style={{ color: 'var(--xsm-text)' }}>📧 Agent Email:</p>
+                  <p className="font-mono text-xs p-2 rounded border select-all" style={{ background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-border)', color: 'var(--xsm-primary)' }}>
+                    {dealStatus?.assigned_email || deal?.assigned_email || 'novaflowa4@gmail.com'}
                   </p>
                 </div>
-                <div className="text-blue-200 text-sm space-y-2">
-                  <p className="font-medium">Instructions:</p>
-                  <ol className="list-decimal list-inside space-y-1 ml-2">
+                <div className="text-xs space-y-1.5" style={{ color: 'var(--xsm-text)' }}>
+                  <p className="font-bold">Instructions:</p>
+                  <ol className="list-decimal list-inside space-y-1 ml-1" style={{ color: 'var(--xsm-light-gray)' }}>
                     <li>Add the agent email as a manager/collaborator to your account</li>
                     <li>Give permissions to view and manage the account</li>
                     <li>DO NOT transfer ownership yet - our agent will handle that securely</li>
-                    <li>Click "I Have Given The Rights" button below once completed</li>
+                    <li>Click "I Have Given The Rights" button above once completed</li>
                   </ol>
                 </div>
-                <div className="bg-yellow-800 border border-yellow-600 rounded-lg p-3">
-                  <p className="text-yellow-200 text-xs">
-                    ⚠️ Important: Only give manager/collaborator access, NOT ownership. Our agent will handle the ownership transfer process securely.
-                  </p>
-                </div>
+                <p className="text-[11px] p-2 rounded border" style={{ background: 'rgba(234, 179, 8, 0.08)', borderColor: 'rgba(234, 179, 8, 0.25)', color: 'var(--xsm-text)' }}>
+                  ⚠️ Important: Only give manager/collaborator access, NOT ownership. Our agent will handle the ownership transfer process securely.
+                </p>
               </div>
             </div>
           )}
 
           {/* Rights Confirmation Status */}
           {(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) && (
-            <div className="bg-green-900 border border-green-700 rounded-lg p-4">
-              <h4 className="text-green-300 font-medium mb-2 flex items-center">
-                <CheckCircle size={16} className="mr-2" />
+            <div 
+              className="rounded-xl p-4 border"
+              style={{
+                background: 'rgba(34, 197, 94, 0.08)',
+                borderColor: 'rgba(34, 197, 94, 0.3)'
+              }}
+            >
+              <h4 className="text-emerald-500 font-bold text-sm mb-1.5 flex items-center gap-2">
+                <CheckCircle size={16} />
                 Rights Confirmed
               </h4>
-              <p className="text-green-200 text-sm">
+              <p className="text-xs" style={{ color: 'var(--xsm-text)' }}>
                 You have confirmed giving account access to our agent. The agent is now verifying the account and will proceed with the secure transfer process. You will be updated once verification is complete.
               </p>
             </div>
@@ -757,126 +821,37 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
 
           {/* YouTube Timer Display */}
           {dealStatus?.platform_type === 'youtube' && dealStatus?.seller_gave_rights && !dealStatus?.timer_completed && dealStatus?.timer_remaining_seconds > 0 && (
-            <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-4">
-              <h4 className="text-yellow-300 font-medium mb-3 flex items-center">
-                <Timer size={16} className="mr-2" />
+            <div 
+              className="rounded-xl p-4 border"
+              style={{
+                background: 'rgba(234, 179, 8, 0.08)',
+                borderColor: 'rgba(234, 179, 8, 0.3)'
+              }}
+            >
+              <h4 className="font-bold text-sm mb-2 flex items-center gap-2" style={{ color: 'var(--xsm-primary)' }}>
+                <Timer size={16} />
                 YouTube Primary Owner Timer
               </h4>
-              <div className="space-y-3">
-                <p className="text-yellow-200 text-sm">
+              <div className="space-y-2.5">
+                <p className="text-xs" style={{ color: 'var(--xsm-text)' }}>
                   YouTube requires a 7-day waiting period before you can promote our agent to Primary Owner.
                 </p>
-                <div className="bg-yellow-800 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-yellow-200 text-sm font-medium">Time Remaining:</span>
-                    <span className="text-yellow-100 font-bold">
+                <div className="rounded-lg p-3 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+                  <div className="flex items-center justify-between text-xs">
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Time Remaining:</span>
+                    <span className="font-bold" style={{ color: 'var(--xsm-text)' }}>
                       {formatTimeRemaining(dealStatus.timer_remaining_seconds)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-yellow-200 text-sm">Timer Expires:</span>
-                    <span className="text-yellow-100 text-sm font-mono">
+                  <div className="flex items-center justify-between text-xs mt-1.5">
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Timer Expires:</span>
+                    <span className="font-mono text-[11px]" style={{ color: 'var(--xsm-text)' }}>
                       {dealStatus.timer_expires_formatted}
                     </span>
                   </div>
                 </div>
-                <p className="text-yellow-200 text-xs">
+                <p className="text-[11px]" style={{ color: 'var(--xsm-light-gray)' }}>
                   ⏰ You will be able to promote the agent to Primary Owner after this timer expires. We'll update the interface automatically when it's ready.
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Timer Completed - Admin Will Handle Primary Owner */}
-          {dealStatus?.seller_gave_rights && ((dealStatus?.platform_type !== 'youtube') || (dealStatus?.platform_type === 'youtube' && (dealStatus?.timer_expired || dealStatus?.timer_completed))) && !dealStatus?.seller_made_primary_owner && (
-            <div className="bg-blue-900 border border-blue-700 rounded-lg p-4">
-              <h4 className="text-blue-300 font-medium mb-3 flex items-center">
-                <Shield size={16} className="mr-2" />
-                Ready for Admin to Promote Agent
-              </h4>
-              <div className="space-y-3">
-                {dealStatus?.platform_type === 'youtube' ? (
-                  <p className="text-blue-200 text-sm">
-                    ✅ The 7-day YouTube timer has completed! Our admin will now promote the agent to Primary Owner of your channel.
-                  </p>
-                ) : (
-                  <p className="text-blue-200 text-sm">
-                    Since this is not a YouTube channel, our admin can promote the agent to Primary Owner immediately.
-                  </p>
-                )}
-                <div className="bg-blue-800 rounded-lg p-3">
-                  <p className="text-blue-200 text-sm font-medium mb-2">What happens next:</p>
-                  <ol className="list-decimal list-inside space-y-1 text-blue-200 text-sm ml-2">
-                    <li>Our admin will access your channel's management settings</li>
-                    <li>Agent will be promoted to Primary Owner</li>
-                    <li>You'll receive notification when the promotion is complete</li>
-                    <li>Deal will proceed to final buyer payment stage</li>
-                  </ol>
-                </div>
-                <div className="bg-yellow-800 border border-yellow-600 rounded-lg p-3">
-                  <p className="text-yellow-200 text-xs">
-                    ⚠️ No action required from you. Our admin team will handle the Primary Owner promotion securely.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Primary Owner Confirmation Complete */}
-          {dealStatus?.seller_made_primary_owner && (
-            <div className="bg-green-900 border border-green-700 rounded-lg p-4">
-              <h4 className="text-green-300 font-medium mb-2 flex items-center">
-                <CheckCircle size={16} className="mr-2" />
-                Primary Owner Transfer Complete!
-              </h4>
-              <p className="text-green-200 text-sm">
-                🎉 Congratulations! You have successfully transferred Primary Owner rights to our agent. The channel transfer is now complete and the deal is in its final stages.
-              </p>
-            </div>
-          )}
-
-          {/* Buyer Payment Confirmation Status */}
-          {dealStatus?.seller_made_primary_owner && dealStatus?.buyer_paid_seller && (
-            <div className="bg-blue-900 border border-blue-700 rounded-lg p-4">
-              <h4 className="text-blue-300 font-medium mb-2 flex items-center">
-                <DollarSign size={16} className="mr-2" />
-                Buyer Payment Confirmed
-              </h4>
-              <p className="text-blue-200 text-sm">
-                💰 The buyer has confirmed that they have paid you the agreed amount ($${dealStatus.channel_price || deal.channel_price}) for the channel transfer.
-                {dealStatus?.buyer_paid_seller_at && (
-                  <span className="block mt-2 text-blue-300 text-xs">
-                    Confirmed on: {new Date(dealStatus.buyer_paid_seller_at).toLocaleDateString()}
-                  </span>
-                )}
-              </p>
-              {!dealStatus?.seller_confirmed_payment && (
-                <div className="mt-3 p-3 bg-blue-800 rounded-lg">
-                  <p className="text-blue-200 text-sm font-medium">⏳ Action Required:</p>
-                  <p className="text-blue-200 text-xs">Please confirm once you have received the payment by clicking "I Have Received The Payment" button above.</p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Seller Payment Confirmation Complete */}
-          {dealStatus?.seller_confirmed_payment && (
-            <div className="bg-green-900 border border-green-700 rounded-lg p-4">
-              <h4 className="text-green-300 font-medium mb-2 flex items-center">
-                <CheckCircle size={16} className="mr-2" />
-                Payment Receipt Confirmed!
-              </h4>
-              <p className="text-green-200 text-sm">
-                ✅ You have confirmed receiving payment from the buyer. Both parties have now confirmed the payment completion.
-                {dealStatus?.seller_confirmed_payment_at && (
-                  <span className="block mt-2 text-green-300 text-xs">
-                    Confirmed on: {new Date(dealStatus.seller_confirmed_payment_at).toLocaleDateString()}
-                  </span>
-                )}
-              </p>
-              <div className="mt-3 p-3 bg-green-800 rounded-lg">
-                <p className="text-green-200 text-sm">
-                  🎊 The deal is now complete! Our agent will finalize the account transfer and provide the buyer with final account credentials.
                 </p>
               </div>
             </div>
@@ -891,13 +866,24 @@ Deal Status: Terms Agreed - Awaiting Escrow Payment`);
         deal={deal}
         userType="seller"
         onPaymentComplete={() => {
-          console.log('Payment completed, refreshing status...');
           setShowFeePayment(false);
           onDealUpdate();
-          // Add small delay to ensure backend has processed the payment
           setTimeout(fetchDealStatus, 1000);
         }}
       />
+
+      {/* Custom Theme-Adaptive Alert Modal */}
+      {alertConfig && (
+        <DealAlertModal
+          {...alertConfig}
+          onClose={() => {
+            if (alertConfig.onClose) {
+              alertConfig.onClose();
+            }
+            setAlertConfig(null);
+          }}
+        />
+      )}
     </div>
   );
 };

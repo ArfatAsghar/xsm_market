@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { X, CreditCard, Bitcoin, Zap, DollarSign, User, AlertCircle, CheckCircle } from 'lucide-react';
+import { X, CreditCard, Bitcoin, Zap, DollarSign, User, AlertCircle, CheckCircle, ShieldAlert } from 'lucide-react';
 import CryptoPaymentModal from './CryptoPaymentModal';
+import DealAlertModal, { DealAlertModalProps } from './DealAlertModal';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
@@ -51,6 +52,7 @@ const TransactionFeePayment: React.FC<TransactionFeePaymentProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [showCryptoModal, setShowCryptoModal] = useState(false);
+  const [alertConfig, setAlertConfig] = useState<Omit<DealAlertModalProps, 'onClose'> | null>(null);
 
   if (!isOpen || !deal) return null;
 
@@ -97,11 +99,19 @@ const TransactionFeePayment: React.FC<TransactionFeePaymentProps> = ({
         onPaymentComplete();
         onClose();
       } else {
-        alert('Payment failed: ' + result.message);
+        setAlertConfig({
+          title: 'Payment Failed',
+          message: result.message || 'Payment could not be completed. Please try again.',
+          type: 'error'
+        });
       }
     } catch (error) {
       console.error('Payment error:', error);
-      alert('Payment failed. Please try again.');
+      setAlertConfig({
+        title: 'Payment Error',
+        message: 'Could not connect to payment service. Please try again.',
+        type: 'error'
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -133,54 +143,70 @@ const TransactionFeePayment: React.FC<TransactionFeePaymentProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-      <div className="bg-xsm-dark-bg border border-gray-700 rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+      <div 
+        className="rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto border shadow-2xl transition-colors duration-200"
+        style={{
+          background: 'var(--xsm-dark-gray)',
+          borderColor: 'var(--xsm-border)',
+          color: 'var(--xsm-text)',
+          display: showCryptoModal ? 'none' : 'block'
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <h2 className="text-xl font-bold text-white">
+        <div className="flex items-center justify-between p-6 border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+          <h2 className="text-xl font-bold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>
             Transaction Fee Payment
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors"
+            className="p-1.5 rounded-lg border transition-colors hover:opacity-80"
+            style={{ borderColor: 'var(--xsm-border)', color: 'var(--xsm-light-gray)' }}
+            title="Close"
           >
-            <X size={24} />
+            <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-5">
           {!showConfirmation ? (
             <>
               {/* Deal Summary */}
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h3 className="text-lg font-semibold text-xsm-yellow mb-3">Deal Summary</h3>
+              <div className="rounded-xl p-4 border" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+                <h3 className="text-base font-bold mb-3" style={{ color: 'var(--xsm-primary)' }}>Deal Summary</h3>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-white">
-                    <span>Transaction ID:</span>
-                    <span className="font-mono">{deal.transaction_id}</span>
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Transaction ID:</span>
+                    <span className="font-mono text-xs" style={{ color: 'var(--xsm-text)' }}>{deal.transaction_id}</span>
                   </div>
-                  <div className="flex justify-between text-white">
-                    <span>Channel:</span>
-                    <span>{deal.channel_title}</span>
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Channel:</span>
+                    <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>{deal.channel_title}</span>
                   </div>
-                  <div className="flex justify-between text-white">
-                    <span>Channel Price:</span>
-                    <span>{formatCurrency(deal.channel_price)}</span>
+                  <div className="flex justify-between">
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Channel Price:</span>
+                    <span style={{ color: 'var(--xsm-text)' }}>{formatCurrency(deal.channel_price)}</span>
                   </div>
-                  <div className="flex justify-between text-white border-t border-gray-600 pt-2 font-semibold">
-                    <span>Transaction Fee:</span>
-                    <span className="text-xsm-yellow">{formatCurrency(deal.escrow_fee)}</span>
+                  <div className="flex justify-between border-t pt-2 font-bold" style={{ borderColor: 'var(--xsm-border)' }}>
+                    <span style={{ color: 'var(--xsm-text)' }}>Transaction Fee:</span>
+                    <span style={{ color: 'var(--xsm-primary)' }}>{formatCurrency(deal.escrow_fee)}</span>
                   </div>
                 </div>
               </div>
 
               {/* Payment Responsibility Info */}
-              <div className="bg-blue-900 border border-blue-700 rounded-lg p-4">
+              <div 
+                className="rounded-xl p-4 border"
+                style={{
+                  background: 'rgba(59, 130, 246, 0.08)',
+                  borderColor: 'rgba(59, 130, 246, 0.25)'
+                }}
+              >
                 <div className="flex items-start space-x-3">
-                  <AlertCircle className="text-blue-300 mt-0.5" size={20} />
+                  <AlertCircle className="mt-0.5 shrink-0" size={18} style={{ color: 'var(--xsm-primary, #3b82f6)' }} />
                   <div>
-                    <h4 className="text-blue-300 font-medium mb-2">Payment Responsibility</h4>
-                    <p className="text-blue-200 text-sm">
+                    <h4 className="font-bold text-sm mb-1.5" style={{ color: 'var(--xsm-primary, #3b82f6)' }}>Payment Responsibility</h4>
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
                       {userType === 'buyer' 
                         ? "As the buyer, you are typically responsible for paying the transaction fee. However, if you and the seller have agreed otherwise, the seller can also pay this fee."
                         : "As the seller, you can choose to pay the transaction fee if you and the buyer have reached an agreement, or if the buyer is unable to pay."
@@ -192,35 +218,33 @@ const TransactionFeePayment: React.FC<TransactionFeePaymentProps> = ({
 
               {/* Payment Method Selection */}
               <div>
-                <h3 className="text-lg font-semibold text-white mb-4">Choose Payment Method</h3>
-                <div className="grid grid-cols-1 gap-4">
-                  {/* Stripe Option */}
-                 
-
+                <h3 className="text-base font-bold mb-3" style={{ color: 'var(--xsm-text)' }}>Choose Payment Method</h3>
+                <div className="grid grid-cols-1 gap-3">
                   {/* Crypto Option */}
                   <button
                     onClick={() => handlePaymentMethodSelect('crypto')}
-                    className="flex items-center justify-between p-4 bg-gray-800 hover:bg-gray-700 border border-gray-600 hover:border-xsm-yellow rounded-lg transition-all group"
+                    className="flex items-center justify-between p-4 rounded-xl border transition-all hover:border-amber-500/50 group text-left"
+                    style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}
                   >
                     <div className="flex items-center space-x-4">
-                      <div className="bg-orange-600 p-3 rounded-lg group-hover:bg-orange-500 transition-colors">
-                        <Bitcoin className="text-white" size={24} />
+                      <div className="bg-amber-500/20 text-amber-500 p-3 rounded-xl group-hover:bg-amber-500 group-hover:text-black transition-colors">
+                        <Bitcoin size={24} />
                       </div>
-                      <div className="text-left">
-                        <h4 className="text-white font-semibold">Cryptocurrency</h4>
-                        <p className="text-gray-400 text-sm">Bitcoin, Ethereum, USDT, and more</p>
-                        <p className="text-yellow-400 text-xs">Lower fees, secure & private</p>
+                      <div>
+                        <h4 className="font-bold text-sm" style={{ color: 'var(--xsm-text)' }}>Cryptocurrency</h4>
+                        <p className="text-xs" style={{ color: 'var(--xsm-light-gray)' }}>Bitcoin, Ethereum, USDT, and more</p>
+                        <p className="text-[11px] font-semibold text-amber-500">Lower fees, secure & private</p>
                       </div>
                     </div>
-                    <Zap className="text-xsm-yellow opacity-0 group-hover:opacity-100 transition-opacity" size={20} />
+                    <Zap className="opacity-0 group-hover:opacity-100 transition-opacity" size={20} style={{ color: 'var(--xsm-primary)' }} />
                   </button>
                 </div>
               </div>
 
               {/* Additional Info */}
-              <div className="bg-gray-800 rounded-lg p-4">
-                <h4 className="text-white font-medium mb-2">Important Notes</h4>
-                <ul className="text-gray-300 text-sm space-y-1">
+              <div className="rounded-xl p-4 border text-xs" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+                <h4 className="font-bold mb-2" style={{ color: 'var(--xsm-text)' }}>Important Notes</h4>
+                <ul className="space-y-1" style={{ color: 'var(--xsm-light-gray)' }}>
                   <li>• The transaction fee ensures secure escrow service</li>
                   <li>• Payment is processed securely through our trusted partners</li>
                   <li>• Once paid, the deal will proceed to the next stage</li>
@@ -328,6 +352,19 @@ const TransactionFeePayment: React.FC<TransactionFeePaymentProps> = ({
         } : null}
         onPaymentComplete={handleCryptoPaymentComplete}
       />
+
+      {/* Custom Theme-Adaptive Alert Modal */}
+      {alertConfig && (
+        <DealAlertModal
+          {...alertConfig}
+          onClose={() => {
+            if (alertConfig.onClose) {
+              alertConfig.onClose();
+            }
+            setAlertConfig(null);
+          }}
+        />
+      )}
     </div>
   );
 };

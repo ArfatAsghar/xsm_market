@@ -1,16 +1,56 @@
 <IfModule mod_rewrite.c>
+  Options -MultiViews
   RewriteEngine On
   RewriteBase /
 
-  # Serve existing static files and directories directly (JS, CSS, images, favicons)
-  RewriteCond %{REQUEST_FILENAME} -f [OR]
-  RewriteCond %{REQUEST_FILENAME} -d
+  # 1. Serve existing static files directly (CSS, JS, images, favicons, fonts)
+  RewriteCond %{REQUEST_FILENAME} -f
   RewriteRule ^ - [L]
 
-  # Route /api and /api/* requests to api/index.php
-  RewriteRule ^api/(.*)$ api/index.php [QSA,L]
-  RewriteRule ^api$ api/index.php [QSA,L]
+  # 2. Direct serve uploads if file exists (either via /api/uploads/ or /uploads/)
+  RewriteCond %{DOCUMENT_ROOT}/php-backend/uploads/$1 -f
+  RewriteRule ^(?:api/)?uploads/(.*)$ php-backend/uploads/$1 [L]
 
-  # React SPA fallback: route all other requests to index.html
+  # 3. Route all /api and /api/* requests directly to php-backend/index.php
+  RewriteRule ^api(/.*)?$ php-backend/index.php [QSA,L]
+
+  # 4. Route /uploads/ that don't match a static file to php-backend/index.php
+  RewriteRule ^uploads/(.*)$ php-backend/index.php [QSA,L]
+
+  # 5. Serve existing directories directly (except api)
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteCond %{REQUEST_URI} !^/api
+  RewriteRule ^ - [L]
+
+  # 6. React SPA fallback: route all other page requests to index.html
   RewriteRule ^ index.html [L]
+</IfModule>
+
+# Ensure proper MIME types are set for all static assets
+<IfModule mod_mime.c>
+  AddType text/css .css
+  AddType application/javascript .js
+  AddType image/svg+xml .svg
+  AddType image/png .png
+  AddType image/jpeg .jpg .jpeg
+  AddType image/webp .webp
+  AddType application/json .json
+  AddType font/woff2 .woff2
+  AddType font/woff .woff
+</IfModule>
+
+# Prevent caching of index.html so updates are visible immediately
+<Files "index.html">
+  <IfModule mod_headers.c>
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+  </IfModule>
+</Files>
+
+# Allow CORS for API requests
+<IfModule mod_headers.c>
+  Header always set Access-Control-Allow-Origin "*"
+  Header always set Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS, PATCH"
+  Header always set Access-Control-Allow-Headers "Origin, X-Requested-With, Content-Type, Accept, Authorization"
 </IfModule>

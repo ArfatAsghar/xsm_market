@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, Shield, DollarSign, CreditCard, Smartphone, Check, HelpCircle, Crown, CheckCircle2, Clock, ArrowRight } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { getBuyerStats } from '@/services/auth';
@@ -21,7 +22,7 @@ const API_URL = getBaseUrl();
 interface PaymentMethod {
   id: string;
   name: string;
-  icon: string;
+  icon: string | React.ReactNode;
   category: 'bank' | 'digital' | 'crypto' | 'other';
 }
 
@@ -42,6 +43,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
   sellerId,
   onNavigateToChat
 }) => {
+  const navigate = useNavigate();
   const { user, isLoggedIn } = useAuth();
   const { toast } = useToast();
   const [selectedTransactionType, setSelectedTransactionType] = useState<'safest' | 'fastest'>('safest');
@@ -51,9 +53,10 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [isCreatingDeal, setIsCreatingDeal] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
-  const [activeInstructionTab, setActiveInstructionTab] = useState<'youtube' | 'tiktok' | 'facebook' | 'instagram'>('youtube');
+  const [activeInstructionTab, setActiveInstructionTab] = useState<'youtube' | 'tiktok' | 'facebook' | 'instagram' | 'twitter' | 'telegram'>('youtube');
   const [buyerTier, setBuyerTier] = useState<'standard' | 'repeat' | 'vip' | 'vip_repeat'>('standard');
   const [buyerIsVip, setBuyerIsVip] = useState(false);
+  const [countdown, setCountdown] = useState<number>(3);
   const [successData, setSuccessData] = useState<{
     txnId: string;
     channelTitle: string;
@@ -61,6 +64,54 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
     serviceFee: number;
     buyerEmail: string;
   } | null>(null);
+
+  const resetModal = () => {
+    setStep('fee-selection');
+    setSelectedPaymentMethods([]);
+    setBuyerEmail('');
+    setSelectedTransactionType('safest');
+    setAgreedToTerms(false);
+    setIsCreatingDeal(false);
+    setShowInfo(false);
+    setActiveInstructionTab('youtube');
+  };
+
+  const redirectToChat = () => {
+    setSuccessData(null);
+    resetModal();
+    onClose();
+    if (onNavigateToChat) {
+      onNavigateToChat();
+    } else {
+      navigate('/chat');
+    }
+  };
+
+  // Auto-redirect directly to chat in 3 seconds after deal creation
+  useEffect(() => {
+    if (!successData) return;
+
+    setCountdown(3);
+
+    const interval = setInterval(() => {
+      setCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    const timer = setTimeout(() => {
+      redirectToChat();
+    }, 3000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timer);
+    };
+  }, [successData]);
 
   // Fetch buyer stats (VIP + repeat buyer tier) when modal opens
   useEffect(() => {
@@ -71,16 +122,17 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
     }).catch(() => {});
   }, [isOpen, isLoggedIn]);
 
-  // Payment methods data (MoneyGram and Google Pay removed)
+  // Payment methods data (reordered: Cryptocurrency, Bank Payment, Payoneer, Bitcoin, then rest)
   const paymentMethods: PaymentMethod[] = [
-    { id: 'bank-transfer', name: 'Bank Transfer', icon: '🏦', category: 'bank' },
-    { id: 'paypal', name: 'PayPal', icon: '💳', category: 'digital' },
+    { id: 'cryptocurrency', name: 'Cryptocurrency', icon: '₮', category: 'crypto' },
+    { id: 'bank-transfer', name: 'Bank Payment', icon: '🏦', category: 'bank' },
+    { id: 'payoneer', name: 'Payoneer', icon: '💼', category: 'digital' },
     { id: 'bitcoin', name: 'Bitcoin', icon: '₿', category: 'crypto' },
+    { id: 'paypal', name: 'PayPal', icon: '💳', category: 'digital' },
     { id: 'venmo', name: 'Venmo', icon: '💸', category: 'digital' },
     { id: 'zelle', name: 'Zelle', icon: '⚡', category: 'digital' },
     { id: 'cashapp', name: 'Cash App', icon: '💰', category: 'digital' },
     { id: 'transferwise', name: 'TransferWise', icon: '🌍', category: 'bank' },
-    { id: 'payoneer', name: 'Payoneer', icon: '💼', category: 'digital' },
     { id: 'western-union', name: 'Western Union', icon: '🌐', category: 'bank' },
     { id: 'other', name: 'Other', icon: '📋', category: 'other' }
   ];
@@ -149,15 +201,6 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
   };
 
   const handleFinalSubmit = async () => {
-    if (!agreedToTerms) {
-      toast({
-        title: 'Terms Agreement Required',
-        description: 'Please agree to the terms and conditions.',
-        variant: 'destructive'
-      });
-      return;
-    }
-
     if (!isLoggedIn || !user) {
       toast({
         title: 'Login Required',
@@ -230,17 +273,6 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
     }
   };
 
-  const resetModal = () => {
-    setStep('fee-selection');
-    setSelectedPaymentMethods([]);
-    setBuyerEmail('');
-    setSelectedTransactionType('safest');
-    setAgreedToTerms(false);
-    setIsCreatingDeal(false);
-    setShowInfo(false);
-    setActiveInstructionTab('youtube');
-  };
-
   const getModalWidthClass = () => {
     switch (step) {
       case 'fee-selection':
@@ -260,16 +292,26 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-3">
-      <div className={`bg-xsm-dark-gray rounded-xl ${getModalWidthClass()} w-full flex flex-col transition-all duration-300 shadow-2xl border border-xsm-medium-gray/40`} style={{ maxHeight: '95vh' }}>
+      <div
+        className={`rounded-xl ${getModalWidthClass()} w-full flex flex-col transition-all duration-300 shadow-2xl border`}
+        style={{
+          maxHeight: '95vh',
+          background: 'var(--xsm-dark-gray)',
+          borderColor: 'var(--xsm-border)',
+          color: 'var(--xsm-text)'
+        }}
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2.5 border-b border-xsm-gray flex-shrink-0">
-          <h2 className="text-base font-bold text-white">Create a Deal</h2>
+        <div className="flex items-center justify-between px-4 py-2.5 border-b flex-shrink-0" style={{ borderColor: 'var(--xsm-border)' }}>
+          <h2 className="text-base font-bold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Create a Deal</h2>
           <button
             onClick={() => {
               resetModal();
               onClose();
             }}
-            className="text-white hover:text-xsm-yellow transition-colors"
+            className="p-1 rounded-md transition-colors hover:opacity-80"
+            style={{ color: 'var(--xsm-light-gray)' }}
+            title="Close"
           >
             <X className="w-4 h-4" />
           </button>
@@ -279,38 +321,43 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
           {step === 'fee-selection' && (
             <>
               <div className="flex items-center justify-between mb-2">
-                <h2 className="text-sm font-bold text-white">Escrow Service Fee</h2>
+                <h2 className="text-sm font-bold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Escrow Service Fee</h2>
                 <button
                   type="button"
                   onClick={() => setShowInfo(true)}
-                  className="text-gray-400 hover:text-xsm-yellow p-1 transition-colors flex items-center gap-1 text-xs font-medium border border-gray-700 rounded-lg bg-gray-800/40"
+                  className="p-1 px-2 transition-colors flex items-center gap-1 text-xs font-medium border rounded-lg hover:border-xsm-yellow"
+                  style={{
+                    borderColor: 'var(--xsm-border)',
+                    background: 'var(--xsm-medium-gray)',
+                    color: 'var(--xsm-text)'
+                  }}
                   title="View Discount Fee Programs"
                 >
-                  <HelpCircle className="w-3.5 h-3.5" />
+                  <HelpCircle className="w-3.5 h-3.5 text-xsm-yellow" />
                   <span>Discount Tiers</span>
                 </button>
               </div>
               
-              <div className="bg-xsm-gray rounded-lg p-3 mb-2">
-                <h3 className="text-xs font-semibold text-white mb-1.5">Standard Fee Structure</h3>
-                <table className="w-full text-left text-xs text-xsm-light-gray border-collapse">
+              <div className="rounded-lg p-3 mb-2 border" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                <h3 className="text-xs font-semibold mb-1.5" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Standard Fee Structure</h3>
+                <table className="w-full text-left text-xs border-collapse" style={{ color: 'var(--xsm-text)' }}>
                   <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="py-1 text-white font-semibold">Deal Amount</th>
-                      <th className="py-1 text-white font-semibold">Fee</th>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Deal Amount</th>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Fee</th>
                     </tr>
                   </thead>
                   <tbody>
-                    <tr className="border-b border-gray-800">
-                      <td className="py-1 font-medium text-white">$1 – $50</td>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+                      <td className="py-1 font-medium">$1 – $50</td>
                       <td className="py-1 text-xsm-yellow font-bold">Minimum $2</td>
                     </tr>
-                    <tr className="border-b border-gray-800">
-                      <td className="py-1 font-medium text-white">$50 – $100</td>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+                      <td className="py-1 font-medium">$50 – $100</td>
                       <td className="py-1 text-xsm-yellow font-bold">5%</td>
                     </tr>
                     <tr>
-                      <td className="py-1 font-medium text-white">Above $100</td>
+                      <td className="py-1 font-medium">Above $100</td>
                       <td className="py-1 text-xsm-yellow font-bold">4%</td>
                     </tr>
                   </tbody>
@@ -318,25 +365,25 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
               </div>
 
               {/* Calculated Fee Summary */}
-              <div className="bg-gray-800/80 border border-gray-700 rounded-lg p-3 mb-3 text-center">
-                <p className="text-gray-400 text-[10px] mb-0.5 uppercase tracking-wider font-semibold">Your Calculated Service Fee</p>
+              <div className="border rounded-lg p-3 mb-3 text-center" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                <p className="text-[10px] mb-0.5 uppercase tracking-wider font-semibold" style={{ color: 'var(--xsm-light-gray)' }}>Your Calculated Service Fee</p>
                 <p className="text-2xl font-extrabold text-xsm-yellow mb-0.5">${escrowFee.toFixed(2)}</p>
-                <p className="text-xsm-light-gray text-xs">
-                  Based on the channel price of <span className="text-white font-semibold">${numericPrice.toFixed(2)}</span>
+                <p className="text-xs" style={{ color: 'var(--xsm-text)' }}>
+                  Based on the channel price of <span className="font-semibold text-xsm-yellow">${numericPrice.toFixed(2)}</span>
                 </p>
-                <div className={`mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${activeTier.color} bg-white/5 border border-white/10`}>
+                <div className={`mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-semibold ${activeTier.color} border`} style={{ borderColor: 'var(--xsm-border)' }}>
                   {activeTier.icon && <span>{activeTier.icon}</span>}
                   <span>{activeTier.label}</span>
                 </div>
-                <div className="mt-2 pt-2 border-t border-gray-700 flex justify-between items-center text-sm px-2">
-                  <span className="text-xsm-light-gray font-medium text-xs">Total with Fee:</span>
-                  <span className="text-white font-bold">${(numericPrice + escrowFee).toFixed(2)}</span>
+                <div className="mt-2 pt-2 border-t flex justify-between items-center text-sm px-2" style={{ borderColor: 'var(--xsm-border)' }}>
+                  <span className="font-medium text-xs" style={{ color: 'var(--xsm-light-gray)' }}>Total with Fee:</span>
+                  <span className="font-bold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>${(numericPrice + escrowFee).toFixed(2)}</span>
                 </div>
               </div>
 
               <button
                 onClick={handleFeeSelection}
-                className="w-full bg-xsm-yellow text-black font-bold py-2 rounded-lg hover:bg-yellow-400 transition-colors text-sm"
+                className="w-full bg-xsm-yellow text-black font-bold py-2.5 rounded-lg hover:bg-yellow-400 transition-colors text-sm shadow-md cursor-pointer"
               >
                 Continue to Payment Methods
               </button>
@@ -350,21 +397,31 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                 <div className="flex justify-center space-x-3 mb-2">
                   <button
                     onClick={() => setSelectedTransactionType('safest')}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                       selectedTransactionType === 'safest'
-                        ? 'bg-white text-black'
-                        : 'bg-transparent border border-white text-white hover:bg-white hover:text-black'
+                        ? 'bg-xsm-yellow text-black shadow-md'
+                        : 'hover:opacity-80'
                     }`}
+                    style={selectedTransactionType !== 'safest' ? {
+                      border: '1px solid var(--xsm-border)',
+                      color: 'var(--xsm-text)',
+                      background: 'transparent'
+                    } : {}}
                   >
                     Safest transaction
                   </button>
                   <button
                     onClick={() => setSelectedTransactionType('fastest')}
-                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                       selectedTransactionType === 'fastest'
-                        ? 'bg-white text-black'
-                        : 'bg-transparent border border-white text-white hover:bg-white hover:text-black'
+                        ? 'bg-xsm-yellow text-black shadow-md'
+                        : 'hover:opacity-80'
                     }`}
+                    style={selectedTransactionType !== 'fastest' ? {
+                      border: '1px solid var(--xsm-border)',
+                      color: 'var(--xsm-text)',
+                      background: 'transparent'
+                    } : {}}
                   >
                     Fastest transaction
                   </button>
@@ -373,59 +430,76 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
               {/* Payment Methods Selection */}
               <div className="mb-2">
-                <p className="text-xs text-gray-400 mb-2">
+                <p className="text-xs mb-2" style={{ color: 'var(--xsm-light-gray)' }}>
                   Select payment methods you can use to pay the seller. More options = better chance of matching the seller.
                 </p>
-                <div className="grid grid-cols-5 gap-2 mb-2">
-                  {paymentMethods.map((method) => (
-                    <button
-                      key={method.id}
-                      onClick={() => handlePaymentMethodToggle(method.id)}
-                      className={`p-2 rounded-lg border-2 transition-all flex flex-col items-center gap-1 ${
-                        selectedPaymentMethods.includes(method.id)
-                          ? 'border-xsm-yellow bg-xsm-yellow/10 text-xsm-yellow'
-                          : 'border-gray-600 text-white hover:border-xsm-yellow hover:text-xsm-yellow'
-                      }`}
-                    >
-                      <span className="text-lg">{method.icon}</span>
-                      <span className="text-[10px] font-medium text-center leading-tight">{method.name}</span>
-                    </button>
-                  ))}
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2 mb-2">
+                  {paymentMethods.map((method) => {
+                    const isSelected = selectedPaymentMethods.includes(method.id);
+                    return (
+                      <button
+                        key={method.id}
+                        type="button"
+                        onClick={() => handlePaymentMethodToggle(method.id)}
+                        className={`p-2 rounded-lg border-2 transition-all flex flex-col items-center justify-center gap-1 relative cursor-pointer ${
+                          isSelected
+                            ? 'border-xsm-yellow bg-xsm-yellow/15 shadow-sm'
+                            : 'hover:border-xsm-yellow/60'
+                        }`}
+                        style={{
+                          background: isSelected ? undefined : 'var(--xsm-medium-gray)',
+                          borderColor: isSelected ? undefined : 'var(--xsm-border)',
+                          color: isSelected ? 'var(--xsm-primary)' : 'var(--xsm-text)'
+                        }}
+                      >
+                        {isSelected && (
+                          <span className="absolute top-1 right-1 w-3.5 h-3.5 rounded-full bg-xsm-yellow text-black flex items-center justify-center text-[8px] font-black">
+                            ✓
+                          </span>
+                        )}
+                        <span className="text-lg">{method.icon}</span>
+                        <span className="text-[10px] font-semibold text-center leading-tight truncate w-full px-0.5">
+                          {method.name}
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 
               {/* Transaction Steps by Platform */}
-              <div className="mb-2 border border-gray-700 bg-gray-800/20 rounded-lg p-3">
-                <h3 className="text-xs font-semibold text-white mb-2">Transaction Instructions by Platform:</h3>
-                <div className="flex border-b border-gray-700 mb-2 gap-1">
-                  {(['youtube', 'tiktok', 'facebook', 'instagram'] as const).map((platform) => (
+              <div className="mb-2 border rounded-lg p-3" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                <h3 className="text-xs font-semibold mb-2" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Transaction Instructions by Platform:</h3>
+                <div className="flex border-b mb-2 gap-1 overflow-x-auto" style={{ borderColor: 'var(--xsm-border)' }}>
+                  {(['youtube', 'tiktok', 'facebook', 'instagram', 'twitter', 'telegram'] as const).map((platform) => (
                     <button
                       key={platform}
                       type="button"
                       onClick={() => setActiveInstructionTab(platform)}
-                      className={`px-3 py-1 text-xs font-semibold capitalize border-b-2 transition-all whitespace-nowrap ${
+                      className={`px-3 py-1 text-xs font-semibold capitalize border-b-2 transition-all whitespace-nowrap cursor-pointer ${
                         activeInstructionTab === platform
-                          ? 'border-xsm-yellow text-xsm-yellow bg-xsm-yellow/5'
-                          : 'border-transparent text-gray-400 hover:text-white'
+                          ? 'border-xsm-yellow text-xsm-yellow bg-xsm-yellow/10 font-bold'
+                          : 'border-transparent hover:opacity-80'
                       }`}
+                      style={activeInstructionTab !== platform ? { color: 'var(--xsm-light-gray)' } : {}}
                     >
-                      {platform}
+                      {platform === 'twitter' ? 'Twitter (X)' : platform}
                     </button>
                   ))}
                 </div>
                 <div>
                   {activeInstructionTab === 'youtube' && (
-                    <ol className="space-y-1 text-white list-decimal list-inside text-xs leading-relaxed">
+                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
                       <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate the escrow process.</li>
-                      <li>The seller designates the website agent's email as a <strong>Manager</strong> of the YouTube channel.</li>
-                      <li>The website agent must remain a Manager for <strong>7 days</strong> before primary ownership can be transferred.</li>
-                      <li>After 7 days, the seller transfers <strong>Primary Ownership</strong> to the website agent.</li>
+                      <li>The seller designates the website agent's email as a <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager</strong> of the YouTube channel.</li>
+                      <li>The website agent must remain a Manager for <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>7 days</strong> before primary ownership can be transferred.</li>
+                      <li>After 7 days, the seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to the website agent.</li>
                       <li>The agent verifies the channel, removes seller's access, and notifies the buyer to pay the seller.</li>
                       <li>After seller confirms payment, the agent assigns Primary Ownership to the buyer.</li>
                     </ol>
                   )}
                   {activeInstructionTab === 'tiktok' && (
-                    <ol className="space-y-1 text-white list-decimal list-inside text-xs leading-relaxed">
+                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
                       <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
                       <li>The seller shares login credentials with the agent via secure chat.</li>
                       <li>The agent updates recovery email, links new phone, and logs out of all sessions.</li>
@@ -434,16 +508,16 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                     </ol>
                   )}
                   {activeInstructionTab === 'facebook' && (
-                    <ol className="space-y-1 text-white list-decimal list-inside text-xs leading-relaxed">
+                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
                       <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
-                      <li>The seller invites the website agent as an <strong>Admin</strong> of the Facebook Page.</li>
+                      <li>The seller invites the website agent as an <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Admin</strong> of the Facebook Page.</li>
                       <li>The agent accepts, checks for other owners, and removes seller's admin access.</li>
                       <li>The agent verifies all roles and notifies buyer to pay seller.</li>
                       <li>After seller confirms payment, agent invites buyer as Admin and removes themselves.</li>
                     </ol>
                   )}
                   {activeInstructionTab === 'instagram' && (
-                    <ol className="space-y-1 text-white list-decimal list-inside text-xs leading-relaxed">
+                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
                       <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
                       <li>The seller updates Instagram account email to the agent's secure transfer email.</li>
                       <li>The agent resets the password and updates 2FA settings.</li>
@@ -451,14 +525,33 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                       <li>After seller confirms payment, agent changes email to buyer's and hands over credentials.</li>
                     </ol>
                   )}
+                  {activeInstructionTab === 'twitter' && (
+                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
+                      <li>The seller updates the Twitter (X) account email to the website agent's secure email.</li>
+                      <li>The agent resets the password, configures 2FA, and disconnects all active sessions.</li>
+                      <li>The agent verifies full account security and instructs the buyer to pay the seller.</li>
+                      <li>After seller confirms payment, the agent updates credentials to the buyer's email and transfers access.</li>
+                    </ol>
+                  )}
+                  {activeInstructionTab === 'telegram' && (
+                    <ol className="space-y-1 list-decimal list-inside text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                      <li>The buyer pays the service fee (${escrowFee.toFixed(2)}) to initiate escrow.</li>
+                      <li>The seller adds the website agent as Administrator with full rights to the Telegram channel/group.</li>
+                      <li>The seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> of the channel/group to the website agent.</li>
+                      <li>The agent confirms ownership transfer, removes previous admins, and notifies buyer to pay seller.</li>
+                      <li>After seller confirms payment, the agent transfers Primary Ownership directly to the buyer.</li>
+                    </ol>
+                  )}
                 </div>
               </div>
 
               {/* Security Notice */}
-              <div className="mb-2">
-                <div className="bg-orange-500/10 border border-orange-500 rounded-lg p-2">
-                  <p className="text-orange-300 text-[10px]">
-                    ⚠️ All messages must be sent through the website chat system. Communication outside the platform may void transaction protection.
+              <div className="mb-3">
+                <div className="p-2.5 rounded-lg border flex items-center gap-2" style={{ background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
+                  <span className="text-amber-500 text-xs">⚠️</span>
+                  <p className="text-[11px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                    All messages must be sent through the website chat system. Communication outside the platform may void transaction protection.
                   </p>
                 </div>
               </div>
@@ -466,15 +559,22 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
               {/* Action Buttons */}
               <div className="flex space-x-3">
                 <button
+                  type="button"
                   onClick={onClose}
-                  className="flex-1 py-2 px-4 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  className="flex-1 py-2 px-4 text-sm rounded-lg border transition-colors hover:opacity-80 font-medium cursor-pointer"
+                  style={{
+                    background: 'var(--xsm-medium-gray)',
+                    borderColor: 'var(--xsm-border)',
+                    color: 'var(--xsm-text)'
+                  }}
                 >
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleCreateDeal}
                   disabled={selectedPaymentMethods.length === 0}
-                  className="flex-1 py-2 px-4 text-sm bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 py-2 px-4 text-sm bg-xsm-yellow text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md cursor-pointer"
                 >
                   Continue
                 </button>
@@ -486,31 +586,31 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
             <>
               {/* Deal Summary */}
               <div className="mb-3">
-                <h3 className="text-sm font-semibold text-white mb-2">Deal Summary</h3>
-                <div className="bg-xsm-gray rounded-lg p-3 space-y-1.5">
+                <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Deal Summary</h3>
+                <div className="rounded-lg p-3 space-y-1.5 border" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-300">Channel:</span>
-                    <span className="text-xsm-yellow font-semibold">{channelTitle}</span>
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Channel:</span>
+                    <span className="text-xsm-yellow font-semibold truncate max-w-[200px]">{channelTitle}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-300">Price:</span>
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Price:</span>
                     <span className="text-xsm-yellow font-semibold">${numericPrice}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-300">Service Fee:</span>
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Service Fee:</span>
                     <span className="text-xsm-yellow font-semibold">${escrowFee.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-300">Transaction Type:</span>
-                    <span className="text-xsm-yellow font-semibold capitalize">{selectedTransactionType}</span>
+                    <span style={{ color: 'var(--xsm-light-gray)' }}>Transaction Type:</span>
+                    <span className="font-semibold capitalize" style={{ color: 'var(--xsm-text)' }}>{selectedTransactionType}</span>
                   </div>
-                  <div className="text-xs">
-                    <span className="text-gray-300">Payment Methods:</span>
-                    <div className="flex flex-wrap gap-1 mt-1">
+                  <div className="text-xs pt-1 border-t" style={{ borderColor: 'var(--xsm-border)' }}>
+                    <span className="block mb-1" style={{ color: 'var(--xsm-light-gray)' }}>Payment Methods:</span>
+                    <div className="flex flex-wrap gap-1">
                       {selectedPaymentMethods.map(methodId => {
                         const method = paymentMethods.find(p => p.id === methodId);
                         return (
-                          <span key={methodId} className="bg-xsm-yellow text-black px-2 py-0.5 rounded-full text-[10px] font-medium">
+                          <span key={methodId} className="bg-xsm-yellow text-black px-2 py-0.5 rounded-full text-[10px] font-semibold">
                             {method?.icon} {method?.name}
                           </span>
                         );
@@ -522,10 +622,10 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
               {/* Email Input */}
               <div className="mb-3">
-                <h3 className="text-xs font-semibold text-white mb-1">
+                <h3 className="text-xs font-semibold mb-1" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>
                   Email address associated with the account to be designated as the owner
                 </h3>
-                <p className="text-gray-400 mb-2 text-[11px]">
+                <p className="mb-2 text-[11px]" style={{ color: 'var(--xsm-light-gray)' }}>
                   No emails or passwords are traded on this website. The account will be transferred to the email address you provide below.
                 </p>
                 <input
@@ -533,22 +633,34 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                   value={buyerEmail}
                   onChange={(e) => setBuyerEmail(e.target.value)}
                   placeholder="Enter your email"
-                  className="w-full p-2.5 text-sm bg-white border border-gray-600 rounded-lg text-black placeholder-gray-500 focus:border-xsm-yellow focus:outline-none"
+                  className="w-full p-2.5 text-sm rounded-lg border focus:border-xsm-yellow focus:outline-none transition-colors"
+                  style={{
+                    background: 'var(--xsm-bg)',
+                    borderColor: 'var(--xsm-border)',
+                    color: 'var(--xsm-text)'
+                  }}
                 />
               </div>
 
               {/* Action Buttons */}
               <div className="flex space-x-3">
                 <button
+                  type="button"
                   onClick={() => setStep('payment-selection')}
-                  className="flex-1 py-2 px-4 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  className="flex-1 py-2 px-4 text-sm rounded-lg border transition-colors hover:opacity-80 font-medium cursor-pointer"
+                  style={{
+                    background: 'var(--xsm-medium-gray)',
+                    borderColor: 'var(--xsm-border)',
+                    color: 'var(--xsm-text)'
+                  }}
                 >
                   Back
                 </button>
                 <button
+                  type="button"
                   onClick={handleEmailConfirmation}
                   disabled={!buyerEmail.trim()}
-                  className="flex-1 py-2 px-4 text-sm bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-lg hover:from-purple-700 hover:to-purple-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold"
+                  className="flex-1 py-2 px-4 text-sm bg-xsm-yellow text-black font-bold rounded-lg hover:bg-yellow-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-md cursor-pointer"
                 >
                   Continue
                 </button>
@@ -560,22 +672,22 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
             <>
               {/* Terms & Conditions */}
               <div className="mb-3">
-                <h3 className="text-sm font-semibold text-white mb-2">Terms & Conditions Agreement</h3>
-                <div className="bg-xsm-gray rounded-lg p-3 max-h-44 overflow-y-auto custom-scrollbar">
-                  <div className="space-y-2 text-white text-xs">
+                <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Terms & Conditions Agreement</h3>
+                <div className="rounded-lg p-3 max-h-44 overflow-y-auto custom-scrollbar border" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                  <div className="space-y-2 text-xs">
                     <div>
                       <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">1. Website Agent Service Agreement</h4>
-                      <p className="text-[11px] text-gray-300">By proceeding, you agree to use our secure website agent service. All transactions must follow the established process for buyer and seller protection.</p>
+                      <p className="text-[11px]" style={{ color: 'var(--xsm-text)' }}>By proceeding, you agree to use our secure website agent service. All transactions must follow the established process for buyer and seller protection.</p>
                     </div>
                     
                     <div>
                       <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">2. Communication Policy</h4>
-                      <p className="text-[11px] text-gray-300">⚠️ <strong>IMPORTANT:</strong> All communication MUST occur through our platform's chat system. Communication outside the website is FORBIDDEN for safety.</p>
+                      <p className="text-[11px]" style={{ color: 'var(--xsm-text)' }}>⚠️ <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>IMPORTANT:</strong> All communication MUST occur through our platform's chat system. Communication outside the website is FORBIDDEN for safety.</p>
                     </div>
                     
                     <div>
                       <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">3. Transaction Process</h4>
-                      <ul className="list-disc list-inside space-y-0.5 text-[11px] text-gray-300 ml-2">
+                      <ul className="list-disc list-inside space-y-0.5 text-[11px] ml-2" style={{ color: 'var(--xsm-text)' }}>
                         <li>Buyer pays service fee (${escrowFee.toFixed(2)})</li>
                         <li>Seller designates website agent as account manager</li>
                         <li>After 7 days, seller transfers primary ownership to website agent</li>
@@ -587,63 +699,55 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                     
                     <div>
                       <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">4. Refund Policy</h4>
-                      <p className="text-[11px] text-gray-300">7-day money-back guarantee applies if seller fails to deliver. Service fee is non-refundable unless transaction is cancelled by seller.</p>
+                      <p className="text-[11px]" style={{ color: 'var(--xsm-text)' }}>7-day money-back guarantee applies if seller fails to deliver. Service fee is non-refundable unless transaction is cancelled by seller.</p>
                     </div>
                     
                     <div>
                       <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">5. Account Transfer</h4>
-                      <p className="text-[11px] text-gray-300">Account will be transferred to: <strong className="text-xsm-yellow">{buyerEmail}</strong>.</p>
+                      <p className="text-[11px]" style={{ color: 'var(--xsm-text)' }}>Account will be transferred to: <strong className="text-xsm-yellow">{buyerEmail}</strong>.</p>
                     </div>
                     
                     <div>
                       <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">6. Dispute Resolution</h4>
-                      <p className="text-[11px] text-gray-300">Disputes will be resolved through our arbitration service via chat log review.</p>
+                      <p className="text-[11px]" style={{ color: 'var(--xsm-text)' }}>Disputes will be resolved through our arbitration service via chat log review.</p>
                     </div>
                     
-                    <div className="bg-orange-500/10 border border-orange-500 rounded p-2 mt-2">
-                      <p className="text-orange-300 text-[10px] font-medium">
-                        🔒 <strong>Security Notice:</strong> Never share credentials outside our platform. Our website agents handle all transfers securely.
+                    <div className="p-2 mt-2 rounded border" style={{ background: 'rgba(245, 158, 11, 0.1)', borderColor: 'rgba(245, 158, 11, 0.3)' }}>
+                      <p className="text-[10px] font-medium" style={{ color: 'var(--xsm-text)' }}>
+                        🔒 <strong className="text-xsm-yellow">Security Notice:</strong> Never share credentials outside our platform. Our website agents handle all transfers securely.
                       </p>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Agreement Checkbox */}
-              <div className="mb-3">
-                <label className="flex items-start space-x-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={agreedToTerms}
-                    onChange={(e) => setAgreedToTerms(e.target.checked)}
-                    className="mt-0.5 w-4 h-4 text-xsm-yellow bg-xsm-gray border-gray-600 rounded focus:ring-xsm-yellow"
-                  />
-                  <span className="text-white text-xs leading-tight">
-                    I have read and agree to the terms and conditions above. All communication must happen through the platform chat for transaction security.
-                  </span>
-                </label>
+              {/* By Continuing Agreement Notice (Checkbox removed as requested) */}
+              <div className="mb-3 p-2.5 rounded-lg border text-center sm:text-left" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                  By continuing, you agree to the <strong className="text-xsm-yellow">Terms & Conditions</strong> above and acknowledge that all communication must happen through the platform chat for transaction security.
+                </p>
               </div>
 
               {/* Transaction Summary */}
               <div className="mb-3">
-                <div className="bg-xsm-black/50 rounded-lg p-2.5">
+                <div className="rounded-lg p-2.5 border" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
                   <h4 className="text-xsm-yellow font-semibold text-xs mb-1.5">Transaction Summary</h4>
                   <div className="grid grid-cols-4 gap-2 text-xs">
                     <div>
-                      <span className="text-gray-400 text-[10px] block">Channel:</span>
-                      <p className="text-white font-medium text-xs truncate">{channelTitle}</p>
+                      <span className="text-[10px] block" style={{ color: 'var(--xsm-light-gray)' }}>Channel:</span>
+                      <p className="font-medium text-xs truncate" style={{ color: 'var(--xsm-text)' }}>{channelTitle}</p>
                     </div>
                     <div>
-                      <span className="text-gray-400 text-[10px] block">Price:</span>
-                      <p className="text-white font-medium text-xs">${numericPrice}</p>
+                      <span className="text-[10px] block" style={{ color: 'var(--xsm-light-gray)' }}>Price:</span>
+                      <p className="font-medium text-xs" style={{ color: 'var(--xsm-text)' }}>${numericPrice}</p>
                     </div>
                     <div>
-                      <span className="text-gray-400 text-[10px] block">Service Fee:</span>
-                      <p className="text-white font-medium text-xs">${escrowFee.toFixed(2)}</p>
+                      <span className="text-[10px] block" style={{ color: 'var(--xsm-light-gray)' }}>Service Fee:</span>
+                      <p className="font-medium text-xs text-xsm-yellow">${escrowFee.toFixed(2)}</p>
                     </div>
                     <div>
-                      <span className="text-gray-400 text-[10px] block">Transfer Email:</span>
-                      <p className="text-white font-medium text-xs truncate" title={buyerEmail}>{buyerEmail}</p>
+                      <span className="text-[10px] block" style={{ color: 'var(--xsm-light-gray)' }}>Transfer Email:</span>
+                      <p className="font-medium text-xs truncate" style={{ color: 'var(--xsm-text)' }} title={buyerEmail}>{buyerEmail}</p>
                     </div>
                   </div>
                 </div>
@@ -652,15 +756,22 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
               {/* Action Buttons */}
               <div className="flex space-x-3">
                 <button
+                  type="button"
                   onClick={() => setStep('email-confirmation')}
-                  className="flex-1 py-2 px-4 text-sm bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  className="flex-1 py-2 px-4 text-sm rounded-lg border transition-colors hover:opacity-80 font-medium cursor-pointer"
+                  style={{
+                    background: 'var(--xsm-medium-gray)',
+                    borderColor: 'var(--xsm-border)',
+                    color: 'var(--xsm-text)'
+                  }}
                 >
                   Back
                 </button>
                 <button
+                  type="button"
                   onClick={handleFinalSubmit}
-                  disabled={!agreedToTerms || isCreatingDeal}
-                  className="flex-1 py-2 px-4 text-sm bg-gradient-to-r from-green-600 to-green-700 text-white rounded-lg hover:from-green-700 hover:to-green-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold flex items-center justify-center space-x-2"
+                  disabled={isCreatingDeal}
+                  className="flex-1 py-2.5 px-4 text-sm bg-gradient-to-r from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white font-bold rounded-lg transition-all shadow-md flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
                 >
                   {isCreatingDeal ? (
                     <>
@@ -682,101 +793,145 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
       {/* Discount Programs Information Modal Overlay */}
       {showInfo && (
-        <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
-          <div className="bg-xsm-dark-gray border border-gray-700 rounded-xl p-6 max-w-xl w-full max-h-[85vh] overflow-y-auto relative shadow-2xl">
+        <div className="fixed inset-0 bg-black/85 z-50 flex items-center justify-center p-4">
+          <div
+            className="rounded-xl p-5 sm:p-6 max-w-xl w-full max-h-[85vh] overflow-y-auto relative shadow-2xl border"
+            style={{
+              background: 'var(--xsm-dark-gray)',
+              borderColor: 'var(--xsm-border)',
+              color: 'var(--xsm-text)'
+            }}
+          >
             <button
               onClick={() => setShowInfo(false)}
-              className="absolute right-4 top-4 text-gray-400 hover:text-white transition-colors"
+              className="absolute right-4 top-4 p-1 rounded-md transition-colors hover:opacity-80"
+              style={{ color: 'var(--xsm-light-gray)' }}
               title="Close Panel"
             >
-              <X className="w-6 h-6" />
+              <X className="w-5 h-5" />
             </button>
 
-            <h3 className="text-xl font-bold text-xsm-yellow mb-1 flex items-center gap-2">
+            <h3 className="text-lg font-bold text-xsm-yellow mb-1 flex items-center gap-2">
               <HelpCircle className="w-5 h-5 text-xsm-yellow" />
               Fee Discount Tiers
             </h3>
-            <p className="text-xs text-gray-400 mb-5">Your active tier is highlighted below.</p>
+            <p className="text-xs mb-4" style={{ color: 'var(--xsm-light-gray)' }}>Your active tier is highlighted below.</p>
 
             <div className="space-y-3">
               {/* Standard */}
-              <div className={`border rounded-lg p-4 transition-all ${
-                buyerTier === 'standard'
-                  ? 'border-gray-500 bg-gray-800/60 ring-1 ring-gray-500'
-                  : 'border-gray-800 bg-xsm-black/40'
-              }`}>
-                <h4 className="font-semibold text-gray-300 mb-2 text-sm flex items-center justify-between">
+              <div
+                className={`border rounded-lg p-3.5 transition-all ${
+                  buyerTier === 'standard' ? 'ring-1 ring-xsm-yellow/60 border-xsm-yellow' : ''
+                }`}
+                style={{
+                  background: 'var(--xsm-medium-gray)',
+                  borderColor: buyerTier === 'standard' ? undefined : 'var(--xsm-border)'
+                }}
+              >
+                <h4 className="font-semibold mb-2 text-sm flex items-center justify-between" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>
                   <span>Standard Rate</span>
-                  {buyerTier === 'standard' && <span className="text-[10px] bg-gray-600 text-white px-2 py-0.5 rounded-full">YOUR TIER</span>}
+                  {buyerTier === 'standard' && <span className="text-[10px] bg-xsm-yellow text-black font-bold px-2 py-0.5 rounded-full">YOUR TIER</span>}
                 </h4>
-                <table className="w-full text-left text-xs text-xsm-light-gray">
-                  <thead><tr className="border-b border-gray-800"><th className="py-1 text-white font-medium">Deal Amount</th><th className="py-1 text-white font-medium">Fee</th></tr></thead>
+                <table className="w-full text-left text-xs" style={{ color: 'var(--xsm-text)' }}>
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Deal Amount</th>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Fee</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    <tr className="border-b border-gray-800/40"><td className="py-1">$1 – $50</td><td className="py-1 text-white">Min $2</td></tr>
-                    <tr className="border-b border-gray-800/40"><td className="py-1">$50 – $100</td><td className="py-1 text-white">5%</td></tr>
-                    <tr><td className="py-1">Above $100</td><td className="py-1 text-white">4%</td></tr>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}><td className="py-1">$1 – $50</td><td className="py-1 font-bold text-xsm-yellow">Min $2</td></tr>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}><td className="py-1">$50 – $100</td><td className="py-1 font-bold text-xsm-yellow">5%</td></tr>
+                    <tr><td className="py-1">Above $100</td><td className="py-1 font-bold text-xsm-yellow">4%</td></tr>
                   </tbody>
                 </table>
               </div>
 
               {/* Repeat Buyer */}
-              <div className={`border rounded-lg p-4 transition-all ${
-                buyerTier === 'repeat'
-                  ? 'border-blue-500 bg-blue-950/40 ring-1 ring-blue-500'
-                  : 'border-gray-800 bg-xsm-black/40'
-              }`}>
-                <h4 className="font-semibold text-blue-300 mb-2 text-sm flex items-center justify-between">
+              <div
+                className={`border rounded-lg p-3.5 transition-all ${
+                  buyerTier === 'repeat' ? 'ring-1 ring-blue-500 border-blue-500' : ''
+                }`}
+                style={{
+                  background: 'var(--xsm-medium-gray)',
+                  borderColor: buyerTier === 'repeat' ? undefined : 'var(--xsm-border)'
+                }}
+              >
+                <h4 className="font-semibold text-blue-400 mb-2 text-sm flex items-center justify-between">
                   <span>🔁 Repeat Buyer Discount</span>
                   <span className="text-[10px] text-blue-400 font-normal">Min 3 completed deals</span>
-                  {buyerTier === 'repeat' && <span className="text-[10px] bg-blue-700 text-white px-2 py-0.5 rounded-full ml-1">YOUR TIER</span>}
+                  {buyerTier === 'repeat' && <span className="text-[10px] bg-blue-600 text-white font-bold px-2 py-0.5 rounded-full ml-1">YOUR TIER</span>}
                 </h4>
-                <table className="w-full text-left text-xs text-xsm-light-gray">
-                  <thead><tr className="border-b border-gray-800"><th className="py-1 text-white font-medium">Deal Amount</th><th className="py-1 text-white font-medium">Fee</th></tr></thead>
+                <table className="w-full text-left text-xs" style={{ color: 'var(--xsm-text)' }}>
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Deal Amount</th>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Fee</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    <tr className="border-b border-gray-800/40"><td className="py-1">$1 – $50</td><td className="py-1 text-white">Min $2</td></tr>
-                    <tr className="border-b border-gray-800/40"><td className="py-1">$50 – $100</td><td className="py-1 text-white">4.5%</td></tr>
-                    <tr><td className="py-1">Above $100</td><td className="py-1 text-white">3.5%</td></tr>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}><td className="py-1">$1 – $50</td><td className="py-1 font-bold text-xsm-yellow">Min $2</td></tr>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}><td className="py-1">$50 – $100</td><td className="py-1 font-bold text-xsm-yellow">4.5%</td></tr>
+                    <tr><td className="py-1">Above $100</td><td className="py-1 font-bold text-xsm-yellow">3.5%</td></tr>
                   </tbody>
                 </table>
               </div>
 
               {/* VIP Member */}
-              <div className={`border rounded-lg p-4 transition-all ${
-                buyerTier === 'vip'
-                  ? 'border-yellow-500 bg-yellow-950/40 ring-1 ring-yellow-500'
-                  : 'border-gray-800 bg-xsm-black/40'
-              }`}>
-                <h4 className="font-semibold text-yellow-400 mb-2 text-sm flex items-center justify-between">
+              <div
+                className={`border rounded-lg p-3.5 transition-all ${
+                  buyerTier === 'vip' ? 'ring-1 ring-amber-500 border-amber-500' : ''
+                }`}
+                style={{
+                  background: 'var(--xsm-medium-gray)',
+                  borderColor: buyerTier === 'vip' ? undefined : 'var(--xsm-border)'
+                }}
+              >
+                <h4 className="font-semibold text-amber-400 mb-2 text-sm flex items-center justify-between">
                   <span>👑 VIP Member Discount</span>
-                  {buyerTier === 'vip' && <span className="text-[10px] bg-yellow-600 text-black px-2 py-0.5 rounded-full">YOUR TIER</span>}
+                  {buyerTier === 'vip' && <span className="text-[10px] bg-amber-500 text-black font-bold px-2 py-0.5 rounded-full">YOUR TIER</span>}
                 </h4>
-                <table className="w-full text-left text-xs text-xsm-light-gray">
-                  <thead><tr className="border-b border-gray-800"><th className="py-1 text-white font-medium">Deal Amount</th><th className="py-1 text-white font-medium">Fee</th></tr></thead>
+                <table className="w-full text-left text-xs" style={{ color: 'var(--xsm-text)' }}>
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Deal Amount</th>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Fee</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    <tr className="border-b border-gray-800/40"><td className="py-1">$1 – $50</td><td className="py-1 text-white">Min $2</td></tr>
-                    <tr className="border-b border-gray-800/40"><td className="py-1">$50 – $100</td><td className="py-1 text-white">4%</td></tr>
-                    <tr><td className="py-1">Above $100</td><td className="py-1 text-white">3%</td></tr>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}><td className="py-1">$1 – $50</td><td className="py-1 font-bold text-xsm-yellow">Min $2</td></tr>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}><td className="py-1">$50 – $100</td><td className="py-1 font-bold text-xsm-yellow">4%</td></tr>
+                    <tr><td className="py-1">Above $100</td><td className="py-1 font-bold text-xsm-yellow">3%</td></tr>
                   </tbody>
                 </table>
               </div>
 
               {/* VIP + Repeat Buyer */}
-              <div className={`border rounded-lg p-4 transition-all ${
-                buyerTier === 'vip_repeat'
-                  ? 'border-emerald-500 bg-emerald-950/40 ring-1 ring-emerald-500'
-                  : 'border-gray-800 bg-xsm-black/40'
-              }`}>
+              <div
+                className={`border rounded-lg p-3.5 transition-all ${
+                  buyerTier === 'vip_repeat' ? 'ring-1 ring-emerald-500 border-emerald-500' : ''
+                }`}
+                style={{
+                  background: 'var(--xsm-medium-gray)',
+                  borderColor: buyerTier === 'vip_repeat' ? undefined : 'var(--xsm-border)'
+                }}
+              >
                 <h4 className="font-semibold text-emerald-400 mb-2 text-sm flex items-center justify-between">
                   <span>⭐ VIP + Repeat Buyer</span>
                   <span className="text-[10px] text-emerald-400 font-normal">Best Rate!</span>
-                  {buyerTier === 'vip_repeat' && <span className="text-[10px] bg-emerald-700 text-white px-2 py-0.5 rounded-full ml-1">YOUR TIER</span>}
+                  {buyerTier === 'vip_repeat' && <span className="text-[10px] bg-emerald-500 text-black font-bold px-2 py-0.5 rounded-full ml-1">YOUR TIER</span>}
                 </h4>
-                <table className="w-full text-left text-xs text-xsm-light-gray">
-                  <thead><tr className="border-b border-gray-800"><th className="py-1 text-white font-medium">Deal Amount</th><th className="py-1 text-white font-medium">Fee</th></tr></thead>
+                <table className="w-full text-left text-xs" style={{ color: 'var(--xsm-text)' }}>
+                  <thead>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Deal Amount</th>
+                      <th className="py-1 font-semibold" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Fee</th>
+                    </tr>
+                  </thead>
                   <tbody>
-                    <tr className="border-b border-gray-800/40"><td className="py-1">$1 – $50</td><td className="py-1 text-white">Min $2</td></tr>
-                    <tr className="border-b border-gray-800/40"><td className="py-1">$50 – $100</td><td className="py-1 text-white">3.5%</td></tr>
-                    <tr><td className="py-1">Above $100</td><td className="py-1 text-white">2.5%</td></tr>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}><td className="py-1">$1 – $50</td><td className="py-1 font-bold text-xsm-yellow">Min $2</td></tr>
+                    <tr className="border-b" style={{ borderColor: 'var(--xsm-border)' }}><td className="py-1">$50 – $100</td><td className="py-1 font-bold text-xsm-yellow">3.5%</td></tr>
+                    <tr><td className="py-1">Above $100</td><td className="py-1 font-bold text-xsm-yellow">2.5%</td></tr>
                   </tbody>
                 </table>
               </div>
@@ -784,7 +939,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
             <button
               onClick={() => setShowInfo(false)}
-              className="mt-6 w-full py-3 bg-xsm-yellow text-black font-bold rounded-lg hover:bg-yellow-500 transition-colors"
+              className="mt-5 w-full py-2.5 bg-xsm-yellow text-black font-bold rounded-lg hover:bg-yellow-500 transition-colors text-sm cursor-pointer shadow-md"
             >
               Back to Checkout
             </button>
@@ -795,58 +950,64 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
       {/* Custom Deal Created Success Popup Modal */}
       {successData && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center z-[70] p-4">
-          <div className="bg-gradient-to-b from-[#1c1c1e] to-[#121214] border border-emerald-500/40 rounded-2xl max-w-md w-full p-6 text-center shadow-[0_0_50px_rgba(16,185,129,0.2)] relative animate-in fade-in zoom-in-95 duration-200">
+          <div
+            className="border border-emerald-500/40 rounded-2xl max-w-md w-full p-6 text-center shadow-[0_0_50px_rgba(16,185,129,0.2)] relative animate-in fade-in zoom-in-95 duration-200"
+            style={{
+              background: 'var(--xsm-dark-gray)',
+              borderColor: 'var(--xsm-border)',
+              color: 'var(--xsm-text)'
+            }}
+          >
             {/* Top success icon badge */}
             <div className="w-16 h-16 rounded-full bg-emerald-500/10 border-2 border-emerald-500/50 flex items-center justify-center mx-auto mb-4 text-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.3)]">
               <CheckCircle2 className="w-9 h-9" />
             </div>
 
-            <h3 className="text-xl font-extrabold text-white mb-1">Deal Created Successfully!</h3>
-            <p className="text-xs text-gray-400 mb-4">Your deal has been saved and the seller has been notified.</p>
+            <h3 className="text-xl font-extrabold mb-1" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Deal Created Successfully!</h3>
+            <p className="text-xs mb-4" style={{ color: 'var(--xsm-light-gray)' }}>Your deal has been saved and the seller has been notified.</p>
 
             {/* Deal Detail Summary Box */}
-            <div className="bg-black/60 border border-white/10 rounded-xl p-3.5 text-left space-y-2 mb-4 text-xs">
-              <div className="flex justify-between items-center pb-1.5 border-b border-white/10">
-                <span className="text-gray-400">Transaction ID:</span>
+            <div className="border rounded-xl p-3.5 text-left space-y-2 mb-4 text-xs" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+              <div className="flex justify-between items-center pb-1.5 border-b" style={{ borderColor: 'var(--xsm-border)' }}>
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Transaction ID:</span>
                 <span className="text-emerald-400 font-mono font-bold">{successData.txnId}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-400">Channel:</span>
-                <span className="text-white font-semibold">{successData.channelTitle}</span>
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Channel:</span>
+                <span className="font-semibold truncate max-w-[200px]" style={{ color: 'var(--xsm-text)' }}>{successData.channelTitle}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-400">Amount:</span>
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Amount:</span>
                 <span className="text-xsm-yellow font-bold">${successData.amount}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-gray-400">Service Fee:</span>
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Service Fee:</span>
                 <span className="text-xsm-yellow font-bold">${successData.serviceFee.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between items-center pt-1.5 border-t border-white/10">
-                <span className="text-gray-400">Transfer Email:</span>
-                <span className="text-white font-medium truncate max-w-[180px]" title={successData.buyerEmail}>{successData.buyerEmail}</span>
+              <div className="flex justify-between items-center pt-1.5 border-t" style={{ borderColor: 'var(--xsm-border)' }}>
+                <span style={{ color: 'var(--xsm-light-gray)' }}>Transfer Email:</span>
+                <span className="font-medium truncate max-w-[180px]" style={{ color: 'var(--xsm-text)' }} title={successData.buyerEmail}>{successData.buyerEmail}</span>
               </div>
             </div>
 
             {/* Status Pill */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold mb-5">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 text-xs font-semibold mb-5">
               <Clock className="w-3.5 h-3.5 animate-pulse" />
               <span>Status: Waiting for seller review</span>
             </div>
 
-            {/* Buttons */}
+            {/* Auto-redirect countdown notice */}
+            <div className="w-full mb-3 py-2 px-3 rounded-lg border flex items-center justify-center gap-2 text-xs font-semibold" style={{ background: 'rgba(59, 130, 246, 0.1)', borderColor: 'rgba(59, 130, 246, 0.3)', color: '#60a5fa' }}>
+              <span className="inline-block w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+              <span>Redirecting to chat in <strong className="text-white text-sm font-bold">{countdown}s</strong>...</span>
+            </div>
+
+            {/* Instant Go to Chat Button */}
             <button
-              onClick={() => {
-                setSuccessData(null);
-                resetModal();
-                onClose();
-                if (onNavigateToChat) {
-                  onNavigateToChat();
-                }
-              }}
+              onClick={redirectToChat}
               className="w-full py-2.5 px-4 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:from-emerald-600 hover:to-emerald-700 text-black font-extrabold text-sm rounded-xl transition-all shadow-[0_0_15px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2 cursor-pointer"
             >
-              <span>Continue to Chat</span>
+              <span>Go to Chat Now</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>

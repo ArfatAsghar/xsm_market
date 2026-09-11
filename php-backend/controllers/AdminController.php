@@ -964,6 +964,16 @@ class AdminController {
             $stmt = $pdo->prepare("UPDATE deals SET deal_status = ?, updated_at = NOW() WHERE id = ?");
             $stmt->execute([$status, $dealId]);
 
+            // Release email allocation if deal is finished or cancelled
+            if (in_array(strtolower($status), ['completed', 'cancelled'])) {
+                try {
+                    require_once __DIR__ . '/../services/EmailAllocationService.php';
+                    EmailAllocationService::releaseDealAllocation($dealId, strtolower($status), $admin['userId'] ?? null);
+                } catch (Throwable $e) {
+                    error_log('Failed to release email allocation for deal ' . $dealId . ': ' . $e->getMessage());
+                }
+            }
+
             // Add history entry
             $historyStmt = $pdo->prepare("
                 INSERT INTO deal_history (deal_id, action_type, action_by, action_description)

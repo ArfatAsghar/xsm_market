@@ -7,6 +7,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { GoogleOAuthProvider } from '@react-oauth/google';
+import { ThemeProvider } from '@/context/ThemeContext';
 import { FaTag } from 'react-icons/fa';
 import { useTokenManager } from '@/hooks/useTokenManager';
 import { useAuth } from '@/context/useAuth';
@@ -191,9 +192,9 @@ const AppContent: React.FC = () => {
 
       {/* Footer — matches Navbar in height, width, padding & background */}
       <footer
-        className="border-t border-white/[0.06] relative"
+        className="border-t border-[var(--xsm-border)] relative transition-colors duration-300"
         style={{
-          background: 'linear-gradient(135deg, rgba(10,10,10,0.98) 0%, rgba(18,18,18,0.98) 50%, rgba(10,10,10,0.98) 100%)',
+          background: 'var(--xsm-nav-bg)',
         }}
       >
         {/* Yellow bottom accent line (mirrors navbar's top accent) */}
@@ -239,15 +240,15 @@ const AppContent: React.FC = () => {
               </button>
             </div>
 
-            {/* CENTER: XSM Tagline */}
+            {/* CENTER: Copyright & Trademark */}
             <div className="hidden md:flex items-center justify-center">
-              <p className="text-[11px] font-semibold text-gray-500 tracking-widest uppercase whitespace-nowrap">
-                🔒 Secure Social Media Marketplace & Escrow Platform
+              <p className="text-[12px] font-medium text-muted-foreground tracking-wide whitespace-nowrap">
+                © {new Date().getFullYear()} XSM Market™. All rights reserved.
               </p>
             </div>
 
             {/* RIGHT: Nav Links */}
-            <div className="hidden md:flex items-center justify-end gap-6 text-[13px] font-semibold text-gray-400 whitespace-nowrap">
+            <div className="hidden md:flex items-center justify-end gap-6 text-[13px] font-semibold text-muted-foreground whitespace-nowrap">
               {[
                 { label: 'About Us', path: '/about' },
                 { label: 'Contact', path: '/contact' },
@@ -277,15 +278,17 @@ const App: React.FC = () => {
   
   return (
     <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
-      <AuthProvider>
-        <NotificationProvider>
-          <TooltipProvider>
-            <Router>
-              <AppContent />
-            </Router>
-          </TooltipProvider>
-        </NotificationProvider>
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <NotificationProvider>
+            <TooltipProvider>
+              <Router>
+                <AppContent />
+              </Router>
+            </TooltipProvider>
+          </NotificationProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </GoogleOAuthProvider>
   );
 };

@@ -11,6 +11,8 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../utils/jwt.php';
 require_once __DIR__ . '/../utils/SystemUser.php';
 require_once __DIR__ . '/../utils/EmailService.php';
+require_once __DIR__ . '/../models/User.php';
+require_once __DIR__ . '/../middleware/auth.php';
 
 // Helper function to trigger both in-app notification & email for deal stage updates
 function triggerDealNotificationAndEmail($deal_id, $stage) {
@@ -95,63 +97,198 @@ function triggerDealNotificationAndEmail($deal_id, $stage) {
 
 // Function to get current user from JWT token
 function getCurrentUser() {
-    $headers = getallheaders();
-    $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+    // 1. Try AuthMiddleware::optionalAuth() if available
+    if (class_exists('AuthMiddleware')) {
+        try {
+            $user = AuthMiddleware::optionalAuth();
+            if ($user && is_array($user)) {
+                if (!isset($user['isAdmin'])) {
+                    $user['isAdmin'] = (!empty($user['is_admin']) || strtolower($user['role'] ?? '') === 'admin') ? 1 : 0;
+                }
+                return $user;
+            }
+        } catch (Exception $e) {
+            error_log("deals.php AuthMiddleware::optionalAuth error: " . $e->getMessage());
+        }
+    }
+
+    // 2. Extract Bearer token from headers
+    $token = null;
+    $headers = function_exists('getallheaders') ? getallheaders() : [];
+    if (is_array($headers)) {
+        foreach ($headers as $key => $value) {
+            if (strtolower($key) === 'authorization') {
+                if (preg_match('/Bearer\s+(.*)$/i', $value, $m)) {
+                    $token = $m[1];
+                    break;
+                }
+            }
+        }
+    }
+    if (!$token && isset($_SERVER['HTTP_AUTHORIZATION'])) {
+        if (preg_match('/Bearer\s+(.*)$/i', $_SERVER['HTTP_AUTHORIZATION'], $m)) {
+            $token = $m[1];
+        }
+    }
+    if (!$token && isset($_SERVER['REDIRECT_HTTP_AUTHORIZATION'])) {
+        if (preg_match('/Bearer\s+(.*)$/i', $_SERVER['REDIRECT_HTTP_AUTHORIZATION'], $m)) {
+            $token = $m[1];
+        }
+    }
+    if (!$token && function_exists('apache_request_headers')) {
+        $ah = apache_request_headers();
+        if (is_array($ah)) {
+            foreach ($ah as $k => $v) {
+                if (strtolower($k) === 'authorization' && preg_match('/Bearer\s+(.*)$/i', $v, $m)) {
+                    $token = $m[1];
+                    break;
+                }
+            }
+        }
+    }
     
-    if (!$authHeader || !preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+    if (!$token) {
         return null;
     }
     
-    $token = $matches[1];
-    
     try {
-        $payload = JWT::verify($token, 'access');
-        return $payload;
+        $payload = null;
+        try {
+            $payload = JWT::decode($token, 'access');
+        } catch (Exception $e1) {
+            try {
+                $payload = JWT::verify($token, 'access');
+            } catch (Exception $e2) {
+                $payload = JWT::verify($token, null);
+            }
+        }
+        
+        if ($payload) {
+            $uid = $payload['userId'] ?? $payload['id'] ?? null;
+            if ($uid) {
+                $payload['userId'] = (int)$uid;
+                $payload['id'] = (int)$uid;
+                try {
+                    $dbUser = null;
+                    if (class_exists('User')) {
+                        $dbUser = User::findById((int)$uid);
+                    }
+                    if (!$dbUser) {
+                        $pdo = Database::getConnection();
+                        $uStmt = $pdo->prepare("SELECT * FROM users WHERE id = ? LIMIT 1");
+                        $uStmt->execute([(int)$uid]);
+                        $dbUser = $uStmt->fetch(PDO::FETCH_ASSOC);
+                    }
+                    if ($dbUser) {
+                        $payload = array_merge($payload, $dbUser);
+                        $payload['userId'] = (int)$dbUser['id'];
+                        $payload['id'] = (int)$dbUser['id'];
+                        if (!empty($dbUser['isAdmin']) || !empty($dbUser['is_admin']) || strtolower($dbUser['role'] ?? '') === 'admin') {
+                            $payload['isAdmin'] = 1;
+                        }
+                    }
+                } catch (Exception $e3) {
+                    error_log("deals.php: DB user fetch failed: " . $e3->getMessage());
+                }
+            }
+            return $payload;
+        }
+        return null;
     } catch (Exception $e) {
         error_log('JWT verification failed: ' . $e->getMessage());
         return null;
     }
 }
 
-// Function to check if user has admin access
+// Function to check if user has admin or manager access
+// Multi-layer check: role, isAdmin/is_admin DB flags, AuthMiddleware, env vars, and direct DB fallback
 function checkAdminAccess($user) {
-    // Load admin email from .env
-    $envFile = __DIR__ . '/../.env';
-    $adminEmail = null;
-    $adminUsername = null;
-    
-    if (file_exists($envFile)) {
-        $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-        foreach ($lines as $line) {
-            $line = trim($line);
-            if (strpos($line, 'admin_email') === 0) {
-                $parts = explode('=', $line, 2);
-                if (count($parts) === 2) {
-                    $adminEmail = trim(trim($parts[1]), ' "\'');
-                }
+    if (!$user || !is_array($user)) {
+        return false;
+    }
+
+    // 1. Explicit role column (if present)
+    $role = strtolower($user['role'] ?? '');
+    if ($role === 'admin' || $role === 'manager') {
+        return true;
+    }
+
+    // 2. isAdmin / is_admin DB flags
+    if (!empty($user['isAdmin']) || !empty($user['is_admin']) || ($user['isAdmin'] ?? 0) == 1 || ($user['is_admin'] ?? 0) == 1) {
+        return true;
+    }
+
+    // 3. Delegate to AuthMiddleware::checkRole if available
+    if (class_exists('AuthMiddleware')) {
+        try {
+            if (AuthMiddleware::checkRole($user, ['admin', 'manager'])) {
+                return true;
             }
-            if (strpos($line, 'admin_username') === 0) {
+        } catch (Exception $e) {}
+    }
+
+    // 4. ADMIN_EMAIL env check via getenv
+    $userEmail = strtolower($user['email'] ?? '');
+    $username = strtolower($user['username'] ?? '');
+
+    $adminEnvEmail = getenv('ADMIN_EMAIL');
+    if ($adminEnvEmail && $userEmail && $userEmail === strtolower($adminEnvEmail)) {
+        return true;
+    }
+
+    // 5. Fallback: check raw .env files
+    $envFiles = [
+        __DIR__ . '/../.env',
+        __DIR__ . '/../../.env',
+        __DIR__ . '/../.env.production'
+    ];
+    foreach ($envFiles as $envFile) {
+        if (file_exists($envFile)) {
+            $lines = file($envFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+            foreach ($lines as $line) {
+                $line = trim($line);
+                if ($line === '' || $line[0] === '#') continue;
                 $parts = explode('=', $line, 2);
-                if (count($parts) === 2) {
-                    $adminUsername = trim(trim($parts[1]), ' "\'');
+                if (count($parts) !== 2) continue;
+                $key = strtolower(trim($parts[0]));
+                $value = strtolower(trim(trim($parts[1]), ' "\''));
+                if ($key === 'admin_email' && $userEmail && $userEmail === $value) {
+                    return true;
+                }
+                if ($key === 'admin_username' && $username && $username === $value) {
+                    return true;
                 }
             }
         }
     }
-    
-    // Check if current user matches admin email or username
-    $userEmail = strtolower($user['email']);
-    $username = strtolower($user['username']);
-    
-    $isAdmin = false;
-    if ($adminEmail && $userEmail === strtolower($adminEmail)) {
-        $isAdmin = true;
+
+    // 6. Direct Database fallback lookup by user ID (ensures no in-memory payload issue denies admin)
+    $uid = $user['id'] ?? $user['userId'] ?? null;
+    if ($uid) {
+        try {
+            $pdo = Database::getConnection();
+            $stmt = $pdo->prepare("SELECT * FROM users WHERE id = ? LIMIT 1");
+            $stmt->execute([(int)$uid]);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($row) {
+                if (!empty($row['isAdmin']) || !empty($row['is_admin'])) {
+                    return true;
+                }
+                $dbRole = strtolower($row['role'] ?? '');
+                if ($dbRole === 'admin' || $dbRole === 'manager') {
+                    return true;
+                }
+                $dbEmail = strtolower($row['email'] ?? '');
+                if ($adminEnvEmail && $dbEmail === strtolower($adminEnvEmail)) {
+                    return true;
+                }
+            }
+        } catch (Exception $e) {
+            error_log("checkAdminAccess DB check failed: " . $e->getMessage());
+        }
     }
-    if ($adminUsername && $username === strtolower($adminUsername)) {
-        $isAdmin = true;
-    }
-    
-    return $isAdmin;
+
+    return false;
 }
 
 // Function to create a new deal
@@ -393,8 +530,8 @@ try {
         exit;
     }
     // Handle GET /deals/{id} - Get specific deal
-    elseif ($method === 'GET' && preg_match('/^\/deals\/(\d+)$/', $path, $matches)) {
-        $deal_id = $matches[1];
+    elseif ($method === 'GET' && preg_match('/^\/deals\/([^\/]+)$/', $path, $matches)) {
+        $deal_param = $matches[1];
         
         $currentUser = getCurrentUser();
         if (!$currentUser) {
@@ -402,8 +539,13 @@ try {
             echo json_encode(['success' => false, 'message' => 'Authentication required']);
             exit;
         }
+        $currentUserId = (int)($currentUser['userId'] ?? $currentUser['id'] ?? 0);
+        $isAdmin = !empty($currentUser['isAdmin']) || in_array($currentUser['role'] ?? '', ['admin', 'manager']);
         
         $pdo = Database::getConnection();
+        $cleanParam = trim($deal_param);
+        $cleanNormalized = str_replace('-', '', $cleanParam);
+
         $stmt = $pdo->prepare("
             SELECT d.*, 
                    buyer.username as buyer_username,
@@ -411,11 +553,37 @@ try {
             FROM deals d
             LEFT JOIN users buyer ON d.buyer_id = buyer.id
             LEFT JOIN users seller ON d.seller_id = seller.id
-            WHERE d.id = ? AND (d.buyer_id = ? OR d.seller_id = ?)
+            WHERE (d.id = ? 
+                OR d.transaction_id = ? 
+                OR REPLACE(d.transaction_id, '-', '') = ?
+                OR REPLACE(d.transaction_id, '-', '') = ?)
+              AND (d.buyer_id = ? OR d.seller_id = ? OR ? = 1)
+            ORDER BY d.id DESC
+            LIMIT 1
         ");
         
-        $stmt->execute([$deal_id, $currentUser['userId'], $currentUser['userId']]);
+        $stmt->execute([$cleanParam, $cleanParam, $cleanNormalized, $cleanParam, $currentUserId, $currentUserId, $isAdmin ? 1 : 0]);
         $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        // If not found by direct param, try checking channel_title or most recent deal for user
+        if (!$deal) {
+            $channelQuery = $_GET['channel_title'] ?? null;
+            if ($channelQuery) {
+                $stmt = $pdo->prepare("
+                    SELECT d.*, 
+                           buyer.username as buyer_username,
+                           seller.username as seller_username
+                    FROM deals d
+                    LEFT JOIN users buyer ON d.buyer_id = buyer.id
+                    LEFT JOIN users seller ON d.seller_id = seller.id
+                    WHERE d.channel_title = ? AND (d.buyer_id = ? OR d.seller_id = ? OR ? = 1)
+                    ORDER BY d.id DESC
+                    LIMIT 1
+                ");
+                $stmt->execute([$channelQuery, $currentUserId, $currentUserId, $isAdmin ? 1 : 0]);
+                $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
+        }
         
         if (!$deal) {
             http_response_code(404);
@@ -428,33 +596,107 @@ try {
         exit;
     }
     // Handle PUT /deals/{id}/seller-agree - Seller agrees to deal terms
-    elseif ($method === 'PUT' && preg_match('/^\/deals\/(\d+)\/seller-agree$/', $path, $matches)) {
-        $deal_id = $matches[1];
+    elseif ($method === 'PUT' && preg_match('/^\/deals\/([^\/]+)\/seller-agree$/', $path, $matches)) {
+        $deal_param = $matches[1];
         
         $currentUser = getCurrentUser();
         if (!$currentUser) {
             http_response_code(401);
-            echo json_encode(['success' => false, 'message' => 'Authentication required']);
+            echo json_encode(['success' => false, 'message' => 'Authentication required. Please log in again.']);
             exit;
         }
+        $currentUserId = (int)($currentUser['userId'] ?? $currentUser['id'] ?? 0);
+        $isAdmin = !empty($currentUser['isAdmin']) || in_array($currentUser['role'] ?? '', ['admin', 'manager']);
         
         try {
             $pdo = Database::getConnection();
+
+            // Read request body for fallback identifiers
+            $body = json_decode(file_get_contents('php://input'), true) ?? [];
+            $fallbackTxn = trim($body['transaction_id'] ?? $_GET['transaction_id'] ?? '');
+            $fallbackDealId = trim((string)($body['deal_id'] ?? $_GET['deal_id'] ?? ''));
+            $channelTitle = trim($body['channel_title'] ?? '');
+
+            $cleanParam = trim($deal_param);
+            $cleanNormalized = str_replace('-', '', $cleanParam);
             
-            // Verify this user is the seller for this deal
-            $stmt = $pdo->prepare("SELECT * FROM deals WHERE id = ? AND seller_id = ?");
-            $stmt->execute([$deal_id, $currentUser['userId']]);
+            // 1. Find deal by route param
+            $stmt = $pdo->prepare("
+                SELECT * FROM deals 
+                WHERE id = ? 
+                   OR transaction_id = ? 
+                   OR REPLACE(transaction_id, '-', '') = ?
+                   OR REPLACE(transaction_id, '-', '') = ?
+                LIMIT 1
+            ");
+            $stmt->execute([$cleanParam, $cleanParam, $cleanNormalized, $cleanParam]);
             $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            // 2. Fallback: match by fallbackTxn from request payload
+            if (!$deal && !empty($fallbackTxn)) {
+                $normTxn = str_replace('-', '', $fallbackTxn);
+                $stmt = $pdo->prepare("
+                    SELECT * FROM deals 
+                    WHERE transaction_id = ? 
+                       OR REPLACE(transaction_id, '-', '') = ?
+                       OR id = ?
+                    LIMIT 1
+                ");
+                $stmt->execute([$fallbackTxn, $normTxn, $fallbackTxn]);
+                $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
+
+            // 3. Fallback: match by fallbackDealId
+            if (!$deal && !empty($fallbackDealId) && is_numeric($fallbackDealId)) {
+                $stmt = $pdo->prepare("SELECT * FROM deals WHERE id = ? LIMIT 1");
+                $stmt->execute([(int)$fallbackDealId]);
+                $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
+
+            // 4. Fallback: search recent active deal for this seller
+            if (!$deal && !empty($currentUserId)) {
+                if (!empty($channelTitle)) {
+                    $stmt = $pdo->prepare("
+                        SELECT * FROM deals 
+                        WHERE seller_id = ? AND channel_title = ? 
+                        ORDER BY id DESC LIMIT 1
+                    ");
+                    $stmt->execute([$currentUserId, $channelTitle]);
+                    $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
+                if (!$deal) {
+                    $stmt = $pdo->prepare("
+                        SELECT * FROM deals 
+                        WHERE seller_id = ? AND (seller_agreed IS NULL OR seller_agreed = 0)
+                        ORDER BY id DESC LIMIT 1
+                    ");
+                    $stmt->execute([$currentUserId]);
+                    $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+                }
+            }
             
             if (!$deal) {
                 http_response_code(404);
-                echo json_encode(['success' => false, 'message' => 'Deal not found or you are not the seller']);
+                echo json_encode(['success' => false, 'message' => 'Deal not found.']);
                 exit;
             }
             
-            if ($deal['seller_agreed']) {
-                http_response_code(400);
-                echo json_encode(['success' => false, 'message' => 'You have already agreed to this deal']);
+            $deal_id = (int)$deal['id'];
+            $isSeller = ((int)$deal['seller_id'] === $currentUserId);
+            
+            if (!$isSeller && !$isAdmin) {
+                http_response_code(403);
+                echo json_encode(['success' => false, 'message' => 'You are not authorized as the seller for this deal.']);
+                exit;
+            }
+            
+            if (!empty($deal['seller_agreed'])) {
+                http_response_code(200);
+                echo json_encode([
+                    'success' => true,
+                    'message' => 'You have already agreed to the deal terms.',
+                    'deal_status' => $deal['deal_status'] ?? 'terms_agreed'
+                ]);
                 exit;
             }
             
@@ -468,16 +710,24 @@ try {
             ");
             $stmt->execute([$deal_id]);
             
-            // Add history record
-            $stmt = $pdo->prepare("
-                INSERT INTO deal_history (deal_id, action_type, action_by, action_description)
-                VALUES (?, 'seller_agreed', ?, 'Seller agreed to the deal terms and payment methods')
-            ");
-            $stmt->execute([$deal_id, $currentUser['userId']]);
+            // Add history record safely
+            try {
+                $stmt = $pdo->prepare("
+                    INSERT INTO deal_history (deal_id, action_type, action_by, action_description)
+                    VALUES (?, 'seller_agreed', ?, 'Seller agreed to the deal terms and payment methods')
+                ");
+                $stmt->execute([$deal_id, $currentUserId]);
+            } catch (\Throwable $th) {
+                error_log('deal_history insert error: ' . $th->getMessage());
+            }
             
             $pdo->commit();
             
-            triggerDealNotificationAndEmail($deal_id, 'terms_agreed');
+            try {
+                triggerDealNotificationAndEmail($deal_id, 'terms_agreed');
+            } catch (\Throwable $th) {
+                error_log('Notification error: ' . $th->getMessage());
+            }
             
             http_response_code(200);
             echo json_encode([
@@ -547,6 +797,22 @@ try {
                         'buyer_agreed' => $row['buyer_agreed'],
                         'buyer_agreed_at' => $row['buyer_agreed_at'],
                         'deal_status' => $row['deal_status'],
+                        'assigned_email' => $row['assigned_email'] ?? null,
+                        'transaction_fee_paid' => (bool)($row['transaction_fee_paid'] ?? false),
+                        'transaction_fee_paid_at' => $row['transaction_fee_paid_at'] ?? null,
+                        'transaction_fee_paid_by' => $row['transaction_fee_paid_by'] ?? null,
+                        'transaction_fee_payment_method' => $row['transaction_fee_payment_method'] ?? null,
+                        'agent_email_sent' => (bool)($row['agent_email_sent'] ?? false),
+                        'agent_email_sent_at' => $row['agent_email_sent_at'] ?? null,
+                        'seller_gave_rights' => (bool)($row['seller_gave_rights'] ?? false),
+                        'seller_gave_rights_at' => $row['seller_gave_rights_at'] ?? null,
+                        'seller_made_primary_owner' => (bool)($row['seller_made_primary_owner'] ?? false),
+                        'seller_made_primary_owner_at' => $row['seller_made_primary_owner_at'] ?? null,
+                        'buyer_paid_seller' => (bool)($row['buyer_paid_seller'] ?? false),
+                        'buyer_paid_seller_at' => $row['buyer_paid_seller_at'] ?? null,
+                        'seller_confirmed_payment' => (bool)($row['seller_confirmed_payment'] ?? false),
+                        'seller_confirmed_payment_at' => $row['seller_confirmed_payment_at'] ?? null,
+                        'timer_completed' => (bool)($row['timer_completed'] ?? false),
                         'created_at' => $row['created_at'],
                         'updated_at' => $row['updated_at'],
                         'buyer_username' => $row['buyer_username'],
@@ -628,6 +894,7 @@ try {
                         'buyer_agreed' => $row['buyer_agreed'],
                         'buyer_agreed_at' => $row['buyer_agreed_at'],
                         'deal_status' => $row['deal_status'],
+                        'assigned_email' => $row['assigned_email'] ?? null,
                         'transaction_fee_paid' => $row['transaction_fee_paid'],
                         'transaction_fee_paid_at' => $row['transaction_fee_paid_at'],
                         'transaction_fee_paid_by' => $row['transaction_fee_paid_by'],
@@ -818,10 +1085,26 @@ try {
                 $action_description = "Transaction fee paid via $payment_method by $payer_type";
                 $stmt->execute([$deal_id, $currentUser['userId'], $action_description]);
                 
-                // After fee payment, send agent email to seller via chat
+                // After fee payment, allocate agent email from pool and send to seller via chat
                 try {
-                    // Get admin email from environment
                     $admin_email = $_ENV['admin_email'] ?? 'novaflowa4@gmail.com';
+                    $assigned_email = null;
+
+                    try {
+                        require_once __DIR__ . '/../services/EmailAllocationService.php';
+                        $allocRes = EmailAllocationService::assignEmailToDeal(
+                            $deal_id,
+                            $deal['platform_type'] ?? 'youtube',
+                            $deal['channel_title'] ?? '',
+                            $deal['buyer_id'] ?? 0
+                        );
+                        if (!empty($allocRes['success']) && !empty($allocRes['email']['email_address'])) {
+                            $admin_email = $allocRes['email']['email_address'];
+                            $assigned_email = $admin_email;
+                        }
+                    } catch (Throwable $allocEx) {
+                        error_log('EmailAllocationService error in fee payment: ' . $allocEx->getMessage());
+                    }
                     
                     // Find the chat for this deal (based on seller and channel)
                     $stmt = $pdo->prepare("
@@ -856,24 +1139,25 @@ try {
                         $stmt->execute(['System: Agent email provided for account access', $chat['chat_id']]);
                     }
                     
-                    // Update deal with agent email sent status
+                    // Update deal with agent email sent status and assigned_email
                     $stmt = $pdo->prepare("
                         UPDATE deals 
                         SET agent_email_sent = TRUE,
                             agent_email_sent_at = NOW(),
+                            assigned_email = COALESCE(?, assigned_email, ?),
                             deal_status = 'agent_access_pending',
                             updated_at = NOW()
                         WHERE id = ?
                     ");
-                    $stmt->execute([$deal_id]);
+                    $stmt->execute([$assigned_email, $admin_email, $deal_id]);
                     
                     // Add history record for agent email sent
                     $stmt = $pdo->prepare("
                         INSERT INTO deal_history (deal_id, action_type, action_by, action_description)
                         VALUES (?, 'agent_email_sent', 1, ?)
                     ");
-                    $agent_email_description = "Agent email ({$admin_email}) sent to seller for account access";
-                    $stmt->execute([$deal_id, $agent_email_description]);
+                    $action_desc = "Agent email ({$admin_email}) sent to seller via chat";
+                    $stmt->execute([$deal_id, $action_desc]);
                     
                 } catch (Exception $e) {
                     error_log('Error sending agent email: ' . $e->getMessage());
@@ -905,9 +1189,181 @@ try {
             exit;
         }
     }
+    // Handle POST /deals/{id}/admin-bypass-fee - Admin bypasses escrow fee payment (no payment gateway)
+    elseif ($method === 'POST' && (preg_match('/^\/deals\/(\d+)\/admin-bypass-fee$/', $path, $matches) || preg_match('/^\/admin\/deals\/(\d+)\/admin-bypass-fee$/', $path, $matches))) {
+        $deal_id = (int)$matches[1];
+
+        $currentUser = getCurrentUser();
+        if (!$currentUser) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Authentication required']);
+            exit;
+        }
+
+        // Strict admin-only gate
+        $isAdminUser = !empty($currentUser['isAdmin'])
+            || in_array($currentUser['role'] ?? '', ['admin', 'manager'])
+            || checkAdminAccess($currentUser);
+
+        if (!$isAdminUser) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Admin access required to bypass fee payment']);
+            exit;
+        }
+
+        $input = json_decode(file_get_contents('php://input'), true) ?? [];
+        $reason = isset($input['reason']) ? trim($input['reason']) : 'Admin bypass — no payment gateway';
+
+        try {
+            $pdo = Database::getConnection();
+
+            // Fetch deal (admin can access any deal)
+            $stmt = $pdo->prepare("SELECT * FROM deals WHERE id = ? LIMIT 1");
+            $stmt->execute([$deal_id]);
+            $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$deal) {
+                http_response_code(404);
+                echo json_encode(['success' => false, 'message' => 'Deal not found']);
+                exit;
+            }
+
+            if ($deal['transaction_fee_paid']) {
+                http_response_code(400);
+                echo json_encode(['success' => false, 'message' => 'Transaction fee has already been paid for this deal']);
+                exit;
+            }
+
+            $pdo->beginTransaction();
+
+            // Mark fee as paid via admin bypass
+            $stmt = $pdo->prepare("
+                UPDATE deals
+                SET transaction_fee_paid = TRUE,
+                    transaction_fee_paid_at = NOW(),
+                    transaction_fee_paid_by = 'admin_bypass',
+                    transaction_fee_payment_method = 'admin_bypass',
+                    deal_status = 'fee_paid',
+                    updated_at = NOW()
+                WHERE id = ?
+            ");
+            $stmt->execute([$deal_id]);
+
+            // Record in deal history
+            $historyStmt = $pdo->prepare("
+                INSERT INTO deal_history (deal_id, action_type, action_by, action_description, created_at)
+                VALUES (?, 'fee_paid', ?, ?, NOW())
+            ");
+            $adminId = (int)($currentUser['userId'] ?? $currentUser['id'] ?? 1);
+            $historyStmt->execute([
+                $deal_id,
+                $adminId,
+                "⚡ Admin Fee Bypass by {$currentUser['username']}: {$reason}"
+            ]);
+
+            // Allocate Gmail from pool and send agent email to seller via chat
+            try {
+                $admin_email = $_ENV['admin_email'] ?? 'novaflowa4@gmail.com';
+                $assigned_email = null;
+
+                try {
+                    require_once __DIR__ . '/../services/EmailAllocationService.php';
+                    $allocRes = EmailAllocationService::assignEmailToDeal(
+                        $deal_id,
+                        $deal['platform_type'] ?? 'youtube',
+                        $deal['channel_title'] ?? '',
+                        $deal['buyer_id'] ?? 0
+                    );
+                    if (!empty($allocRes['success']) && !empty($allocRes['email']['email_address'])) {
+                        $admin_email = $allocRes['email']['email_address'];
+                        $assigned_email = $admin_email;
+                    }
+                } catch (Throwable $allocEx) {
+                    error_log('EmailAllocationService error in admin bypass: ' . $allocEx->getMessage());
+                }
+
+                $stmt = $pdo->prepare("
+                    SELECT c.id as chat_id FROM chats c
+                    INNER JOIN chat_participants cp1 ON c.id = cp1.chatId
+                    INNER JOIN chat_participants cp2 ON c.id = cp2.chatId
+                    WHERE c.type = 'ad_inquiry'
+                    AND cp1.userId = ? AND cp1.isActive = 1
+                    AND cp2.userId = ? AND cp2.isActive = 1
+                    AND cp1.chatId = cp2.chatId
+                    LIMIT 1
+                ");
+                $stmt->execute([$deal['buyer_id'], $deal['seller_id']]);
+                $chat = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($chat) {
+                    $message_content = "🎉 Great news! The transaction fee has been cleared (admin-approved) and your deal is now proceeding to the next step.\n\n📧 **Agent Email for Account Rights**: {$admin_email}\n\nPlease add this email as a manager/collaborator to your account so our agent can verify everything and facilitate the secure transfer. Once you've given rights to this email, please confirm below.\n\n⚠️ **Important**: Only give manager/collaborator access, NOT ownership. Our agent will handle the ownership transfer securely.";
+
+                    $stmt = $pdo->prepare("
+                        INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
+                        VALUES (?, ?, ?, 'system', 0, NOW(), NOW())
+                    ");
+                    $stmt->execute([$chat['chat_id'], getSystemUserId($pdo), $message_content]);
+
+                    $stmt = $pdo->prepare("
+                        UPDATE chats SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW()
+                        WHERE id = ?
+                    ");
+                    $stmt->execute(['System: Agent email provided for account access', $chat['chat_id']]);
+                }
+
+                // Advance deal to agent_access_pending
+                $stmt = $pdo->prepare("
+                    UPDATE deals
+                    SET agent_email_sent = TRUE,
+                        agent_email_sent_at = NOW(),
+                        assigned_email = COALESCE(?, assigned_email, ?),
+                        deal_status = 'agent_access_pending',
+                        updated_at = NOW()
+                    WHERE id = ?
+                ");
+                $stmt->execute([$assigned_email, $admin_email, $deal_id]);
+
+                $historyStmt2 = $pdo->prepare("
+                    INSERT INTO deal_history (deal_id, action_type, action_by, action_description, created_at)
+                    VALUES (?, 'agent_email_sent', ?, ?, NOW())
+                ");
+                $historyStmt2->execute([
+                    $deal_id,
+                    $adminId,
+                    "Agent email ({$admin_email}) dispatched to seller after admin bypass"
+                ]);
+
+            } catch (Exception $emailErr) {
+                error_log('Admin bypass — agent email error: ' . $emailErr->getMessage());
+                // Don't fail the bypass if the email dispatch errors
+            }
+
+            $pdo->commit();
+
+            triggerDealNotificationAndEmail($deal_id, 'agent_access_pending');
+
+            http_response_code(200);
+            echo json_encode([
+                'success' => true,
+                'message' => 'Escrow fee bypassed by admin. Deal is now advancing to the next stage.',
+                'deal_status' => 'agent_access_pending',
+                'bypassed_by' => $currentUser['username'],
+                'reason' => $reason
+            ]);
+
+        } catch (Exception $e) {
+            if (isset($pdo) && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            error_log('Admin bypass fee error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Server error: ' . $e->getMessage()]);
+            exit;
+        }
+    }
     // Handle POST /deals/{id}/confirm-rights - Seller confirms they gave rights to agent
-    elseif ($method === 'POST' && preg_match('/^\/deals\/(\d+)\/confirm-rights$/', $path, $matches)) {
-        $deal_id = $matches[1];
+    elseif ($method === 'POST' && preg_match('/^\/deals\/([^\/]+)\/confirm-rights$/', $path, $matches)) {
+        $deal_param = $matches[1];
         
         $currentUser = getCurrentUser();
         if (!$currentUser) {
@@ -915,6 +1371,8 @@ try {
             echo json_encode(['success' => false, 'message' => 'Authentication required']);
             exit;
         }
+        $currentUserId = (int)($currentUser['userId'] ?? $currentUser['id'] ?? 0);
+        $isAdmin = !empty($currentUser['isAdmin']) || in_array($currentUser['role'] ?? '', ['admin', 'manager']);
         
         try {
             $pdo = Database::getConnection();
@@ -922,9 +1380,10 @@ try {
             // Get deal and verify seller access
             $stmt = $pdo->prepare("
                 SELECT * FROM deals 
-                WHERE id = ? AND seller_id = ?
+                WHERE (id = ? OR transaction_id = ?) AND (seller_id = ? OR ? = 1)
+                LIMIT 1
             ");
-            $stmt->execute([$deal_id, $currentUser['userId']]);
+            $stmt->execute([$deal_param, $deal_param, $currentUserId, $isAdmin ? 1 : 0]);
             $deal = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$deal) {
@@ -932,6 +1391,7 @@ try {
                 echo json_encode(['success' => false, 'message' => 'Deal not found or access denied']);
                 exit;
             }
+            $deal_id = (int)$deal['id'];
             
             // Check if transaction fee is paid and agent email was sent
             if (!$deal['transaction_fee_paid'] || !$deal['agent_email_sent']) {
@@ -1665,8 +2125,8 @@ try {
         }
     }
     // Handle POST /deals/{id}/seller-confirmed-payment - Seller confirms they received payment from buyer
-    elseif ($method === 'POST' && preg_match('/^\/deals\/(\d+)\/seller-confirmed-payment$/', $path, $matches)) {
-        $deal_id = $matches[1];
+    elseif ($method === 'POST' && preg_match('/^\/deals\/([^\/]+)\/seller-confirmed-payment$/', $path, $matches)) {
+        $deal_param = $matches[1];
         
         $currentUser = getCurrentUser();
         if (!$currentUser) {
@@ -1674,6 +2134,8 @@ try {
             echo json_encode(['success' => false, 'message' => 'Authentication required']);
             exit;
         }
+        $currentUserId = (int)($currentUser['userId'] ?? $currentUser['id'] ?? 0);
+        $isAdmin = !empty($currentUser['isAdmin']) || in_array($currentUser['role'] ?? '', ['admin', 'manager']);
         
         try {
             $pdo = Database::getConnection();
@@ -1681,9 +2143,10 @@ try {
             // Get deal and verify seller access
             $stmt = $pdo->prepare("
                 SELECT * FROM deals 
-                WHERE id = ? AND seller_id = ?
+                WHERE (id = ? OR transaction_id = ?) AND (seller_id = ? OR ? = 1)
+                LIMIT 1
             ");
-            $stmt->execute([$deal_id, $currentUser['userId']]);
+            $stmt->execute([$deal_param, $deal_param, $currentUserId, $isAdmin ? 1 : 0]);
             $deal = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$deal) {
@@ -1691,6 +2154,7 @@ try {
                 echo json_encode(['success' => false, 'message' => 'Deal not found or access denied']);
                 exit;
             }
+            $deal_id = (int)$deal['id'];
             
             // Check if buyer has confirmed payment
             if (!$deal['buyer_paid_seller']) {
@@ -1804,8 +2268,8 @@ try {
         }
     }
     // Handle GET /deals/{id}/status - Get deal status and timer information
-    elseif ($method === 'GET' && preg_match('/^\/deals\/(\d+)\/status$/', $path, $matches)) {
-        $deal_id = $matches[1];
+    elseif ($method === 'GET' && preg_match('/^\/deals\/([^\/]+)\/status$/', $path, $matches)) {
+        $deal_param = $matches[1];
         
         $currentUser = getCurrentUser();
         if (!$currentUser) {
@@ -1813,16 +2277,19 @@ try {
             echo json_encode(['success' => false, 'message' => 'Authentication required']);
             exit;
         }
+        $currentUserId = (int)($currentUser['userId'] ?? $currentUser['id'] ?? 0);
+        $isAdmin = !empty($currentUser['isAdmin']) || in_array($currentUser['role'] ?? '', ['admin', 'manager']);
         
         try {
             $pdo = Database::getConnection();
             
-            // Get deal and verify user access (either buyer or seller)
+            // Get deal and verify user access (either buyer, seller, or admin)
             $stmt = $pdo->prepare("
                 SELECT * FROM deals 
-                WHERE id = ? AND (seller_id = ? OR buyer_id = ?)
+                WHERE (id = ? OR transaction_id = ?) AND (seller_id = ? OR buyer_id = ? OR ? = 1)
+                LIMIT 1
             ");
-            $stmt->execute([$deal_id, $currentUser['userId'], $currentUser['userId']]);
+            $stmt->execute([$deal_param, $deal_param, $currentUserId, $currentUserId, $isAdmin ? 1 : 0]);
             $deal = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if (!$deal) {
@@ -1831,11 +2298,51 @@ try {
                 exit;
             }
             
+            $assignedEmail = $deal['assigned_email'] ?? null;
+            if (!$assignedEmail) {
+                try {
+                    $allocStmt = $pdo->prepare("
+                        SELECT e.email_address 
+                        FROM email_pool_allocations a
+                        JOIN email_pool e ON a.email_id = e.id
+                        WHERE a.deal_id = ?
+                        ORDER BY a.created_at DESC
+                        LIMIT 1
+                    ");
+                    $allocStmt->execute([$deal['id']]);
+                    $allocRow = $allocStmt->fetch(PDO::FETCH_ASSOC);
+                    if ($allocRow && !empty($allocRow['email_address'])) {
+                        $assignedEmail = $allocRow['email_address'];
+                    }
+                } catch (Throwable $e) {
+                    // ignore
+                }
+            }
+
+            // Auto-assign from pool if deal fee is paid (or rights pending) and no email assigned yet
+            if (!$assignedEmail && (!empty($deal['transaction_fee_paid']) || in_array($deal['deal_status'], ['fee_paid', 'agent_access_pending', 'waiting_promotion_timer', 'timer_completed']))) {
+                try {
+                    require_once __DIR__ . '/../services/EmailAllocationService.php';
+                    $allocRes = EmailAllocationService::assignEmailToDeal(
+                        $deal['id'],
+                        $deal['platform_type'] ?? 'youtube',
+                        $deal['channel_title'] ?? '',
+                        $deal['buyer_id'] ?? 0
+                    );
+                    if (!empty($allocRes['success']) && !empty($allocRes['email']['email_address'])) {
+                        $assignedEmail = $allocRes['email']['email_address'];
+                    }
+                } catch (Throwable $allocErr) {
+                    error_log('Auto email allocation error on status check: ' . $allocErr->getMessage());
+                }
+            }
+
             $response = [
                 'success' => true,
                 'deal_id' => $deal['id'],
                 'deal_status' => $deal['deal_status'],
                 'platform_type' => $deal['platform_type'],
+                'assigned_email' => $assignedEmail,
                 'transaction_fee_paid' => (bool)$deal['transaction_fee_paid'],
                 'transaction_fee_paid_by' => $deal['transaction_fee_paid_by'],
                 'seller_gave_rights' => (bool)$deal['seller_gave_rights'],

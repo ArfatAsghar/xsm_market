@@ -169,12 +169,9 @@ if ($zip->open($zipFile) === TRUE) {
     // 5. Clean up other files in the backend subfolder recursively
     await cleanDirectoryRecursive(deployApiDir);
 
-    // 6. Remove the legacy api/ subdirectory inside api/ (contains old standalone scripts)
-    const nestedApiDir = path.join(deployApiDir, 'api');
-    if (await fs.pathExists(nestedApiDir)) {
-      console.log('🗑️  Removing legacy nested api/ directory...');
-      await fs.remove(nestedApiDir);
-    }
+    // 6.5 Ensure uploads directory structure exists
+    await fs.ensureDir(path.join(deployApiDir, 'uploads', 'ads'));
+    await fs.ensureDir(path.join(deployApiDir, 'uploads', 'chat'));
 
     console.log('🤐 Zipping deployment package with POSIX paths for Hostinger compatibility...');
     const targetZipPath = path.join(ROOT_DIR, 'xsm-market-deploy.zip');

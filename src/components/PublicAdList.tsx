@@ -149,9 +149,22 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
 
   if (loading) {
     return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-xsm-yellow mx-auto mb-4"></div>
-        <p className="text-xsm-light-gray">Loading listings...</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="bg-xsm-black/70 border border-xsm-medium-gray/30 rounded-none p-2.5 animate-pulse space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-9 h-9 rounded-none bg-xsm-medium-gray/40 flex-shrink-0" />
+              <div className="flex-1 space-y-1">
+                <div className="h-3 bg-xsm-medium-gray/40 rounded-none w-4/5" />
+                <div className="h-2.5 bg-xsm-medium-gray/30 rounded-none w-2/5" />
+              </div>
+            </div>
+            <div className="flex items-center justify-between pt-1.5 border-t border-xsm-medium-gray/20">
+              <div className="h-3.5 bg-xsm-medium-gray/40 rounded-none w-14" />
+              <div className="h-3.5 bg-xsm-medium-gray/30 rounded-none w-16" />
+            </div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -202,29 +215,25 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
         return (
           <div
             key={ad.id}
-            className={`rounded-xl p-3 shadow-md flex flex-col justify-between transition-all duration-300 w-full cursor-pointer relative overflow-hidden ${
+            className={`rounded-none p-2.5 shadow-md flex flex-col justify-between transition-all duration-300 w-full cursor-pointer relative overflow-hidden ${
               isVipListing
                 ? 'bg-gradient-to-b from-amber-950/40 via-xsm-black/90 to-xsm-black border border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.2)] hover:border-amber-400'
                 : 'bg-xsm-black/80 border border-xsm-medium-gray/30 hover:border-xsm-yellow/40'
             }`}
             onClick={() => navigate(`/ad/${generateAdSlug(ad.id, ad.title)}`)}
           >
-            {/* Top Badges */}
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-black text-black bg-xsm-yellow rounded-full px-1.5 py-0.5 leading-none shadow">
-                #{adIndex + 1}
-              </span>
+            {/* VIP Badge (top right) */}
+            {isVipListing && (
+              <div className="absolute top-1.5 right-1.5 z-10">
+                <Crown className="w-3 h-3 text-yellow-400 fill-yellow-400/20" title="VIP Listing" />
+              </div>
+            )}
 
-              {isVipListing && (
-                <Crown className="w-3.5 h-3.5 text-yellow-400 fill-yellow-400/20" title="VIP Listing" />
-              )}
-            </div>
-
-            {/* Thumbnail & Title Row */}
-            <div className="flex items-center gap-2.5 mb-2.5">
+            {/* Thumbnail & Title + Price/Subs Row */}
+            <div className="flex items-center gap-2 mb-2">
               <div className="relative flex-shrink-0">
                 <div
-                  className={`w-11 h-11 rounded-lg overflow-hidden border ${
+                  className={`w-9 h-9 rounded-none overflow-hidden border ${
                     isVipListing ? 'border-amber-400' : 'border-xsm-medium-gray/40'
                   }`}
                 >
@@ -234,46 +243,51 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <div className="absolute -bottom-1 -right-1">
+                <div className="absolute -bottom-1 -right-1 scale-90">
                   {getPlatformIconSmall(ad.platform)}
                 </div>
               </div>
 
-              <div className="min-w-0 flex-1">
-                <h4 className="text-white font-bold text-xs truncate hover:text-xsm-yellow transition-colors">
+              <div className="min-w-0 flex-1 pr-6">
+                <h4
+                  className="text-white font-bold text-xs truncate hover:text-xsm-yellow transition-colors"
+                  title={ad.title}
+                >
                   {ad.title}
                 </h4>
-                <p className="text-[10px] text-blue-400 font-medium">
-                  {formatSubscribers(ad.subscribers)} subs
-                </p>
+                <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
+                  <span className="text-xsm-yellow font-extrabold text-xs">
+                    {formatPrice(ad.price)}
+                  </span>
+                  <span className="text-xsm-medium-gray/60">•</span>
+                  <span className="text-blue-400 font-medium">
+                    {formatSubscribers(ad.subscribers)} subs
+                  </span>
+                </div>
               </div>
             </div>
 
-            {/* Price & Monetization */}
-            <div className="flex items-center justify-between pt-2 border-t border-xsm-medium-gray/20 mb-2 text-xs">
-              <span className="text-xsm-yellow font-extrabold text-xs sm:text-sm">
-                {formatPrice(ad.price)}
-              </span>
-              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+            {/* Monetization & Purchase Button Row */}
+            <div className="flex items-center justify-between pt-1.5 border-t border-xsm-medium-gray/20">
+              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-none ${
                 ad.isMonetized ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
               }`}>
                 {ad.isMonetized ? 'Monetized' : 'Non-Monetized'}
               </span>
-            </div>
 
-            {/* Purchase Button */}
-            <div className="flex items-center justify-end pt-1.5 border-t border-xsm-medium-gray/20" onClick={(e) => e.stopPropagation()}>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedAd(ad);
-                  setShowDealModal(true);
-                }}
-                className="bg-xsm-yellow text-black px-3 py-1 rounded-lg hover:bg-yellow-400 transition-colors text-xs font-bold flex items-center gap-1 shadow-sm"
-              >
-                <ShoppingCart className="w-3 h-3" />
-                Purchase
-              </button>
+              <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedAd(ad);
+                    setShowDealModal(true);
+                  }}
+                  className="bg-xsm-yellow text-black px-2 py-0.5 rounded-none hover:bg-yellow-400 transition-colors text-[10px] font-bold flex items-center gap-1 shadow-sm"
+                >
+                  <ShoppingCart className="w-2.5 h-2.5" />
+                  Purchase
+                </button>
+              </div>
             </div>
           </div>
         );

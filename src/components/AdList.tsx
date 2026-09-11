@@ -329,10 +329,10 @@ const AdList: React.FC<AdListProps> = ({
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {[...Array(8)].map((_, i) => (
-          <div key={i} className="xsm-card animate-pulse">
-            <div className="h-48 bg-xsm-medium-gray rounded mb-4"></div>
-            <div className="h-4 bg-xsm-medium-gray rounded mb-2"></div>
-            <div className="h-4 bg-xsm-medium-gray rounded w-3/4"></div>
+          <div key={i} className="xsm-card !rounded-none animate-pulse">
+            <div className="h-48 bg-xsm-medium-gray rounded-none mb-4"></div>
+            <div className="h-4 bg-xsm-medium-gray rounded-none mb-2"></div>
+            <div className="h-4 bg-xsm-medium-gray rounded-none w-3/4"></div>
           </div>
         ))}
       </div>
@@ -373,8 +373,8 @@ const AdList: React.FC<AdListProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Ad Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+      {/* Ad Grid - reduced card width with responsive 2 to 6 column layout */}
+      <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-3.5">
         {displayAds.map((ad) => {
           const isVipListing = Boolean(
             ad.seller?.isVip ||
@@ -388,7 +388,7 @@ const AdList: React.FC<AdListProps> = ({
           return (
             <div 
               key={ad.id} 
-              className={`xsm-card !p-3 group transition-all duration-300 cursor-pointer h-full flex flex-col relative overflow-hidden ${
+              className={`xsm-card !rounded-none !p-2.5 sm:!p-3 group transition-all duration-300 cursor-pointer h-full flex flex-col relative overflow-hidden ${
                 isVipListing
                   ? 'border-2 border-amber-500/80 shadow-[0_0_20px_rgba(245,158,11,0.25)] hover:shadow-[0_0_28px_rgba(245,158,11,0.45)] bg-gradient-to-b from-amber-950/20 via-xsm-dark-gray to-xsm-dark-gray'
                   : ''
@@ -397,14 +397,14 @@ const AdList: React.FC<AdListProps> = ({
             >
               {/* Thumbnail */}
               <div 
-                className="relative h-36 bg-gradient-to-br from-xsm-medium-gray to-xsm-dark-gray rounded-lg mb-2.5 overflow-hidden group/image cursor-pointer"
+                className="relative aspect-[16/10] bg-gradient-to-br from-xsm-medium-gray to-xsm-dark-gray rounded-none mb-2 overflow-hidden group/image cursor-pointer"
                 onClick={(e) => navigateToDetail(ad, e)}
               >
                 <div className="w-full h-full overflow-hidden">
                   <img 
                     src={getListingImage(ad)}
                     alt={ad.title}
-                    className="w-full h-full object-contain bg-black transition-all duration-500 ease-in-out p-2"
+                    className="w-full h-full object-contain bg-black transition-all duration-500 ease-in-out p-1.5"
                     style={{ objectPosition: 'center' }}
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
@@ -418,7 +418,7 @@ const AdList: React.FC<AdListProps> = ({
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/image:opacity-100 transition-opacity duration-300"></div>
                 
                 {/* Platform Badge */}
-                <div className="absolute top-2 left-2">
+                <div className="absolute top-1.5 left-1.5">
                   {getPlatformIcon(ad.platform)}
                 </div>
 
@@ -426,21 +426,21 @@ const AdList: React.FC<AdListProps> = ({
                 <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
                   {isVipListing && (
                     <span
-                      className="flex items-center justify-center w-7 h-7 rounded-full shadow-lg border border-yellow-300/60"
+                      className="flex items-center justify-center w-6 h-6 rounded-none shadow-lg border border-yellow-300/60"
                       style={{ background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 60%, #FF8C00 100%)' }}
                       title="VIP Listing"
                     >
-                      <Crown className="w-3.5 h-3.5 fill-black text-black" />
+                      <Crown className="w-3 h-3 fill-black text-black" />
                     </span>
                   )}
                   <div className="flex space-x-1">
                     {ad.verified && (
-                      <span className="bg-blue-500 text-white px-2 py-0.5 rounded text-[10px] font-bold">
+                      <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded-none text-[9px] font-bold">
                         ✓ VERIFIED
                       </span>
                     )}
                     {ad.premium && (
-                      <span className="xsm-badge-premium">PREMIUM</span>
+                      <span className="xsm-badge-premium !rounded-none !text-[9px] !px-1.5 !py-0.5">PREMIUM</span>
                     )}
                   </div>
                 </div>
@@ -448,40 +448,41 @@ const AdList: React.FC<AdListProps> = ({
               </div>
 
             {/* Content */}
-            <div className="space-y-1.5 flex flex-col flex-1">
-              <div className="flex items-start justify-between gap-2">
+            <div className="space-y-1 flex flex-col flex-1">
+              <div className="flex items-start justify-between gap-1.5">
                 {/* Clickable title */}
                 <h3
-                  className="text-white font-semibold text-sm line-clamp-1 group-hover:text-xsm-yellow transition-colors flex-1 cursor-pointer hover:underline"
+                  className="text-foreground font-semibold text-xs sm:text-sm line-clamp-1 group-hover:text-xsm-yellow transition-colors flex-1 cursor-pointer hover:underline"
                   onClick={(e) => navigateToDetail(ad, e)}
+                  title={ad.title}
                 >
                   {ad.title}
                 </h3>
-                <div className="text-green-400 font-bold whitespace-nowrap text-sm">
+                <div className="text-green-400 font-bold whitespace-nowrap text-xs sm:text-sm">
                   {formatPrice(ad.price)}
                 </div>
               </div>
 
               {/* Stats */}
-              <div className="flex flex-col gap-0.5 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-gray-400 font-medium">Category:</span>
-                  <span className="text-xsm-light-gray truncate">{ad.category}</span>
+              <div className="flex flex-col gap-0.5 text-[11px] sm:text-xs">
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground font-medium">Category:</span>
+                  <span className="text-foreground/80 truncate">{ad.category}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-gray-400 font-medium">Subscribers:</span>
-                  <span className="text-white">{formatNumber(ad.subscribers)}</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground font-medium">Subscribers:</span>
+                  <span className="text-foreground font-semibold">{formatNumber(ad.subscribers)}</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-gray-400 font-medium">Monetization:</span>
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground font-medium">Monetization:</span>
                   <span className={`font-semibold ${ad.isMonetized ? 'text-green-400' : 'text-red-400'}`}>
                     {ad.isMonetized ? 'YES' : 'NO'}
                   </span>
                 </div>
                 {ad.monthlyIncome > 0 && (
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1">
                     <DollarSign className="w-3 h-3 text-green-400" />
-                    <span className="text-green-400 text-xs">{formatPrice(ad.monthlyIncome)}/mo</span>
+                    <span className="text-green-400 text-[11px] font-semibold">{formatPrice(ad.monthlyIncome)}/mo</span>
                   </div>
                 )}
               </div>
@@ -496,7 +497,7 @@ const AdList: React.FC<AdListProps> = ({
                 title={`View ${ad.seller.username}'s profile`}
               >
                 {/* Seller Profile Picture → Seller Profile */}
-                <div className="w-7 h-7 rounded-full overflow-hidden border border-xsm-medium-gray/40 flex-shrink-0 hover:ring-2 hover:ring-xsm-yellow/60 transition-all duration-200">
+                <div className="w-6 h-6 rounded-full overflow-hidden border border-xsm-medium-gray/40 flex-shrink-0 hover:ring-2 hover:ring-xsm-yellow/60 transition-all duration-200">
                   {ad.seller.profilePicture ? (
                     <img
                       src={getImageUrl(ad.seller.profilePicture) || ad.seller.profilePicture}
@@ -505,15 +506,15 @@ const AdList: React.FC<AdListProps> = ({
                       onError={(e) => { (e.target as HTMLImageElement).src = '/images/logo.png'; }}
                     />
                   ) : (
-                    <div className="w-full h-full bg-xsm-medium-gray flex items-center justify-center text-xsm-light-gray text-xs font-bold">
+                    <div className="w-full h-full bg-xsm-medium-gray flex items-center justify-center text-xsm-light-gray text-[10px] font-bold">
                       {ad.seller.username.charAt(0).toUpperCase()}
                     </div>
                   )}
                 </div>
                 {/* Seller Username → Seller Profile */}
-                <span className="text-xsm-light-gray text-xs hover:text-xsm-yellow hover:underline transition-colors truncate flex items-center gap-1">
+                <span className="text-foreground/70 text-[11px] hover:text-xsm-yellow hover:underline transition-colors truncate flex items-center gap-1">
                   {ad.seller.username}
-                  {Boolean(ad.seller?.isVip || (ad as any).seller_isVip || (ad as any).sellerIsVip || (ad as any).isVip) && <Crown className="w-3 h-3 text-yellow-400 flex-shrink-0" />}
+                  {Boolean(ad.seller?.isVip || (ad as any).seller_isVip || (ad as any).sellerIsVip || (ad as any).isVip) && <Crown className="w-2.5 h-2.5 text-yellow-400 flex-shrink-0" />}
                 </span>
               </div>
 
@@ -521,7 +522,7 @@ const AdList: React.FC<AdListProps> = ({
               <div className="mt-auto w-full pt-1.5">
                 <button
                   onClick={(e) => handlePurchase(ad, e)}
-                  className="w-full bg-xsm-yellow text-black py-2 rounded-lg hover:bg-yellow-500 transition-colors font-semibold text-sm"
+                  className="w-full bg-xsm-yellow text-black py-1.5 sm:py-2 rounded-none hover:bg-yellow-500 transition-colors font-bold text-xs shadow-sm cursor-pointer"
                 >
                   Make Purchase
                 </button>

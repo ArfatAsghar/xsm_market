@@ -205,9 +205,9 @@ const AdDetails: React.FC = () => {
       
       // Normalize screenshots from either JSON string, array of URLs, or array of uploaded objects.
       const normalizeScreenshot = (item: any): string => {
-        if (!item) return '';
-        if (typeof item === 'string') return item;
-        return item.url || item.data || item.thumbnail || '';
+        if (!item || item === '0' || item === 'null' || item === 'NULL') return '';
+        if (typeof item === 'string') return item.trim();
+        return (item.url || item.data || item.thumbnail || item.path || '').trim();
       };
 
       let screenshots: string[] = [];
@@ -215,13 +215,19 @@ const AdDetails: React.FC = () => {
         try {
           const rawScreenshots = Array.isArray(data.screenshots)
             ? data.screenshots
-            : JSON.parse(data.screenshots);
+            : typeof data.screenshots === 'string'
+            ? JSON.parse(data.screenshots)
+            : [];
           screenshots = Array.isArray(rawScreenshots)
             ? rawScreenshots.map(normalizeScreenshot).filter(Boolean)
             : [];
         } catch (e) {
           console.warn('Failed to parse screenshots JSON:', e);
-          screenshots = [];
+          if (typeof data.screenshots === 'string' && data.screenshots.trim() && data.screenshots !== '0' && data.screenshots !== 'NULL') {
+            screenshots = [data.screenshots.trim()];
+          } else {
+            screenshots = [];
+          }
         }
       }
       
@@ -947,8 +953,30 @@ const AdDetails: React.FC = () => {
             {/* Income Details - Centered */}
             {channel.incomeDetails && channel.incomeDetails.trim() && (
               <div className="xsm-card max-w-3xl mx-auto">
-                <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Income Details</h4>
-                <p className="text-white leading-relaxed text-center whitespace-pre-wrap break-words overflow-wrap-anywhere">{channel.incomeDetails}</p>
+                <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Monetization & Income Details</h4>
+                <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+                  {channel.incomeDetails.split(',').map(m => m.trim()).filter(Boolean).map((item, idx) => {
+                    const isFresh = item.toLowerCase().includes('freshly monetized');
+                    const isAdsense = item.toLowerCase().includes('adsense change');
+                    return (
+                      <span
+                        key={idx}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-all border shadow-sm ${
+                          isFresh
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40'
+                            : isAdsense
+                            ? 'bg-cyan-500/20 text-cyan-400 border-cyan-500/40'
+                            : ''
+                        }`}
+                        style={!isFresh && !isAdsense ? { background: 'var(--xsm-bg)', color: 'var(--xsm-text)', borderColor: 'var(--xsm-border)' } : undefined}
+                      >
+                        {isFresh && '✨ '}
+                        {isAdsense && '⚡ '}
+                        {item}
+                      </span>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -978,8 +1006,21 @@ const AdDetails: React.FC = () => {
                           alt={`${channel.name} screenshot ${index + 1}`}
                           className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-110"
                           onError={(e) => {
+                            const target = e.currentTarget;
+                            const currentSrc = target.getAttribute('src') || '';
+                            // Auto-retry with /api/ prefix if /uploads/ was used and vice versa
+                            if (currentSrc.startsWith('/uploads/') && !target.dataset.retried) {
+                              target.dataset.retried = 'true';
+                              target.setAttribute('src', `/api${currentSrc}`);
+                              return;
+                            }
+                            if (currentSrc.startsWith('/api/uploads/') && !target.dataset.retried) {
+                              target.dataset.retried = 'true';
+                              target.setAttribute('src', currentSrc.replace('/api/uploads/', '/uploads/'));
+                              return;
+                            }
                             console.error('Image failed to load:', screenshot, 'Resolved to:', imageUrl);
-                            e.currentTarget.style.display = 'none';
+                            target.style.display = 'none';
                           }}
                         />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">

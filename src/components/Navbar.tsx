@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   FaStore, FaInbox, FaTag, FaBell, FaUser, FaSignOutAlt,
   FaFileAlt, FaCrown, FaTachometerAlt, FaBars, FaTimes,
-  FaChevronDown, FaEnvelope, FaCheck, FaBan, FaCheckCircle
+  FaChevronDown, FaEnvelope, FaCheck, FaBan, FaCheckCircle,
+  FaSun, FaMoon
 } from 'react-icons/fa';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
@@ -11,6 +12,8 @@ import { logout, API_URL } from '@/services/auth';
 import { isCurrentUserAdmin } from '@/utils/adminConfig';
 import VipSubscriptionModal from './VipSubscriptionModal';
 import AuthWidget from './AuthWidget';
+import { ThemeModal } from './ThemeModal';
+import { useTheme } from '@/context/ThemeContext';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -27,6 +30,8 @@ const Navbar: React.FC = () => {
   const [showAuthWidget, setShowAuthWidget] = useState(false);
   const [isUserAdmin, setIsUserAdmin] = useState(false);
   const [showVipModal, setShowVipModal] = useState(false);
+  const [showThemeModal, setShowThemeModal] = useState(false);
+  const { currentTheme, activeTheme, toggleTheme } = useTheme();
   const { isLoggedIn, setIsLoggedIn, user, setUser } = useAuth();
   const { inAppNotifications, unreadInAppCount, unreadBellCount, markRead, markAllRead } = useNotifications();
   const [unreadCount, setUnreadCount] = useState(0);
@@ -113,13 +118,13 @@ const Navbar: React.FC = () => {
             ? 'text-[15.5px] font-bold' 
             : 'text-[13.5px] font-semibold'
         } ${
-          active ? 'text-xsm-yellow' : 'text-gray-300 hover:text-white'
+          active ? 'text-xsm-yellow' : 'text-foreground/80 hover:text-foreground'
         }`}
         style={{ background: 'none', border: 'none' }}
       >
         <span className={`transition-transform duration-200 group-hover:scale-110 ${
           isBigger ? 'text-[18px]' : 'text-base'
-        } ${active ? 'text-xsm-yellow' : 'text-gray-400 group-hover:text-xsm-yellow'}`}>
+        } ${active ? 'text-xsm-yellow' : 'text-foreground/60 group-hover:text-xsm-yellow'}`}>
           {icon}
         </span>
         <span>{label}</span>
@@ -145,9 +150,9 @@ const Navbar: React.FC = () => {
       )}
 
       <nav
-        className="sticky top-0 z-50 border-b border-white/[0.06]"
+        className="sticky top-0 z-50 border-b border-[var(--xsm-border)] transition-colors duration-300"
         style={{
-          background: 'linear-gradient(135deg, rgba(10,10,10,0.98) 0%, rgba(18,18,18,0.98) 50%, rgba(10,10,10,0.98) 100%)',
+          background: 'var(--xsm-nav-bg)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
         }}
@@ -207,10 +212,11 @@ const Navbar: React.FC = () => {
             </div>
 
             {/* ── RIGHT: Actions ── */}
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex items-center justify-end gap-2.5">
 
               {/* Notification Bell */}
               {isLoggedIn && (
+
                 <div className="relative" ref={notifRef}>
                   <button
                     onClick={() => setShowNotifications(p => !p)}
@@ -369,7 +375,7 @@ const Navbar: React.FC = () => {
                         )}
                       </div>
                       <div className="flex flex-col items-start leading-tight">
-                        <span className="text-[12.5px] font-bold text-white group-hover:text-xsm-yellow transition-colors">
+                        <span className="text-[12.5px] font-bold text-foreground group-hover:text-xsm-yellow transition-colors">
                           {user?.username || 'Account'}
                         </span>
                         {(user as any)?.isBanned ? (
@@ -382,16 +388,17 @@ const Navbar: React.FC = () => {
                           </span>
                         )}
                       </div>
-                      <FaChevronDown className="text-gray-500 text-[10px] group-hover:text-gray-300 transition-colors" />
+                      <FaChevronDown className="text-muted-foreground text-[10px] group-hover:text-foreground transition-colors" />
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent
                     align="end"
-                    className="min-w-[210px] rounded-xl overflow-hidden p-1"
+                    className="min-w-[220px] rounded-xl overflow-hidden p-1"
+                    onCloseAutoFocus={(e) => e.preventDefault()}
                     style={{
-                      background: 'linear-gradient(145deg, #111111, #0d0d0d)',
-                      border: '1px solid rgba(255,255,255,0.07)',
-                      boxShadow: '0 20px 60px rgba(0,0,0,0.7), 0 0 0 0.5px rgba(255,208,0,0.06)',
+                      background: 'var(--xsm-dark-gray)',
+                      border: '1px solid var(--xsm-border)',
+                      boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
                     }}
                   >
                     <DropdownMenuLabel className="px-3 py-2 text-[11px] font-bold text-gray-500 uppercase tracking-widest">My Account</DropdownMenuLabel>
@@ -444,7 +451,7 @@ const Navbar: React.FC = () => {
                       <span className="text-sm">VIP Membership</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuSeparator className="my-1" style={{ background: 'rgba(255,255,255,0.06)' }} />
+                    <DropdownMenuSeparator className="my-1" style={{ background: 'var(--xsm-border)' }} />
 
                     <DropdownMenuItem
                       onClick={handleLogout}
@@ -454,6 +461,8 @@ const Navbar: React.FC = () => {
                       <span className="text-sm font-medium">Logout</span>
                     </DropdownMenuItem>
                   </DropdownMenuContent>
+
+
                 </DropdownMenu>
               ) : (
                 <button
@@ -468,10 +477,38 @@ const Navbar: React.FC = () => {
                   <span>Login</span>
                 </button>
               )}
+
+              {/* Theme Toggle Button (Moon / Sun) at the very end of navbar */}
+              <button
+                onClick={toggleTheme}
+                className="relative w-9 h-9 flex items-center justify-center rounded-xl border border-[var(--xsm-border)] bg-[var(--xsm-dark-gray)] text-foreground/80 hover:text-xsm-yellow hover:border-xsm-yellow/50 transition-all duration-200 shadow-sm hover:scale-105 active:scale-95 cursor-pointer ml-1"
+                title={currentTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+                aria-label="Toggle theme"
+              >
+                {currentTheme === 'light' ? (
+                  <FaMoon className="text-[15px] text-amber-500 transition-transform duration-300 hover:-rotate-12" />
+                ) : (
+                  <FaSun className="text-[15px] text-yellow-400 transition-transform duration-300 hover:rotate-45" />
+                )}
+              </button>
             </div>
 
-            {/* ── MOBILE hamburger ── */}
+            {/* ── MOBILE header actions ── */}
             <div className="md:hidden flex items-center gap-2">
+              {/* Mobile Theme Toggle Button */}
+              <button
+                onClick={toggleTheme}
+                className="w-9 h-9 flex items-center justify-center rounded-xl border border-[var(--xsm-border)] bg-[var(--xsm-dark-gray)] text-foreground/80 hover:text-xsm-yellow transition-all cursor-pointer"
+                title={currentTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}
+                aria-label="Toggle theme"
+              >
+                {currentTheme === 'light' ? (
+                  <FaMoon className="text-sm text-amber-500" />
+                ) : (
+                  <FaSun className="text-sm text-yellow-400" />
+                )}
+              </button>
+
               {isLoggedIn && unreadCount > 0 && (
                 <button
                   onClick={() => navigateTo('/chat')}
@@ -483,7 +520,7 @@ const Navbar: React.FC = () => {
               )}
               <button
                 onClick={() => setIsMenuOpen(p => !p)}
-                className="w-9 h-9 flex items-center justify-center rounded-lg text-gray-300 hover:text-white hover:bg-white/5 transition-colors"
+                className="w-9 h-9 flex items-center justify-center rounded-lg text-foreground/80 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
               >
                 {isMenuOpen ? <FaTimes className="text-base" /> : <FaBars className="text-base" />}
               </button>
@@ -562,6 +599,29 @@ const Navbar: React.FC = () => {
                 </button>
               ))}
 
+              {/* Mobile Color Theme Selector */}
+              <div className="pt-2 pb-1 border-t border-[var(--xsm-border)]">
+                <button
+                  onClick={() => { toggleTheme(); setIsMenuOpen(false); }}
+                  className="flex items-center justify-between w-full px-4 py-3 rounded-xl text-sm font-semibold text-foreground/80 hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-all"
+                >
+                  <div className="flex items-center gap-3">
+                    {currentTheme === 'light' ? (
+                      <FaMoon className="text-sm text-amber-500 flex-shrink-0" />
+                    ) : (
+                      <FaSun className="text-sm text-yellow-400 flex-shrink-0" />
+                    )}
+                    <span>{currentTheme === 'light' ? 'Switch to Dark Mode' : 'Switch to Light Mode'}</span>
+                  </div>
+                  <span
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: activeTheme.badgeBg, color: activeTheme.badgeText }}
+                  >
+                    {currentTheme === 'light' ? 'Soft Light' : 'Dark'}
+                  </span>
+                </button>
+              </div>
+
               <div className="border-t pt-2 mt-2 space-y-1" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
                 {isLoggedIn ? (
                   <>
@@ -614,6 +674,12 @@ const Navbar: React.FC = () => {
           }}
         />
       )}
+
+      {/* Theme Appearance Modal */}
+      <ThemeModal
+        isOpen={showThemeModal}
+        onClose={() => setShowThemeModal(false)}
+      />
     </>
   );
 };

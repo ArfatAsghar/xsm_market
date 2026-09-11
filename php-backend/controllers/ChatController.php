@@ -64,6 +64,19 @@ class ChatController {
                 $participantStmt->execute([$chat['id']]);
                 $participants = $participantStmt->fetchAll(PDO::FETCH_ASSOC);
 
+                // Safely fetch profilePicture per participant without breaking on missing column
+                foreach ($participants as &$p) {
+                    try {
+                        $ppStmt = $this->db->prepare("SELECT profilePicture FROM users WHERE id = ? LIMIT 1");
+                        $ppStmt->execute([$p['user_id']]);
+                        $ppRow = $ppStmt->fetch(PDO::FETCH_ASSOC);
+                        $p['profilePicture'] = $ppRow['profilePicture'] ?? '';
+                    } catch (\Exception $e) {
+                        $p['profilePicture'] = '';
+                    }
+                }
+                unset($p); // break reference
+
                 $otherParticipants = array_values(array_filter($participants, function($p) use ($userId) {
                     return (int)$p['userId'] !== (int)$userId;
                 }));
@@ -133,7 +146,8 @@ class ChatController {
                         return [
                             'id' => (int)$p['user_id'],
                             'username' => $p['username'],
-                            'email' => $p['email']
+                            'email' => $p['email'],
+                            'profilePicture' => $p['profilePicture'] ?? ''
                         ];
                     }, $otherParticipants),
                     'messages' => $chat['last_message_content'] ? [[
@@ -1238,6 +1252,19 @@ class ChatController {
         $stmt->execute([$chatId]);
         $participants = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // Safely fetch profilePicture per participant
+        foreach ($participants as &$p) {
+            try {
+                $ppStmt = $this->db->prepare("SELECT profilePicture FROM users WHERE id = ? LIMIT 1");
+                $ppStmt->execute([$p['user_id']]);
+                $ppRow = $ppStmt->fetch(PDO::FETCH_ASSOC);
+                $p['profilePicture'] = $ppRow['profilePicture'] ?? '';
+            } catch (\Exception $e) {
+                $p['profilePicture'] = '';
+            }
+        }
+        unset($p);
+
         $otherParticipants = array_values(array_filter($participants, function($p) use ($currentUserId) {
             return (int)$p['user_id'] !== (int)$currentUserId;
         }));
@@ -1283,7 +1310,8 @@ class ChatController {
                 return [
                     'id' => (int)$p['user_id'],
                     'username' => $p['username'],
-                    'email' => $p['email']
+                    'email' => $p['email'],
+                    'profilePicture' => $p['profilePicture'] ?? ''
                 ];
             }, $otherParticipants),
             'ad' => $chatData['ad_id'] ? [

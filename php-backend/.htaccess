@@ -1,16 +1,25 @@
 <IfModule mod_rewrite.c>
-  RewriteEngine On
-  RewriteBase /
-
-  # Serve existing static files and directories directly (JS, CSS, images, favicons)
-  RewriteCond %{REQUEST_FILENAME} -f [OR]
-  RewriteCond %{REQUEST_FILENAME} -d
-  RewriteRule ^ - [L]
-
-  # Route /api and /api/* requests to api/index.php
-  RewriteRule ^api/(.*)$ api/index.php [QSA,L]
-  RewriteRule ^api$ api/index.php [QSA,L]
-
-  # React SPA fallback: route all other requests to index.html
-  RewriteRule ^ index.html [L]
+  RewriteEngine Off
 </IfModule>
+
+# Deny direct access to sensitive configuration files
+<FilesMatch "^\.env|\.(sql|log)$">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order deny,allow
+    Deny from all
+  </IfModule>
+</FilesMatch>
+
+# Explicitly ensure index.php is allowed
+<Files "index.php">
+  <IfModule mod_authz_core.c>
+    Require all granted
+  </IfModule>
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Allow from all
+  </IfModule>
+</Files>

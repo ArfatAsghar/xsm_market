@@ -42,9 +42,25 @@ function markTransactionFeePaid($pdo, $dealId, $paymentId, $paymentInfo) {
     $description = "Transaction fee paid via cryptocurrency. Payment ID: {$paymentId}. Amount: {$actuallyPaid} {$payCurrency}";
     $historyStmt->execute([$dealId, $buyerId, $description]);
 
-    // Send agent email to seller via chat, same as the deal's normal flow
+    // Allocate Gmail from pool and send agent email to seller via chat
     try {
-        $admin_email = $_ENV['ADMIN_EMAIL'] ?? $_ENV['admin_email'] ?? 'novaflowa4@gmail.com';
+        require_once __DIR__ . '/../services/EmailAllocationService.php';
+
+        // Fetch deal info to get platform & channel title
+        $dInfoStmt = $pdo->prepare("SELECT platform_type, channel_title, buyer_id FROM deals WHERE id = ?");
+        $dInfoStmt->execute([$dealId]);
+        $dInfo = $dInfoStmt->fetch(PDO::FETCH_ASSOC);
+
+        $allocRes = EmailAllocationService::assignEmailToDeal(
+            $dealId,
+            $dInfo['platform_type'] ?? 'youtube',
+            $dInfo['channel_title'] ?? '',
+            $dInfo['buyer_id'] ?? $buyerId
+        );
+
+        $admin_email = ($allocRes['success'] && !empty($allocRes['email']['email_address']))
+            ? $allocRes['email']['email_address']
+            : ($_ENV['ADMIN_EMAIL'] ?? 'novaflowa4@gmail.com');
 
         $chatStmt = $pdo->prepare("
             SELECT c.id as chat_id FROM chats c
@@ -79,17 +95,18 @@ function markTransactionFeePaid($pdo, $dealId, $paymentId, $paymentInfo) {
             UPDATE deals
             SET agent_email_sent = TRUE,
                 agent_email_sent_at = NOW(),
+                assigned_email = ?,
                 deal_status = 'agent_access_pending',
                 updated_at = NOW()
             WHERE id = ?
         ");
-        $agentEmailStmt->execute([$dealId]);
+        $agentEmailStmt->execute([$admin_email, $dealId]);
 
         $agentHistoryStmt = $pdo->prepare("
             INSERT INTO deal_history (deal_id, action_type, action_by, action_description, created_at)
             VALUES (?, 'agent_email_sent', 1, ?, NOW())
         ");
-        $agent_email_description = "Agent email ({$admin_email}) sent to seller for account access";
+        $agent_email_description = "Agent email ({$admin_email}) allocated from pool and sent to seller for account access";
         $agentHistoryStmt->execute([$dealId, $agent_email_description]);
 
     } catch (Exception $e) {

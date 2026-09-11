@@ -11,7 +11,7 @@ set_exception_handler(function($e) {
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Credentials: true');
 
@@ -25,41 +25,40 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') == 'OPTIONS') {
 require_once __DIR__ . '/config/auto-env.php';
 
 // Serve uploaded files from php-backend/uploads
-$requestPathForUpload = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
+$rawUploadUri = $_SERVER['REQUEST_URI'] ?? '/';
+$requestPathForUpload = parse_url($rawUploadUri, PHP_URL_PATH) ?? '/';
 
-// Support both /uploads/... and /api/uploads/...
-if (strpos($requestPathForUpload, '/api/uploads/') === 0) {
-    $requestPathForUpload = substr($requestPathForUpload, 4); // converts /api/uploads/... to /uploads/...
-}
+// Check if request is asking for an upload file
+if (preg_match('#/(?:api/)?uploads/(.+)$#i', $requestPathForUpload, $uploadMatch)) {
+    $subPath = ltrim(urldecode($uploadMatch[1]), '/\\');
+    // Prevent directory traversal
+    $subPath = str_replace(['../', '..\\'], '', $subPath);
+    $targetFile = __DIR__ . '/uploads/' . $subPath;
 
-if (strpos($requestPathForUpload, '/uploads/') === 0) {
-    $uploadRoot = realpath(__DIR__ . '/uploads');
-    $requestedFile = realpath(__DIR__ . $requestPathForUpload);
-
-    if (
-        $uploadRoot &&
-        $requestedFile &&
-        strpos($requestedFile, $uploadRoot) === 0 &&
-        is_file($requestedFile)
-    ) {
-        $mimeType = mime_content_type($requestedFile) ?: 'application/octet-stream';
+    if (file_exists($targetFile) && is_file($targetFile)) {
+        $ext = strtolower(pathinfo($targetFile, PATHINFO_EXTENSION));
+        $contentTypes = [
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png'  => 'image/png',
+            'gif'  => 'image/gif',
+            'webp' => 'image/webp',
+            'svg'  => 'image/svg+xml',
+            'mp4'  => 'video/mp4',
+            'webm' => 'video/webm',
+            'mov'  => 'video/quicktime',
+        ];
+        $mimeType = $contentTypes[$ext] ?? (mime_content_type($targetFile) ?: 'application/octet-stream');
 
         header('Content-Type: ' . $mimeType);
-        header('Content-Length: ' . filesize($requestedFile));
-        header('Cache-Control: public, max-age=86400');
+        header('Content-Length: ' . filesize($targetFile));
+        header('Cache-Control: public, max-age=31536000, immutable');
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: GET, HEAD, OPTIONS');
 
-        readfile($requestedFile);
+        readfile($targetFile);
         exit;
     }
-
-    http_response_code(404);
-    header('Content-Type: application/json');
-    echo json_encode([
-        'success' => false,
-        'message' => 'Uploaded file not found',
-        'path' => $requestPathForUpload
-    ]);
-    exit;
 }
 
 // Load environment variables
@@ -151,6 +150,36 @@ error_log("UPLOAD REQUEST DETECTED: Method=" . ($_SERVER['REQUEST_METHOD'] ?? ''
 
 // Route handling
 try {
+    // Static file serving fallback for uploads (e.g. /uploads/ads/... or /uploads/chat/...)
+    if (preg_match('#^/uploads/(.+)$#', $path, $uploadMatches) && $method === 'GET') {
+        $relUploadPath = $uploadMatches[1];
+        $targetFile = __DIR__ . '/uploads/' . $relUploadPath;
+        $realUploadsBase = realpath(__DIR__ . '/uploads');
+        $realTargetFile = realpath($targetFile);
+        
+        if ($realTargetFile && $realUploadsBase && strpos($realTargetFile, $realUploadsBase) === 0 && file_exists($realTargetFile)) {
+            $ext = strtolower(pathinfo($realTargetFile, PATHINFO_EXTENSION));
+            $contentTypes = [
+                'jpg'  => 'image/jpeg',
+                'jpeg' => 'image/jpeg',
+                'png'  => 'image/png',
+                'gif'  => 'image/gif',
+                'webp' => 'image/webp',
+                'svg'  => 'image/svg+xml',
+                'mp4'  => 'video/mp4',
+                'webm' => 'video/webm',
+                'mov'  => 'video/quicktime',
+            ];
+            $contentType = $contentTypes[$ext] ?? (mime_content_type($realTargetFile) ?: 'application/octet-stream');
+            
+            header('Content-Type: ' . $contentType);
+            header('Content-Length: ' . filesize($realTargetFile));
+            header('Cache-Control: public, max-age=31536000');
+            readfile($realTargetFile);
+            exit();
+        }
+    }
+
     // Simple delete ad endpoint (no authentication) - placed early to ensure it gets matched
     if (preg_match('/^\/delete-ad\/(\d+)$/', $path, $matches) && $method === 'DELETE') {
         error_log("DELETE AD ROUTE MATCHED: Path=$path, Method=$method, AdId={$matches[1]}");
@@ -204,6 +233,12 @@ try {
     elseif (strpos($path, '/webhooks/nowpayments') === 0) {
         require_once __DIR__ . '/webhooks/nowpayments.php';
         exit(); // Exit after handling webhook to prevent further processing
+    }
+    // Email Pool Manager routes
+    elseif (strpos($path, '/admin/email-pool') === 0) {
+        require_once __DIR__ . '/controllers/EmailPoolController.php';
+        $emailPoolController = new EmailPoolController();
+        handleEmailPoolRoutes($emailPoolController, $path, $method);
     }
     // Admin routes
     elseif (strpos($path, '/admin') === 0) {
@@ -511,6 +546,12 @@ function handleUserRoutes($controller, $path, $method) {
         // VIP routes
         case $path === '/user/buy-vip' && $method === 'POST':
             $controller->buyVip();
+            break;
+        case $path === '/user/vip-crypto-payment' && $method === 'POST':
+            $controller->createVipCryptoPayment();
+            break;
+        case preg_match('/^\/user\/vip-payment-status\/([^\/]+)$/', $path, $matches) && $method === 'GET':
+            $controller->getVipPaymentStatus($matches[1]);
             break;
         case $path === '/user/buyer-stats' && $method === 'GET':
             $controller->getBuyerStats();
@@ -866,6 +907,7 @@ function handleAdminRoutes($controller, $path, $method) {
             break;
         case preg_match('/^\/admin\/deals\/(\d+)\/mark-primary-owner-made$/', $path, $matches) && $method === 'POST':
         case preg_match('/^\/admin\/deals\/(\d+)\/confirm-primary-owner$/', $path, $matches) && $method === 'POST':
+        case preg_match('/^\/admin\/deals\/(\d+)\/admin-bypass-fee$/', $path, $matches) && $method === 'POST':
             handleDealsRoutes($path, $method);
             break;
         case $path === '/admin/support-requests' && $method === 'GET':
@@ -912,6 +954,49 @@ function handleAdminRoutes($controller, $path, $method) {
             break;
         default:
             Response::error('Admin route not found', 404);
+    }
+}
+
+function handleEmailPoolRoutes($controller, $path, $method) {
+    switch (true) {
+        case $path === '/admin/email-pool/stats' && $method === 'GET':
+            $controller->getStats();
+            break;
+        case $path === '/admin/email-pool/settings' && $method === 'GET':
+            $controller->getSettings();
+            break;
+        case $path === '/admin/email-pool/settings' && $method === 'PUT':
+            $controller->updateSettings();
+            break;
+        case $path === '/admin/email-pool/reassign' && $method === 'POST':
+            $controller->reassignDeal();
+            break;
+        case $path === '/admin/email-pool/assign' && $method === 'POST':
+            $controller->manualAssign();
+            break;
+        case $path === '/admin/email-pool' && $method === 'GET':
+            $controller->getEmails();
+            break;
+        case $path === '/admin/email-pool' && $method === 'POST':
+            $controller->addEmail();
+            break;
+        case preg_match('/^\/admin\/email-pool\/(\d+)\/capacity$/', $path, $matches) && $method === 'PUT':
+            $controller->updateCapacity($matches[1]);
+            break;
+        case preg_match('/^\/admin\/email-pool\/(\d+)\/status$/', $path, $matches) && in_array($method, ['POST', 'PUT', 'PATCH']):
+            $controller->toggleStatus($matches[1]);
+            break;
+        case preg_match('/^\/admin\/email-pool\/(\d+)$/', $path, $matches) && $method === 'GET':
+            $controller->getEmailDetails($matches[1]);
+            break;
+        case preg_match('/^\/admin\/email-pool\/(\d+)$/', $path, $matches) && $method === 'PUT':
+            $controller->updateEmail($matches[1]);
+            break;
+        case preg_match('/^\/admin\/email-pool\/(\d+)$/', $path, $matches) && $method === 'DELETE':
+            $controller->deleteEmail($matches[1]);
+            break;
+        default:
+            Response::error('Email pool route not found', 404);
     }
 }
 

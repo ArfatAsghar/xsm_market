@@ -175,8 +175,116 @@ const PublicProfile: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-xsm-black pt-16 flex items-center justify-center">
-        <div className="text-xsm-yellow text-xl">Loading profile...</div>
+      <div className="min-h-screen bg-xsm-black text-white pt-6 pb-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-pulse">
+            
+            {/* Left Sidebar Skeleton */}
+            <div className="lg:col-span-3 space-y-6">
+              <div className="bg-xsm-dark-gray rounded-xl p-5 border border-xsm-medium-gray/30 text-center space-y-4">
+                <div className="w-28 h-28 rounded-full bg-xsm-medium-gray/40 mx-auto ring-4 ring-xsm-medium-gray/20" />
+                <div className="space-y-2">
+                  <div className="h-5 bg-xsm-medium-gray/40 rounded w-3/4 mx-auto" />
+                  <div className="h-3 bg-xsm-medium-gray/30 rounded w-1/2 mx-auto" />
+                </div>
+                <div className="h-6 bg-xsm-medium-gray/30 rounded-full w-4/5 mx-auto" />
+
+                {/* Reputation score skeleton */}
+                <div className="w-full bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl py-2 px-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-md bg-xsm-medium-gray/40" />
+                    <div className="h-3 bg-xsm-medium-gray/40 rounded w-20" />
+                  </div>
+                  <div className="h-3.5 bg-xsm-medium-gray/40 rounded w-8" />
+                </div>
+
+                {/* Returning partners skeleton */}
+                <div className="w-full bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl py-2 px-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-md bg-xsm-medium-gray/40" />
+                    <div className="h-3 bg-xsm-medium-gray/40 rounded w-24" />
+                  </div>
+                  <div className="h-3.5 bg-xsm-medium-gray/40 rounded w-6" />
+                </div>
+
+                <div className="h-8 bg-xsm-medium-gray/40 rounded-lg w-full" />
+
+                <div className="pt-3 border-t border-xsm-medium-gray/20 flex items-center justify-between">
+                  <div className="h-3 bg-xsm-medium-gray/30 rounded w-20" />
+                  <div className="h-3 bg-xsm-medium-gray/40 rounded w-24" />
+                </div>
+              </div>
+            </div>
+
+            {/* Middle Main Content Skeleton */}
+            <div className="lg:col-span-6 space-y-6">
+              {/* About card */}
+              <div className="bg-xsm-dark-gray rounded-xl p-5 border border-xsm-medium-gray/30 space-y-3">
+                <div className="h-5 bg-xsm-medium-gray/40 rounded w-20" />
+                <div className="h-3 bg-xsm-medium-gray/30 rounded w-full" />
+                <div className="h-3 bg-xsm-medium-gray/30 rounded w-5/6" />
+                <div className="h-3 bg-xsm-medium-gray/30 rounded w-4/6" />
+              </div>
+
+              {/* Listings card */}
+              <div className="bg-xsm-dark-gray rounded-xl p-5 border border-xsm-medium-gray/30 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="h-5 bg-xsm-medium-gray/40 rounded w-28" />
+                  <div className="h-5 bg-xsm-medium-gray/30 rounded-full w-8" />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="bg-xsm-black/80 border border-xsm-medium-gray/30 rounded-none p-2.5 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-9 h-9 rounded-none bg-xsm-medium-gray/40 flex-shrink-0" />
+                        <div className="flex-1 space-y-1">
+                          <div className="h-3 bg-xsm-medium-gray/40 rounded-none w-4/5" />
+                          <div className="h-2.5 bg-xsm-medium-gray/30 rounded-none w-1/2" />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between pt-1.5 border-t border-xsm-medium-gray/20">
+                        <div className="h-3.5 bg-xsm-medium-gray/40 rounded-none w-14" />
+                        <div className="h-3.5 bg-xsm-medium-gray/30 rounded-none w-16" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Sidebar Skeleton */}
+            <div className="lg:col-span-3 space-y-6">
+              {/* Trading volume card */}
+              <div className="bg-xsm-dark-gray border border-xsm-medium-gray/30 rounded-xl p-4 space-y-2.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-xsm-medium-gray/40 flex-shrink-0" />
+                  <div className="space-y-1.5 flex-1">
+                    <div className="h-2.5 bg-xsm-medium-gray/30 rounded w-20" />
+                    <div className="h-5 bg-xsm-medium-gray/40 rounded w-16" />
+                  </div>
+                </div>
+                <div className="h-2.5 bg-xsm-medium-gray/20 rounded w-3/4" />
+              </div>
+
+              {/* Completed deals card */}
+              <div className="bg-xsm-dark-gray border border-xsm-medium-gray/30 rounded-xl p-4 space-y-3">
+                <div className="flex items-center justify-between pb-2.5 border-b border-xsm-medium-gray/20">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-xsm-medium-gray/40" />
+                    <div className="h-3.5 bg-xsm-medium-gray/40 rounded w-24" />
+                  </div>
+                  <div className="h-5 bg-xsm-medium-gray/40 rounded w-6" />
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <div className="h-10 bg-xsm-medium-gray/20 rounded-lg" />
+                  <div className="h-10 bg-xsm-medium-gray/20 rounded-lg" />
+                  <div className="h-10 bg-xsm-medium-gray/20 rounded-lg" />
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
       </div>
     );
   }
@@ -268,34 +376,34 @@ const PublicProfile: React.FC = () => {
                   <span>{profileUser.sellerMetrics?.responseTime || 'Usually replies in 10 minutes'}</span>
                 </div>
 
-                {/* 🛡️ Reputation Score Card */}
-                <div className="w-full text-left bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl p-3.5 mb-3 shadow-lg">
+                {/* 🛡️ Reputation Score Card (Compact height) */}
+                <div className="w-full text-left bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl py-2 px-3 mb-2 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
-                        <ShieldCheck className="w-4 h-4" />
+                      <div className="p-1 rounded-md bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
+                        <ShieldCheck className="w-3.5 h-3.5" />
                       </div>
                       <span className="font-semibold text-white text-xs">Reputation Score</span>
                     </div>
                     <div className="text-right">
-                      <div className="font-bold text-xsm-yellow text-sm">{(profileUser.sellerMetrics?.reputationScore ?? 0).toLocaleString()}</div>
-                      <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">
+                      <div className="font-bold text-xsm-yellow text-xs leading-tight">{(profileUser.sellerMetrics?.reputationScore ?? 0).toLocaleString()}</div>
+                      <div className="text-[9px] text-emerald-400 font-semibold leading-none">
                         +{(profileUser.sellerMetrics?.thisMonthPoints ?? 0).toLocaleString()} this month
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* 🔁 Returning Partners Card */}
-                <div className="w-full text-left bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl p-3.5 shadow-lg">
+                {/* 🔁 Returning Partners Card (Compact height) */}
+                <div className="w-full text-left bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl py-2 px-3 mb-3 shadow-sm">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className="p-1.5 rounded-lg bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
-                        <Users className="w-4 h-4" />
+                      <div className="p-1 rounded-md bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
+                        <Users className="w-3.5 h-3.5" />
                       </div>
                       <span className="font-semibold text-white text-xs">Returning Partners</span>
                     </div>
-                    <span className="font-bold text-white text-sm">{(profileUser.sellerMetrics?.returningPartners ?? 0).toLocaleString()}</span>
+                    <span className="font-bold text-white text-xs">{(profileUser.sellerMetrics?.returningPartners ?? 0).toLocaleString()}</span>
                   </div>
                 </div>
               </div>
@@ -314,19 +422,12 @@ const PublicProfile: React.FC = () => {
               )}
 
               {/* Profile Stats */}
-              <div className="space-y-2.5 pt-3 border-t border-xsm-medium-gray/20 text-xs">
+              <div className="pt-3 border-t border-xsm-medium-gray/20 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-xsm-light-gray">Member since</span>
                   <span className="text-white font-medium flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 text-xsm-yellow" />
                     {formatDate(profileUser.createdAt)}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-xsm-light-gray">Active listings</span>
-                  <span className="text-xsm-yellow font-bold">
-                    {profileUser.adCount || 0}
                   </span>
                 </div>
               </div>

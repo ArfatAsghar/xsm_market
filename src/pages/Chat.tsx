@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Send, Shield, MessageCircle, Image as ImageIcon, Video, X, BarChart3, HeadphonesIcon } from 'lucide-react';
+import { Send, Shield, MessageCircle, Image as ImageIcon, Video, X, BarChart3, HeadphonesIcon, Paperclip, Download, ZoomIn, ZoomOut, CheckCheck } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { API_URL } from '@/services/auth';
-import { getImageUrl } from '@/config/api';
+import { getImageUrl, getAlternateImageUrl } from '@/config/api';
 import { toast } from '@/components/ui/use-toast';
 import { io, Socket } from 'socket.io-client';
 import DealCardMessage from '@/components/DealCardMessage';
@@ -92,6 +92,7 @@ interface Message {
     id: string;
     username: string;
     isAdmin?: boolean;
+    profilePicture?: string;
   };
 }
 
@@ -105,7 +106,9 @@ interface ChatData {
     id: string;
     username: string;
     email: string;
+    profilePicture?: string;
   }>;
+  participants?: Array<{ user: { isAdmin?: boolean; role?: string; }; }>;
   ad?: {
     id: number;
     title: string;
@@ -122,6 +125,8 @@ interface ChatData {
       price: number;
       role?: string;
       status?: string;
+      deal_id?: number;
+      transaction_id?: string;
     }>;
   };
   support_requested?: boolean;
@@ -130,6 +135,128 @@ interface ChatData {
   buyerUserId?: number | null;
   sellerUserId?: number | null;
 }
+
+interface ChatImageBubbleProps {
+  mediaUrl: string;
+  alt?: string;
+  isMyMessage: boolean;
+  status?: string;
+  timeStr: string;
+  senderName?: string;
+  onOpenLightbox: (data: { url: string; senderName?: string; time?: string }) => void;
+}
+
+const ChatImageBubble: React.FC<ChatImageBubbleProps> = ({
+  mediaUrl,
+  alt = 'Sent photo',
+  isMyMessage,
+  status,
+  timeStr,
+  senderName,
+  onOpenLightbox
+}) => {
+  const [currentSrc, setCurrentSrc] = useState<string>(() => getImageUrl(mediaUrl) || mediaUrl);
+  const [hasError, setHasError] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const fallbackTriedRef = useRef(false);
+
+  useEffect(() => {
+    setCurrentSrc(getImageUrl(mediaUrl) || mediaUrl);
+    setHasError(false);
+    setIsLoaded(false);
+    fallbackTriedRef.current = false;
+  }, [mediaUrl]);
+
+  const handleError = () => {
+    if (!fallbackTriedRef.current) {
+      fallbackTriedRef.current = true;
+      const altUrl = getAlternateImageUrl(currentSrc);
+      if (altUrl && altUrl !== currentSrc) {
+        setCurrentSrc(altUrl);
+        return;
+      }
+      if (!currentSrc.startsWith('http') && !currentSrc.startsWith('blob:')) {
+        setCurrentSrc(`${window.location.origin}${currentSrc.startsWith('/') ? '' : '/'}${currentSrc}`);
+        return;
+      }
+    }
+    setHasError(true);
+  };
+
+  return (
+    <div
+      className="relative rounded-2xl overflow-hidden cursor-pointer group select-none transition-all duration-200 active:scale-[0.99] border shadow-sm"
+      style={{
+        width: 'min(280px, 72vw)',
+        minHeight: '160px',
+        maxHeight: '340px',
+        background: 'var(--xsm-medium-gray)',
+        borderColor: 'var(--xsm-border)'
+      }}
+      onClick={() => {
+        if (!hasError) {
+          onOpenLightbox({ url: currentSrc, senderName, time: timeStr });
+        }
+      }}
+    >
+      {/* Loading Shimmer Placeholder */}
+      {!isLoaded && !hasError && (
+        <div 
+          className="absolute inset-0 animate-pulse flex items-center justify-center"
+          style={{ background: 'var(--xsm-medium-gray)' }}
+        >
+          <div className="w-7 h-7 rounded-full border-2 border-t-transparent animate-spin" style={{ borderColor: 'var(--xsm-primary)', borderTopColor: 'transparent' }} />
+        </div>
+      )}
+
+      {/* Main Image */}
+      {!hasError ? (
+        <img
+          src={currentSrc}
+          alt={alt}
+          loading="lazy"
+          decoding="async"
+          onLoad={() => setIsLoaded(true)}
+          onError={handleError}
+          className={`w-full h-full object-cover transition-opacity duration-300 ${
+            isLoaded ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{ maxHeight: '340px' }}
+        />
+      ) : (
+        /* Subtle non-breaking error box */
+        <div className="flex flex-col items-center justify-center h-40 p-4 text-center text-xs text-neutral-400 bg-neutral-900/90">
+          <ImageIcon className="w-7 h-7 mb-2 text-neutral-500 opacity-80" />
+          <span>Photo unavailable</span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              fallbackTriedRef.current = false;
+              setHasError(false);
+              setCurrentSrc(`${getImageUrl(mediaUrl) || mediaUrl}?t=${Date.now()}`);
+            }}
+            className="mt-2 text-[11px] text-xsm-yellow hover:underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* WhatsApp-style floating bottom-right glass pill */}
+      <div className="absolute bottom-1.5 right-1.5 px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-[10px] text-white/95 flex items-center gap-1 shadow pointer-events-none">
+        <span>{timeStr}</span>
+        {isMyMessage && (
+          status === 'sending' ? (
+            <div className="w-2.5 h-2.5 border border-white/60 border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <CheckCheck className="w-3 h-3 text-xsm-yellow" />
+          )
+        )}
+      </div>
+    </div>
+  );
+};
 
 const Chat: React.FC = () => {
   const { user, isLoggedIn } = useAuth();
@@ -150,10 +277,9 @@ const Chat: React.FC = () => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [lastMessageId, setLastMessageId] = useState<number | null>(null);
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const [imageUploading, setImageUploading] = useState(false);
-  const videoInputRef = useRef<HTMLInputElement>(null);
-  const [videoUploading, setVideoUploading] = useState(false);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const [mediaUploading, setMediaUploading] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState<string>('');
   const [showDealSummary, setShowDealSummary] = useState(false);
   const [isSendingAgentRequest, setIsSendingAgentRequest] = useState(false);
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -166,15 +292,44 @@ const Chat: React.FC = () => {
   const [highlightedDealId, setHighlightedDealId] = useState<string | number | null>(null);
   const [selectedDealForModal, setSelectedDealForModal] = useState<any | null>(null);
   const [showSellerDealModal, setShowSellerDealModal] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; senderName?: string; time?: string } | null>(null);
+  const [lightboxZoom, setLightboxZoom] = useState(1);
 
-  const handleOpenDealModal = async (dealId: number | string) => {
+  // Close lightbox on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && lightboxImage) {
+        setLightboxImage(null);
+        setLightboxZoom(1);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lightboxImage]);
+
+  const handleOpenDealModal = async (dealId: number | string, contextData?: any) => {
+    const primaryId = contextData?.transaction_id || dealId;
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`${API_URL}/deals/${dealId}`, {
+      let response = await fetch(`${API_URL}/deals/${encodeURIComponent(primaryId)}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
+
+      // If 404 and we have another identifier, try it
+      if (!response.ok && contextData?.transaction_id && contextData.transaction_id !== primaryId) {
+        response = await fetch(`${API_URL}/deals/${encodeURIComponent(contextData.transaction_id)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+
+      if (!response.ok && contextData?.channel_title) {
+        response = await fetch(`${API_URL}/deals/${encodeURIComponent(primaryId)}?channel_title=${encodeURIComponent(contextData.channel_title)}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+
       if (response.ok) {
         const data = await response.json();
         const dealObj = data.deal || data;
@@ -186,18 +341,26 @@ const Chat: React.FC = () => {
       console.error('Error fetching deal for modal:', err);
     }
 
-    // Guaranteed fallback deal object if API fetch is unavailable
+    // If dealSummary on selectedChat has the matching deal, use it!
+    const summaryMatch = selectedChat?.dealSummary?.deals?.find((d: any) => 
+      (contextData?.transaction_id && d.transaction_id === contextData.transaction_id) ||
+      (dealId && (d.deal_id === dealId || d.id === dealId || d.transaction_id === dealId))
+    );
+
+    const actualTxnId = contextData?.transaction_id || (typeof dealId === 'string' && dealId.startsWith('TXN') ? dealId : summaryMatch?.transaction_id || `TXN${String(dealId).padStart(6, '0')}`);
+
     const fallbackDeal: any = {
-      id: Number(dealId) || 1,
-      transaction_id: typeof dealId === 'string' && dealId.startsWith('TXN') ? dealId : `TXN${String(dealId).padStart(6, '0')}`,
-      channel_title: 'Channel Listing',
-      channel_price: 21,
-      escrow_fee: 2,
-      deal_status: 'seller_reviewing',
-      buyer_id: 1,
-      seller_id: 2,
-      buyer_username: 'Buyer',
-      payment_methods: []
+      id: summaryMatch?.deal_id || summaryMatch?.id || Number(dealId) || 1,
+      deal_id: summaryMatch?.deal_id || summaryMatch?.id || Number(dealId) || 1,
+      transaction_id: actualTxnId,
+      channel_title: contextData?.channel_title || summaryMatch?.channel || 'Channel Listing',
+      channel_price: contextData?.channel_price || summaryMatch?.price || 21,
+      escrow_fee: contextData?.escrow_fee || 2,
+      deal_status: contextData?.deal_status || summaryMatch?.status || 'seller_reviewing',
+      buyer_id: contextData?.buyer_id || selectedChat?.buyerUserId || 1,
+      seller_id: contextData?.seller_id || selectedChat?.sellerUserId || user?.id || 2,
+      buyer_username: contextData?.buyer_username || 'Buyer',
+      payment_methods: contextData?.payment_methods || []
     };
     setSelectedDealForModal(fallbackDeal);
     setShowSellerDealModal(true);
@@ -224,8 +387,8 @@ const Chat: React.FC = () => {
       const title = titleMatch ? titleMatch[1] : 'Social Media Channel';
       const price = priceMatch ? parseFloat(priceMatch[1]) : 0;
       const txnId = txnMatch ? txnMatch[0].replace(/Transaction ID:\s*/i, '').trim() : 'TXN0001';
-      const numMatch = txnId.match(/\d+/);
-      const dealId = numMatch ? parseInt(numMatch[0].slice(-6), 10) || 1 : 1;
+      const dealIdMatch = content.match(/Deal #(\d+)/i);
+      const dealId = dealIdMatch ? parseInt(dealIdMatch[1], 10) : txnId;
 
       return {
         deal_id: dealId,
@@ -682,102 +845,97 @@ const Chat: React.FC = () => {
     }
   };
 
-  const handleSendImage = async (file: File) => {
-    if (!selectedChat || !user || !file) return;
-    
-    // Check file size (limit to 10MB for images)
-    if (file.size > 10 * 1024 * 1024) {
-      alert('Image file size must be less than 10MB');
-      return;
-    }
-    
-    setImageUploading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const formData = new FormData();
-      formData.append('file', file); // Changed from 'image' to 'file'
-      formData.append('messageType', 'image');
-      
-      console.log('Uploading image:', file.name, 'Size:', file.size);
-      
-      // Use the correct upload endpoint
-      const response = await fetch(`${API_URL}/chat/chats/${selectedChat.id}/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-      
-      if (response.ok) {
-        const message = await response.json();
-        console.log('Image upload successful:', message);
-        setMessages(prev => [...prev, message]);
-        setLastMessageId(message.id);
-        updateChatLastMessage(message);
-        // Scroll to bottom after sending an image
-        setTimeout(scrollToBottom, 100);
-        setTimeout(() => checkForNewMessages(), 500);
-      } else {
-        const errorData = await response.json();
-        console.error('Image upload failed:', errorData);
-        throw new Error(errorData.message || 'Failed to upload image');
-      }
-    } catch (error) {
-      console.error('Error sending image:', error);
-      alert(`Failed to send image: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setImageUploading(false);
-    }
-  };
+  const handleSendMediaFiles = async (files: FileList) => {
+    if (!selectedChat || !user || !files || files.length === 0) return;
 
-  const handleSendVideo = async (file: File) => {
-    if (!selectedChat || !user || !file) return;
-    
-    // Check file size (limit to 50MB for videos)
-    if (file.size > 50 * 1024 * 1024) {
-      alert('Video file size must be less than 50MB');
-      return;
-    }
-    
-    setVideoUploading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const formData = new FormData();
-      formData.append('file', file); // Changed from 'video' to 'file'
-      formData.append('messageType', 'video');
-      
-      console.log('Uploading video:', file.name, 'Size:', file.size);
-      
-      // Use the correct upload endpoint
-      const response = await fetch(`${API_URL}/chat/chats/${selectedChat.id}/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-      
-      if (response.ok) {
-        const message = await response.json();
-        console.log('Video upload successful:', message);
-        setMessages(prev => [...prev, message]);
-        setLastMessageId(message.id);
-        updateChatLastMessage(message);
-        // Scroll to bottom after sending a video
-        setTimeout(scrollToBottom, 100);
-        setTimeout(() => checkForNewMessages(), 500);
-      } else {
-        const errorData = await response.json();
-        console.error('Video upload failed:', errorData);
-        throw new Error(errorData.message || 'Failed to upload video');
+    const MAX_FILES = 20;
+    const fileArray = Array.from(files).slice(0, MAX_FILES);
+
+    // Validate sizes upfront
+    for (const file of fileArray) {
+      const isVideo = file.type.startsWith('video/');
+      const limit = isVideo ? 50 * 1024 * 1024 : 15 * 1024 * 1024;
+      if (file.size > limit) {
+        alert(`"${file.name}" exceeds the ${isVideo ? '50MB video' : '15MB image'} limit.`);
+        return;
       }
-    } catch (error) {
-      console.error('Error sending video:', error);
-      alert(`Failed to send video: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setVideoUploading(false);
     }
+
+    setMediaUploading(true);
+    const token = localStorage.getItem('token');
+
+    for (let i = 0; i < fileArray.length; i++) {
+      const file = fileArray[i];
+      const isVideo = file.type.startsWith('video/');
+      const messageType = isVideo ? 'video' : 'image';
+      const localBlobUrl = URL.createObjectURL(file);
+      const tempId = -Date.now() - i;
+
+      // Optimistic instant message into chat (WhatsApp Web style instant display)
+      const optimisticMsg: Message = {
+        id: tempId,
+        chatId: selectedChat.id,
+        senderId: user.id,
+        content: '',
+        messageType: messageType as any,
+        mediaUrl: localBlobUrl,
+        fileName: file.name,
+        fileSize: file.size,
+        isRead: false,
+        status: 'sending' as any,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        sender: {
+          id: user.id,
+          username: user.username || 'You',
+          email: user.email || '',
+          profilePicture: (user as any)?.profilePicture,
+          isAdmin: !!(user as any)?.isAdmin
+        }
+      };
+
+      setMessages(prev => [...prev, optimisticMsg]);
+      setTimeout(scrollToBottom, 40);
+
+      setUploadProgressText(`Uploading ${i + 1} of ${fileArray.length}…`);
+
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('messageType', messageType);
+
+        const response = await fetch(`${API_URL}/chat/chats/${selectedChat.id}/upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${token}` },
+          body: formData
+        });
+
+        if (response.ok) {
+          const serverMessage = await response.json();
+          // Preserve localBlobUrl so image continues displaying smoothly without redownloading
+          setMessages(prev => prev.map(m => m.id === tempId ? { ...serverMessage, _localUrl: localBlobUrl, status: 'sent' } : m));
+          setLastMessageId(serverMessage.id);
+          updateChatLastMessage(serverMessage);
+          if (socket) {
+            socket.emit('send_message', serverMessage);
+          }
+          setTimeout(scrollToBottom, 60);
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('Media upload failed:', errorData);
+          setMessages(prev => prev.filter(m => m.id !== tempId));
+          toast({ title: `Failed to send "${file.name}"`, description: errorData.message || 'Upload error', variant: 'destructive' });
+        }
+      } catch (error) {
+        console.error('Error sending media:', error);
+        setMessages(prev => prev.filter(m => m.id !== tempId));
+        toast({ title: `Error sending "${file.name}"`, description: error instanceof Error ? error.message : 'Unknown error', variant: 'destructive' });
+      }
+    }
+
+    setMediaUploading(false);
+    setUploadProgressText('');
+    setTimeout(() => checkForNewMessages(), 500);
   };
 
   const updateChatLastMessage = (message: Message) => {
@@ -923,7 +1081,11 @@ const Chat: React.FC = () => {
       await fetchChats();
     } catch (error) {
       console.error('Error opening Website Agent chat:', error);
-      alert('Website Agent is not configured yet. Please ask an admin to create an admin support account.');
+      toast({
+        variant: 'destructive',
+        title: 'Website Agent Unavailable',
+        description: 'Website Agent is not configured yet. Please ask an admin to configure the support agent account.',
+      });
     }
   };
 
@@ -1039,24 +1201,28 @@ const Chat: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-xsm-black to-xsm-dark-gray">
+    <div className="min-h-screen" style={{ background: 'var(--xsm-bg)' }}>
       <style dangerouslySetInnerHTML={{ __html: scrollbarStyles }} />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="relative text-center mb-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-8">
+        {/* Compact header bar — no scrolling needed to reach inbox */}
+        <div className="flex items-center justify-between mb-3 px-1">
+          <div className="flex items-center gap-2">
+            <Shield className="w-4 h-4 text-xsm-yellow" />
+            <span className="text-base font-bold text-xsm-yellow">Secure Chat</span>
+            <span className="hidden sm:inline text-xs text-muted-foreground">· All messages are monitored for security</span>
+          </div>
           <button
             type="button"
             onClick={handleCloseChat}
-            className="absolute right-0 top-0 text-gray-400 hover:text-white hover:border-xsm-yellow hover:bg-xsm-yellow/10 transition-colors border border-xsm-medium-gray rounded-lg p-2"
+            className="text-muted-foreground hover:text-foreground hover:border-xsm-yellow hover:bg-xsm-yellow/10 transition-colors border border-xsm-medium-gray rounded-lg p-1.5"
             title="Close chat"
             aria-label="Close chat"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
-          <h1 className="text-4xl font-bold text-xsm-yellow mb-4">Secure Chat</h1>
-          <p className="text-xl text-white">
-            Communicate safely with buyers and sellers through our secure messaging system
-          </p>
-                {/* Restricted Account Alert Banner for Temporarily Banned Users - Revision 12 */}
+        </div>
+
+        {/* Ban alert banner */}
         {Boolean((user as any)?.isBanned) && (() => {
           const banExpires = (user as any)?.banExpires;
           const banReason = (user as any)?.banReason;
@@ -1076,10 +1242,10 @@ const Chat: React.FC = () => {
             }
           }
           return (
-            <div className="mb-6 bg-gradient-to-r from-red-950/90 to-slate-900 border border-red-500/50 rounded-xl p-4 text-white shadow-xl flex items-center justify-between gap-4">
+            <div className="mb-3 bg-gradient-to-r from-red-950/90 to-slate-900 border border-red-500/50 rounded-xl p-3 text-white shadow-xl flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 flex-shrink-0">
-                  <Shield className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-full bg-red-500/20 border border-red-500/40 flex items-center justify-center text-red-400 flex-shrink-0">
+                  <Shield className="w-4 h-4" />
                 </div>
                 <div>
                   <h4 className="font-bold text-red-300 text-sm">
@@ -1096,33 +1262,33 @@ const Chat: React.FC = () => {
               </div>
               <button
                 onClick={handleOpenWebsiteAgent}
-                className="px-4 py-2 bg-xsm-yellow text-black text-xs font-bold rounded-lg hover:bg-yellow-400 transition-colors flex-shrink-0"
+                className="px-3 py-1.5 bg-xsm-yellow text-black text-xs font-bold rounded-lg hover:bg-yellow-400 transition-colors flex-shrink-0"
               >
                 Contact Support
               </button>
             </div>
           );
         })()}
-        </div>
 
-        <div className="bg-xsm-dark-gray rounded-lg overflow-hidden" style={{ height: '600px' }}>
+        <div className="rounded-lg overflow-hidden border" style={{ height: 'calc(100vh - 160px)', minHeight: '480px', background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-border)' }}>
           <div className="flex h-full">
             {/* Chat List */}
-            <div className="w-80 bg-xsm-black border-r border-xsm-medium-gray">
-              <div className="p-4 border-b border-xsm-medium-gray">
+            <div className="w-80 border-r" style={{ background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' }}>
+              <div className="p-4 border-b" style={{ borderColor: 'var(--xsm-border)' }}>
                 <h3 className="text-lg font-semibold text-xsm-yellow flex items-center">
                   <MessageCircle className="w-5 h-5 mr-2" />
                   Conversations
                 </h3>
               </div>
 
-              <div className="p-4 border-b border-xsm-medium-gray">
+              <div className="p-4 border-b" style={{ borderColor: 'var(--xsm-border)' }}>
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search conversations..."
-                  className="w-full px-4 py-2 bg-xsm-dark-gray text-white rounded-lg border border-xsm-medium-gray focus:outline-none focus:border-xsm-yellow"
+                  className="w-full px-4 py-2 rounded-lg border focus:outline-none focus:border-xsm-yellow text-foreground"
+                  style={{ background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-border)' }}
                 />
               </div>
 
@@ -1219,22 +1385,34 @@ const Chat: React.FC = () => {
                             setSelectedChat(chat);
                             setIsAnnouncementsSelected(false);
                           }}
-                          className={`p-4 border-b border-xsm-medium-gray cursor-pointer transition-all relative ${
+                          className={`p-4 border-b cursor-pointer transition-all relative ${
                             selectedChat?.id === chat.id && !isAnnouncementsSelected
-                              ? 'bg-xsm-medium-gray/80 border-l-4 border-xsm-yellow'
+                              ? 'border-l-4 border-xsm-yellow'
                               : hasUnread
-                              ? 'bg-amber-950/20 border-l-4 border-amber-500 hover:bg-xsm-dark-gray'
-                              : 'hover:bg-xsm-dark-gray'
+                              ? 'border-l-4 border-amber-500'
+                              : ''
                           }`}
+                          style={{
+                            borderBottomColor: 'var(--xsm-border)',
+                            background: selectedChat?.id === chat.id && !isAnnouncementsSelected
+                              ? 'var(--xsm-dark-gray)'
+                              : undefined
+                          }}
                         >
                           <div className="flex items-center justify-between mb-1">
                             <div className="flex items-center flex-1 min-w-0">
-                              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xsm-black font-bold text-sm mr-3 shrink-0 relative ${hasUnread ? 'bg-xsm-yellow ring-2 ring-amber-400' : 'bg-xsm-yellow'}`}>
-                                {getChatDisplayName(chat).charAt(0).toUpperCase()}
+                              {/* Conversation avatar with profile picture */}
+                              <div className={`w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-xsm-black font-bold text-sm mr-3 shrink-0 relative flex-shrink-0 ${
+                                hasUnread ? 'ring-2 ring-amber-400' : ''
+                              }`} style={{ background: 'var(--xsm-primary)' }}>
+                                {chat.otherParticipants?.[0]?.profilePicture
+                                  ? <img src={getImageUrl(chat.otherParticipants[0].profilePicture) || chat.otherParticipants[0].profilePicture} alt="" className="w-full h-full object-cover" />
+                                  : getChatDisplayName(chat).charAt(0).toUpperCase()
+                                }
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
-                                  <h4 className={`text-sm truncate ${hasUnread ? 'text-white font-black' : 'text-white font-medium'}`}>
+                                  <h4 className={`text-sm truncate font-medium text-foreground ${hasUnread ? 'font-black' : ''}`}>
                                     {getChatDisplayName(chat)}
                                   </h4>
                                   {hasUnread && (
@@ -1250,7 +1428,7 @@ const Chat: React.FC = () => {
                             </div>
                             <div className="flex flex-col items-end shrink-0 ml-2">
                               {chat.lastMessageTime && (
-                                <span className={`text-xs ${hasUnread ? 'text-xsm-yellow font-bold' : 'text-gray-400'}`}>
+                                <span className={`text-xs ${hasUnread ? 'text-xsm-yellow font-bold' : 'text-muted-foreground'}`}>
                                   {formatLastSeen(chat.lastMessageTime)}
                                 </span>
                               )}
@@ -1261,7 +1439,7 @@ const Chat: React.FC = () => {
                               )}
                             </div>
                           </div>
-                          <p className={`text-sm truncate ${hasUnread ? 'text-white font-semibold' : 'text-gray-400'}`}>
+                          <p className={`text-sm truncate ${hasUnread ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}>
                             {chat.lastMessage || 'No messages yet'}
                           </p>
                         </div>
@@ -1342,11 +1520,14 @@ const Chat: React.FC = () => {
               ) : selectedChat ? (
                 <React.Fragment>
                   {/* Chat Header */}
-                  <div className="p-4 border-b border-xsm-medium-gray bg-xsm-black flex items-center justify-between">
+                  <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--xsm-border)', background: 'var(--xsm-bg)' }}>
                     <div className="flex items-center space-x-3">
                       <div className="relative">
-                        <div className="w-10 h-10 bg-xsm-yellow rounded-full flex items-center justify-center text-xsm-black font-bold">
-                          {getChatDisplayName(selectedChat).charAt(0).toUpperCase()}
+                        <div className="w-10 h-10 rounded-full overflow-hidden flex items-center justify-center text-xsm-black font-bold" style={{ background: 'var(--xsm-primary)' }}>
+                          {selectedChat.otherParticipants?.[0]?.profilePicture
+                            ? <img src={getImageUrl(selectedChat.otherParticipants[0].profilePicture) || selectedChat.otherParticipants[0].profilePicture} alt="" className="w-full h-full object-cover" />
+                            : getChatDisplayName(selectedChat).charAt(0).toUpperCase()
+                          }
                         </div>
                         {selectedChat.otherParticipants?.[0]?.id && onlineUserIds.has(String(selectedChat.otherParticipants[0].id)) && (
                           <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-black rounded-full shadow-[0_0_8px_#10b981]" title="Online now" />
@@ -1357,18 +1538,25 @@ const Chat: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleOpenParticipantProfile(selectedChat)}
-                            className={`text-white font-medium transition-colors text-left ${
+                            className={`font-semibold text-base transition-colors text-left flex items-center gap-2 ${
                               getProfileUsernameFromChat(selectedChat)
                                 ? 'hover:text-xsm-yellow cursor-pointer'
                                 : 'cursor-default'
                             }`}
+                            style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}
                             title={
                               getProfileUsernameFromChat(selectedChat)
                                 ? 'Open seller profile'
                                 : 'Profile unavailable'
                             }
                           >
-                            {getChatDisplayName(selectedChat)}
+                            <span>{getChatDisplayName(selectedChat)}</span>
+                            {(selectedChat.name === 'Website Agent' || (selectedChat as any).isSupport || selectedChat.type === 'support') && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                                <Shield className="w-3 h-3 text-emerald-500" />
+                                Support
+                              </span>
+                            )}
                           </button>
                         </div>
                         {remoteTypingUser ? (
@@ -1414,6 +1602,7 @@ const Chat: React.FC = () => {
                   <div 
                     ref={messagesContainerRef}
                     className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar messages-scrollbar"
+                    style={{ background: 'var(--xsm-bg)' }}
                   >
                     {messages.length === 0 ? (
                       <div className="text-center text-gray-400 py-8">
@@ -1463,53 +1652,57 @@ const Chat: React.FC = () => {
                             </div>
                           );
                         }
+                        // Only treat as admin/official if the SERVER explicitly flagged it
+                        // (sent via admin dashboard). Normal messages from admin users stay regular.
+                        const isDashboardAdminMessage = Boolean(
+                          (message as any)?.isStaffMessage ||
+                          (message as any)?.staffDisplayName
+                        );
 
-                        const isSenderAdmin = Boolean((message as any)?.isStaffMessage || (message as any)?.staffDisplayName);
-                        const senderRole = (message.sender as any)?.role ?? '';
-
-                        // --- Display name logic (never show raw username for staff) ---
-                        const getAgentLabel = () => {
-                          if (senderRole === 'agent') return 'Support Agent';
-                          if (senderRole === 'manager') return 'Manager';
-                          return 'Admin';
-                        };
-
-                        // Agent/Admin messages: same teal style for both sender and receiver
-                        if (isSenderAdmin) {
+                        if (isDashboardAdminMessage) {
+                          const adminName = (message as any)?.staffDisplayName || 'XSM Market Admin';
                           return (
-                            <div key={message.id} className="flex justify-start w-full my-1 px-1">
-                              {/* Agent avatar */}
-                              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-gradient-to-br from-teal-600 to-emerald-700 flex items-center justify-center shadow-md mt-1 mr-2 border border-teal-400/30">
-                                <Shield className="w-3.5 h-3.5 text-white" />
+                            <div key={message.id} className="flex items-end gap-2 my-1 justify-start">
+                              {/* Admin avatar — cyan gradient */}
+                              <div
+                                className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold mb-0.5 flex-shrink-0"
+                                style={{
+                                  background: 'linear-gradient(135deg, #06b6d4, #0891b2)',
+                                  color: '#fff',
+                                  boxShadow: '0 0 0 2px rgba(6,182,212,0.3)'
+                                }}
+                              >
+                                A
                               </div>
-                              <div className="max-w-xs lg:max-w-md">
-                                {/* Agent name header */}
-                                <div className="flex items-center gap-1.5 mb-1">
-                                  <span className="text-[11px] font-bold text-teal-300 select-none">
-                                    {getAgentLabel()}
-                                  </span>
-                                </div>
-                                {/* Agent bubble */}
-                                <div className="px-4 py-2.5 rounded-2xl rounded-tl-sm bg-gradient-to-br from-gray-900 to-gray-800 border border-teal-500/30 shadow-[0_0_12px_rgba(20,184,166,0.15)] text-white">
-                                  {message.messageType === 'image' && (message.mediaUrl || message.content) ? (
-                                    <div className="relative">
-                                      <img
-                                        src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content}
-                                        alt="Sent image"
-                                        className="rounded-lg max-w-[200px] max-h-[200px] mb-2 border border-teal-400/40 cursor-pointer"
-                                        style={{ objectFit: 'cover' }}
-                                        onClick={() => window.open(getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content, '_blank')}
-                                        onError={(e) => { const t = e.target as HTMLImageElement; t.style.display = 'none'; const f = t.nextElementSibling as HTMLElement; if (f) f.style.display = 'flex'; }}
-                                      />
-                                      <div className="absolute inset-0 bg-gray-700 rounded-lg items-center justify-center text-white text-sm" style={{ display: 'none' }}>
-                                        <div className="text-center p-4">
-                                          <div className="text-2xl mb-2">🖼️</div><div>Image unavailable</div>
-                                          <button onClick={() => window.open(getImageUrl(message.content) || message.content, '_blank')} className="mt-2 px-3 py-1 rounded text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700">Try Opening</button>
-                                        </div>
-                                      </div>
-                                    </div>
+                              <div className="max-w-xs lg:max-w-md flex flex-col items-start">
+                                {/* Admin name only — no badge */}
+                                <p
+                                  className="text-[11px] font-semibold mb-1 ml-1 select-none"
+                                  style={{ color: '#0891b2' }}
+                                >
+                                  {adminName}
+                                </p>
+                                {/* Cyan bubble — readable in both dark & light mode */}
+                                <div
+                                  className="px-4 py-2.5 rounded-2xl rounded-bl-sm shadow-sm"
+                                  style={{
+                                    background: 'rgba(6,182,212,0.15)',
+                                    color: 'var(--xsm-text)',
+                                    border: '1.5px solid rgba(6,182,212,0.5)',
+                                  }}
+                                >
+                                  {message.messageType === 'image' && (message.mediaUrl || message.content || (message as any)._localUrl) ? (
+                                    <ChatImageBubble
+                                      mediaUrl={(message as any)._localUrl || message.mediaUrl || message.content}
+                                      alt="Admin image"
+                                      isMyMessage={false}
+                                      status={message.status}
+                                      timeStr={formatTime(message.createdAt)}
+                                      senderName={adminName}
+                                      onOpenLightbox={setLightboxImage}
+                                    />
                                   ) : message.messageType === 'video' && (message.mediaUrl || message.content) ? (
-                                    <div className="relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border bg-black border-teal-400/40">
+                                    <div className="relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border bg-black" style={{ borderColor: 'rgba(6,182,212,0.4)' }}>
                                       <video className="w-full h-full object-cover" controls preload="metadata" style={{ maxHeight: '200px' }}
                                         onError={(e) => { const t = e.target as HTMLVideoElement; t.style.display = 'none'; const f = t.nextElementSibling as HTMLElement; if (f) f.style.display = 'flex'; }}>
                                         <source src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content} type="video/mp4" />
@@ -1518,20 +1711,21 @@ const Chat: React.FC = () => {
                                         Your browser does not support the video tag.
                                       </video>
                                       <div className="absolute inset-0 bg-gray-700 flex items-center justify-center text-white text-sm" style={{ display: 'none' }}>
-                                        <div className="text-center p-4"><div className="text-2xl mb-2">🎥</div><div>Video file</div><div className="text-xs mt-1 break-all px-2 max-w-[200px]">{message.content.split('/').pop()}</div>
-                                          <button onClick={() => { const url = getImageUrl(message.content) || message.content; window.open(url, '_blank'); }} className="mt-2 px-3 py-1 rounded text-xs font-semibold bg-teal-600 text-white hover:bg-teal-700">Open Video</button>
-                                        </div>
+                                        <div className="text-center p-4"><div className="text-2xl mb-2">🎥</div><div>Video</div></div>
                                       </div>
                                     </div>
                                   ) : (
-                                    <p className="text-sm leading-relaxed">{message.content}</p>
+                                    <p className="text-sm leading-relaxed" style={{ color: 'var(--xsm-text)' }}>{message.content}</p>
                                   )}
-                                  <p className="text-[10px] mt-1.5 text-teal-400/60 text-right">{formatTime(message.createdAt)}</p>
+                                  <p className="text-[10px] mt-1 flex items-center justify-end gap-0.5" style={{ color: '#0891b2' }}>
+                                    <span>{formatTime(message.createdAt)}</span>
+                                  </p>
                                 </div>
                               </div>
                             </div>
                           );
                         }
+
 
                         // Regular messages: my messages (right/yellow) vs other user messages (left/dark)
                         // For admin/manager/viewer: add buyer (blue ring) vs seller (green ring) distinction
@@ -1547,51 +1741,45 @@ const Chat: React.FC = () => {
                           >
                             {/* Other user avatar (left side only) */}
                             {!isMyMessage && (
-                              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-xsm-medium-gray flex items-center justify-center text-xs font-bold text-white border border-xsm-medium-gray/60 mb-0.5">
-                                {(message.sender?.username ?? '?').charAt(0).toUpperCase()}
+                              <div className="flex-shrink-0 w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold text-white border border-xsm-medium-gray/60 mb-0.5" style={{ background: 'var(--xsm-medium-gray)' }}>
+                                {message.sender?.profilePicture
+                                  ? <img src={getImageUrl(message.sender.profilePicture) || message.sender.profilePicture} alt="" className="w-full h-full object-cover" />
+                                  : (message.sender?.username ?? '?').charAt(0).toUpperCase()
+                                }
                               </div>
                             )}
 
                             <div className={`max-w-xs lg:max-w-md ${isMyMessage ? 'items-end' : 'items-start'} flex flex-col`}>
                               {/* Sender name for other user */}
                               {!isMyMessage && (
-                                <p className="text-[11px] font-semibold text-gray-400 mb-1 ml-1 select-none">
+                                <p className="text-[11px] font-semibold mb-1 ml-1 select-none" style={{ color: 'var(--xsm-light-gray)' }}>
                                   {message.sender?.username ?? 'User'}
                                 </p>
                               )}
 
                               {/* Message bubble — buyer gets blue ring, seller gets green ring */}
                               <div
-                                style={isBuyer ? { outline: '2px solid #3b82f6', outlineOffset: '0px' } : isSeller ? { outline: '2px solid #22c55e', outlineOffset: '0px' } : {}}
+                                style={isBuyer
+                                  ? { outline: '2px solid #3b82f6', outlineOffset: '0px', background: isMyMessage ? 'var(--xsm-primary)' : 'var(--xsm-dark-gray)', color: isMyMessage ? '#000000' : 'var(--xsm-text)', border: isMyMessage ? 'none' : '1px solid var(--xsm-border)' }
+                                  : isSeller
+                                  ? { outline: '2px solid #22c55e', outlineOffset: '0px', background: isMyMessage ? 'var(--xsm-primary)' : 'var(--xsm-dark-gray)', color: isMyMessage ? '#000000' : 'var(--xsm-text)', border: isMyMessage ? 'none' : '1px solid var(--xsm-border)' }
+                                  : { background: isMyMessage ? 'var(--xsm-primary)' : 'var(--xsm-dark-gray)', color: isMyMessage ? '#000000' : 'var(--xsm-text)', border: isMyMessage ? 'none' : '1px solid var(--xsm-border)' }}
                                 className={`px-4 py-2.5 shadow-sm ${
                                   isMyMessage
-                                    ? 'bg-xsm-yellow text-black rounded-2xl rounded-br-sm'
-                                    : 'bg-[#2a2a2a] text-white rounded-2xl rounded-bl-sm'
+                                    ? 'text-black rounded-2xl rounded-br-sm'
+                                    : 'rounded-2xl rounded-bl-sm'
                                 }`}
                               >
-                                {message.messageType === 'image' && (message.mediaUrl || message.content) ? (
-                                  <div className="relative">
-                                    <img
-                                      src={getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content}
-                                      alt="Sent image"
-                                      className={`rounded-lg max-w-[200px] max-h-[200px] mb-2 border cursor-pointer ${isMyMessage ? 'border-yellow-400/60' : 'border-white/10'}`}
-                                      style={{ objectFit: 'cover' }}
-                                      onClick={() => window.open(getImageUrl(message.mediaUrl || message.content) || message.mediaUrl || message.content, '_blank')}
-                                      onError={(e) => {
-                                        const target = e.target as HTMLImageElement;
-                                        target.style.display = 'none';
-                                        const fallback = target.nextElementSibling as HTMLElement;
-                                        if (fallback) fallback.style.display = 'flex';
-                                      }}
-                                    />
-                                    <div className="absolute inset-0 bg-gray-700 rounded-lg flex items-center justify-center text-white text-sm" style={{ display: 'none' }}>
-                                      <div className="text-center p-4">
-                                        <div className="text-2xl mb-2">🖼️</div>
-                                        <div>Image unavailable</div>
-                                        <button onClick={() => { const url = getImageUrl(message.content) || message.content; window.open(url, '_blank'); }} className={`mt-2 px-3 py-1 rounded text-xs font-semibold ${isMyMessage ? 'bg-black text-yellow-400 hover:bg-gray-900' : 'bg-xsm-yellow text-black hover:bg-yellow-500'}`}>Try Opening</button>
-                                      </div>
-                                    </div>
-                                  </div>
+                                {message.messageType === 'image' && (message.mediaUrl || message.content || (message as any)._localUrl) ? (
+                                  <ChatImageBubble
+                                    mediaUrl={(message as any)._localUrl || message.mediaUrl || message.content}
+                                    alt="Sent image"
+                                    isMyMessage={isMyMessage}
+                                    status={message.status}
+                                    timeStr={formatTime(message.createdAt)}
+                                    senderName={isMyMessage ? 'You' : (message.sender?.username ?? 'User')}
+                                    onOpenLightbox={setLightboxImage}
+                                  />
                                 ) : message.messageType === 'video' && (message.mediaUrl || message.content) ? (
                                   <div className={`relative rounded-lg overflow-hidden max-w-[250px] max-h-[200px] mb-2 border bg-black ${isMyMessage ? 'border-yellow-400/60' : 'border-white/10'}`}>
                                     <video className="w-full h-full object-cover" controls preload="metadata" style={{ maxHeight: '200px' }}
@@ -1644,8 +1832,11 @@ const Chat: React.FC = () => {
 
                             {/* My avatar (right side only) */}
                             {isMyMessage && (
-                              <div className="flex-shrink-0 w-7 h-7 rounded-full bg-xsm-yellow flex items-center justify-center text-xs font-bold text-black border border-yellow-400/60 mb-0.5">
-                                {(user?.username ?? 'M').charAt(0).toUpperCase()}
+                              <div className="flex-shrink-0 w-7 h-7 rounded-full overflow-hidden flex items-center justify-center text-xs font-bold text-black border border-yellow-400/60 mb-0.5" style={{ background: 'var(--xsm-primary)' }}>
+                                {user?.profilePicture
+                                  ? <img src={getImageUrl(user.profilePicture) || user.profilePicture} alt="" className="w-full h-full object-cover" />
+                                  : (user?.username ?? 'M').charAt(0).toUpperCase()
+                                }
                               </div>
                             )}
                           </div>
@@ -1696,59 +1887,39 @@ const Chat: React.FC = () => {
                         );
                       })()
                     ) : (
-                      <div className="p-4 border-t border-xsm-medium-gray flex items-center space-x-2">
-                        {/* Image Button */}
-                        <button
-                          type="button"
-                          onClick={() => imageInputRef.current?.click()}
-                          className={`p-2 text-gray-400 hover:text-xsm-yellow rounded-lg border border-xsm-yellow bg-xsm-dark-gray ${
-                            imageUploading ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                          title="Attach Image"
-                          disabled={imageUploading || videoUploading}
-                        >
-                          {imageUploading ? (
-                            <div className="w-5 h-5 border-2 border-xsm-yellow border-t-transparent rounded-full animate-spin"></div>
-                          ) : (
-                            <ImageIcon className="w-5 h-5" />
+                      <div className="p-4 border-t flex items-center space-x-2" style={{ borderColor: 'var(--xsm-border)', background: 'var(--xsm-bg)' }}>
+                        {/* Media Button (images + videos, up to 20) */}
+                        <div className="relative flex-shrink-0">
+                          <button
+                            type="button"
+                            onClick={() => mediaInputRef.current?.click()}
+                            className={`p-2 text-gray-400 hover:text-xsm-yellow rounded-lg border border-xsm-yellow bg-xsm-dark-gray transition-colors ${
+                              mediaUploading ? 'opacity-50 cursor-not-allowed' : ''
+                            }`}
+                            title="Attach photos or videos (up to 20)"
+                            disabled={mediaUploading}
+                          >
+                            {mediaUploading ? (
+                              <div className="w-5 h-5 border-2 border-xsm-yellow border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                              <Paperclip className="w-5 h-5" />
+                            )}
+                          </button>
+                          {mediaUploading && uploadProgressText && (
+                            <span className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap text-[10px] font-semibold bg-black/80 text-xsm-yellow px-2 py-0.5 rounded-full border border-xsm-yellow/40 pointer-events-none">
+                              {uploadProgressText}
+                            </span>
                           )}
-                        </button>
+                        </div>
                         <input
-                          ref={imageInputRef}
+                          ref={mediaInputRef}
                           type="file"
-                          accept="image/*"
+                          accept="image/*,video/*"
+                          multiple
                           style={{ display: 'none' }}
                           onChange={e => {
-                            if (e.target.files && e.target.files[0]) {
-                              handleSendImage(e.target.files[0]);
-                              e.target.value = '';
-                            }
-                          }}
-                        />
-                        {/* Video Button */}
-                        <button
-                          type="button"
-                          onClick={() => videoInputRef.current?.click()}
-                          className={`p-2 text-gray-400 hover:text-xsm-yellow rounded-lg border border-xsm-yellow bg-xsm-dark-gray ${
-                            videoUploading ? 'opacity-50 cursor-not-allowed' : ''
-                          }`}
-                          title="Attach Video"
-                          disabled={videoUploading || imageUploading}
-                        >
-                          {videoUploading ? (
-                            <div className="w-5 h-5 border-2 border-xsm-yellow border-t-transparent rounded-full animate-spin"></div>
-                          ) : (
-                            <Video className="w-5 h-5" />
-                          )}
-                        </button>
-                        <input
-                          ref={videoInputRef}
-                          type="file"
-                          accept="video/*"
-                          style={{ display: 'none' }}
-                          onChange={e => {
-                            if (e.target.files && e.target.files[0]) {
-                              handleSendVideo(e.target.files[0]);
+                            if (e.target.files && e.target.files.length > 0) {
+                              handleSendMediaFiles(e.target.files);
                               e.target.value = '';
                             }
                           }}
@@ -1850,22 +2021,44 @@ const Chat: React.FC = () => {
                               setHighlightedDealId(dealId ? String(dealId) : channelKey);
                               setTimeout(() => setHighlightedDealId(null), 3000);
                             } else {
-                              // If card isn't in DOM, scroll message area down
                               scrollToBottom();
                             }
                           }, 100);
                         }}
-                        className="flex items-center justify-between gap-3 text-sm py-2.5 px-3 rounded-xl border border-xsm-medium-gray/30 bg-xsm-black/50 hover:bg-xsm-yellow/10 hover:border-xsm-yellow/40 cursor-pointer transition-all duration-200 group mb-1.5"
+                        className="flex items-center justify-between gap-3 text-sm py-2.5 px-3 rounded-xl border cursor-pointer transition-all duration-200 group mb-1.5 hover:border-xsm-yellow/40 hover:bg-xsm-yellow/10"
+                        style={{ borderColor: 'var(--xsm-border)', background: 'var(--xsm-bg)' }}
                       >
                         <div className="min-w-0 flex-1">
-                          <p className="text-white truncate font-semibold group-hover:text-xsm-yellow transition-colors flex items-center gap-1.5">
-                            <span>{deal.channel || 'Deal'}</span>
+                          <p className="text-foreground truncate font-semibold group-hover:text-xsm-yellow transition-colors">
+                            {deal.channel || 'Deal'}
                           </p>
-                          {(deal.role || deal.status) && (
-                            <p className="text-xs text-xsm-light-gray capitalize">
-                              {[deal.role, deal.status].filter(Boolean).join(' · ')}
+                          {txnKey && (
+                            <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                              {txnKey}
                             </p>
                           )}
+                          {deal.status && (() => {
+                            const statusMap: Record<string, { label: string; color: string }> = {
+                              completed: { label: 'Completed', color: '#22c55e' },
+                              complete: { label: 'Completed', color: '#22c55e' },
+                              seller_reviewing: { label: 'Seller Reviewing', color: '#f59e0b' },
+                              buyer_paid: { label: 'Buyer Paid', color: '#3b82f6' },
+                              in_escrow: { label: 'In Escrow', color: '#8b5cf6' },
+                              disputed: { label: 'Disputed', color: '#ef4444' },
+                              cancelled: { label: 'Cancelled', color: '#6b7280' },
+                              refunded: { label: 'Refunded', color: '#f97316' },
+                              pending: { label: 'Pending', color: '#eab308' },
+                            };
+                            const s = statusMap[deal.status.toLowerCase()] || { label: deal.status.replace(/_/g, ' '), color: '#9ca3af' };
+                            return (
+                              <span
+                                className="inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full mt-1"
+                                style={{ background: s.color + '22', color: s.color, border: `1px solid ${s.color}55` }}
+                              >
+                                {s.label}
+                              </span>
+                            );
+                          })()}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-xsm-yellow font-bold whitespace-nowrap">
@@ -1903,13 +2096,112 @@ const Chat: React.FC = () => {
         )}
 
 
-        {/* Security Notice */}
-        <div className="mt-6 bg-xsm-black/50 rounded-lg p-4">
-          <div className="flex items-center space-x-2 text-xsm-yellow mb-2">
-            <Shield className="w-5 h-5" />
-            <span className="font-semibold">Security Notice</span>
+        {/* WhatsApp Web-Style Lightbox Modal */}
+        {lightboxImage && (
+          <div
+            className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex flex-col select-none"
+            onClick={() => {
+              setLightboxImage(null);
+              setLightboxZoom(1);
+            }}
+          >
+            {/* Top Bar */}
+            <div
+              className="flex items-center justify-between px-4 py-3 bg-black/70 border-b border-white/10 text-white z-10"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLightboxImage(null);
+                    setLightboxZoom(1);
+                  }}
+                  className="p-1.5 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
+                  title="Close (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <div>
+                  <h4 className="text-sm font-semibold text-white leading-tight">
+                    {lightboxImage.senderName || 'Photo'}
+                  </h4>
+                  {lightboxImage.time && (
+                    <p className="text-[11px] text-gray-400">{lightboxImage.time}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Controls */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setLightboxZoom(prev => Math.max(0.5, prev - 0.25))}
+                  className="p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-4 h-4" />
+                </button>
+                <span className="text-xs font-mono text-gray-300 w-12 text-center select-none">
+                  {Math.round(lightboxZoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setLightboxZoom(prev => Math.min(3, prev + 0.25))}
+                  className="p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-4 h-4" />
+                </button>
+                {lightboxZoom !== 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setLightboxZoom(1)}
+                    className="px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-gray-200 text-xs transition-colors"
+                    title="Reset Zoom"
+                  >
+                    Reset
+                  </button>
+                )}
+                <a
+                  href={lightboxImage.url}
+                  download="chat-image"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-2 rounded-lg hover:bg-white/10 text-gray-300 hover:text-white transition-colors ml-1"
+                  title="Download / Open Full image"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <Download className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
+
+            {/* Viewport */}
+            <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+              <img
+                src={lightboxImage.url}
+                alt="Enlarged view"
+                style={{
+                  transform: `scale(${lightboxZoom})`,
+                  transition: 'transform 0.15s ease-out',
+                  maxWidth: '92vw',
+                  maxHeight: '84vh',
+                }}
+                className="object-contain rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           </div>
-          <p className="text-white text-sm">
+        )}
+
+        {/* Security Notice */}
+        <div className="mt-4 rounded-lg p-3" style={{ background: 'var(--xsm-dark-gray)', border: '1px solid var(--xsm-border)' }}>
+          <div className="flex items-center space-x-2 text-xsm-yellow mb-1">
+            <Shield className="w-4 h-4" />
+            <span className="font-semibold text-sm">Security Notice</span>
+          </div>
+          <p className="text-muted-foreground text-xs">
             All conversations are monitored for security. Never share personal financial information, 
             passwords, or complete transactions outside our secure payment system.
           </p>

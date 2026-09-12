@@ -220,6 +220,15 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
         };
       });
       
+      // Sort pinned ads to the top of profile
+      adsWithBooleanPinned.sort((a, b) => {
+        if (b.pinned !== a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+        const bPinnedAt = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+        const aPinnedAt = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+        if (bPinnedAt !== aPinnedAt) return bPinnedAt - aPinnedAt;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+
       setAds(adsWithBooleanPinned);
       setError(null);
     } catch (err: any) {
@@ -339,14 +348,21 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
     try {
       const result = await togglePinAd(selectedAdForPin.id);
       
-      // Update the local ads state to reflect the change
-      setAds(prevAds => 
-        prevAds.map(ad => 
+      // Update the local ads state and re-sort pinned to the top of profile
+      setAds(prevAds => {
+        const updated = prevAds.map(ad => 
           ad.id === selectedAdForPin.id 
             ? { ...ad, pinned: result.pinned, pinnedAt: result.pinnedAt }
             : ad
-        )
-      );
+        );
+        return updated.sort((a, b) => {
+          if (b.pinned !== a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
+          const bPinnedAt = b.pinnedAt ? new Date(b.pinnedAt).getTime() : 0;
+          const aPinnedAt = a.pinnedAt ? new Date(a.pinnedAt).getTime() : 0;
+          if (bPinnedAt !== aPinnedAt) return bPinnedAt - aPinnedAt;
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        });
+      });
       
       // Close modal and refresh the ads list to get updated order
       setShowPinModal(false);
@@ -601,11 +617,33 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
 
                   {/* Monetization & Action Buttons Row */}
                   <div className="flex items-center justify-between pt-1.5 border-t border-xsm-medium-gray/20">
-                    <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-none ${
-                      ad.isMonetized ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
-                    }`}>
-                      {ad.isMonetized ? 'Monetized' : 'Non-Monetized'}
-                    </span>
+                    {ad.isMonetized ? (
+                      <span
+                        className="inline-flex items-center justify-center p-1 rounded-none bg-green-500/15 text-green-400 border border-green-500/30 shadow-sm"
+                        title="Monetized"
+                      >
+                        <DollarSign className="w-3.5 h-3.5 text-green-400" />
+                      </span>
+                    ) : (
+                      <span
+                        className="inline-flex items-center justify-center p-1 rounded-none bg-red-500/15 text-red-400 border border-red-500/30 shadow-sm"
+                        title="Demonetized / Non-Monetized"
+                      >
+                        <svg
+                          className="w-3.5 h-3.5 text-red-400"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <line x1="12" y1="1" x2="12" y2="23" />
+                          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                          <line x1="3" y1="3" x2="21" y2="21" stroke="#ef4444" strokeWidth="2.5" />
+                        </svg>
+                      </span>
+                    )}
 
                     <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <button
@@ -628,6 +666,17 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                         title="Bump Listing"
                       >
                         <Zap className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={() => handlePin(ad.id)}
+                        className={`p-1 ${
+                          ad.pinned 
+                            ? 'bg-amber-500 text-black hover:bg-amber-400' 
+                            : 'bg-zinc-700/90 text-amber-400 hover:bg-zinc-600 hover:text-amber-300'
+                        } rounded-none transition-colors`}
+                        title={ad.pinned ? "Unpin from Profile" : "Pin to Profile"}
+                      >
+                        <Pin className={`w-3 h-3 ${ad.pinned ? 'fill-current' : ''}`} />
                       </button>
                     </div>
                   </div>
@@ -781,7 +830,7 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
               <div className="mb-4">
                 <Pin className="w-16 h-16 text-xsm-yellow mx-auto mb-4" />
                 <h3 className="text-lg font-semibold text-white mb-2">
-                  {selectedAdForPin.pinned ? 'Unpin Listing' : 'Pin Listing'}
+                  {selectedAdForPin.pinned ? 'Unpin from Profile' : 'Pin to Profile'}
                 </h3>
                 <p className="text-sm text-gray-300 mb-4">
                   "{selectedAdForPin.title}"
@@ -792,8 +841,8 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
               <div className="mb-6">
                 <p className="text-gray-300">
                   {selectedAdForPin.pinned 
-                    ? 'Are you sure you want to unpin this listing? It will no longer appear at the top of your listings.'
-                    : 'Are you sure you want to pin this listing? It will appear at the top of your listings.'
+                    ? 'Are you sure you want to unpin this listing? It will no longer appear at the top of your profile.'
+                    : 'Are you sure you want to pin this listing? It will appear at the top of your profile listings.'
                   }
                 </p>
                 {selectedAdForPin.pinnedAt && (

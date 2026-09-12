@@ -107,9 +107,8 @@ const AdList: React.FC<AdListProps> = ({
             }
           }));
           
-          // Sort: pinned first, then newest first by createdAt
+          // Sort: newest first by createdAt (profile pinning does not affect marketplace)
           formattedAds.sort((a: any, b: any) => {
-            if (b.pinned !== a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
             return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
           });
 
@@ -216,9 +215,8 @@ const AdList: React.FC<AdListProps> = ({
       });
     }
 
-    // Always keep newest-first order (pinned first, then by createdAt DESC)
+    // Always keep newest-first order (by createdAt DESC, profile pinning does not affect marketplace)
     filtered.sort((a: any, b: any) => {
-      if (b.pinned !== a.pinned) return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0);
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
@@ -473,11 +471,29 @@ const AdList: React.FC<AdListProps> = ({
                   <span className="text-muted-foreground font-medium">Subscribers:</span>
                   <span className="text-foreground font-semibold">{formatNumber(ad.subscribers)}</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5">
                   <span className="text-muted-foreground font-medium">Monetization:</span>
-                  <span className={`font-semibold ${ad.isMonetized ? 'text-green-400' : 'text-red-400'}`}>
-                    {ad.isMonetized ? 'YES' : 'NO'}
-                  </span>
+                  {ad.isMonetized ? (
+                    <span className="inline-flex items-center justify-center p-0.5 rounded-none bg-green-500/15 text-green-400 border border-green-500/30" title="Monetized">
+                      <DollarSign className="w-3 h-3 text-green-400" />
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center justify-center p-0.5 rounded-none bg-red-500/15 text-red-400 border border-red-500/30" title="Demonetized / Non-Monetized">
+                      <svg
+                        className="w-3 h-3 text-red-400"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <line x1="12" y1="1" x2="12" y2="23" />
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                        <line x1="3" y1="3" x2="21" y2="21" stroke="#ef4444" strokeWidth="2.5" />
+                      </svg>
+                    </span>
+                  )}
                 </div>
                 {ad.monthlyIncome > 0 && (
                   <div className="flex items-center gap-1">

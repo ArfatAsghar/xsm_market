@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Eye, ShoppingCart, Crown } from 'lucide-react';
+import { Eye, ShoppingCart, Crown, DollarSign, Pin } from 'lucide-react';
 import { encodeId, generateAdSlug } from '@/utils/idEncoder';
 import { getImageUrl } from '@/config/api';
 import DealCreationModal from '@/components/DealCreationModal';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
-  return import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'https://xsmmarket.com/api');
+  return import.meta.env.VITE_API_URL || (import.meta.DEV ? '/api' : 'https://xsmmarket.com/api');
 };
 
 const API_URL = getApiUrl();
@@ -21,6 +21,8 @@ interface PublicAd {
   subscribers: number;
   monthlyIncome: number;
   isMonetized: boolean;
+  pinned?: boolean;
+  pinnedAt?: string;
   createdAt: string;
   images?: string[];
   screenshots?: any[];
@@ -203,77 +205,104 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-      {ads.map((ad, adIndex) => {
-        const isVipListing = Boolean(
-          (ad as any).isVip ||
-          (ad as any).seller_isVip ||
-          (ad as any).sellerIsVip ||
-          (ad as any).seller?.isVip ||
-          ((ad as any).seller_vipUntil && new Date((ad as any).seller_vipUntil) > new Date())
-        );
+        {ads.map((ad) => {
+          const isVipListing = Boolean(
+            (ad as any).isVip ||
+            (ad as any).seller_isVip ||
+            (ad as any).sellerIsVip ||
+            (ad as any).seller?.isVip ||
+            ((ad as any).seller_vipUntil && new Date((ad as any).seller_vipUntil) > new Date())
+          );
 
-        return (
-          <div
-            key={ad.id}
-            className={`rounded-none p-2.5 shadow-md flex flex-col justify-between transition-all duration-300 w-full cursor-pointer relative overflow-hidden ${
-              isVipListing
-                ? 'bg-gradient-to-b from-amber-950/40 via-xsm-black/90 to-xsm-black border border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.2)] hover:border-amber-400'
-                : 'bg-xsm-black/80 border border-xsm-medium-gray/30 hover:border-xsm-yellow/40'
-            }`}
-            onClick={() => navigate(`/ad/${generateAdSlug(ad.id, ad.title)}`)}
-          >
-            {/* VIP Badge (top right) */}
-            {isVipListing && (
-              <div className="absolute top-1.5 right-1.5 z-10">
-                <Crown className="w-3 h-3 text-yellow-400 fill-yellow-400/20" title="VIP Listing" />
-              </div>
-            )}
-
-            {/* Thumbnail & Title + Price/Subs Row */}
-            <div className="flex items-center gap-2 mb-2">
-              <div className="relative flex-shrink-0">
-                <div
-                  className={`w-9 h-9 rounded-none overflow-hidden border ${
-                    isVipListing ? 'border-amber-400' : 'border-xsm-medium-gray/40'
-                  }`}
-                >
-                  <img
-                    src={getImageUrl(ad.thumbnail && String(ad.thumbnail).trim() !== '0' ? ad.thumbnail : null) || '/default-avatar.png'}
-                    alt="Thumbnail"
-                    className="w-full h-full object-cover"
-                  />
+          return (
+            <div
+              key={ad.id}
+              className={`relative rounded-none p-2.5 cursor-pointer transition-all duration-300 ${
+                isVipListing
+                  ? 'bg-gradient-to-b from-amber-950/40 via-xsm-black/90 to-xsm-black border border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.2)] hover:border-amber-400'
+                  : 'bg-xsm-black/80 border border-xsm-medium-gray/30 hover:border-xsm-yellow/40'
+              }`}
+              onClick={() => navigate(`/ad/${generateAdSlug(ad.id, ad.title)}`)}
+            >
+              {/* VIP & Pinned Badges (top right) */}
+              {(isVipListing || ad.pinned) && (
+                <div className="absolute top-1.5 right-1.5 z-10 flex items-center gap-1">
+                  {isVipListing && (
+                    <Crown className="w-3 h-3 text-yellow-400 fill-yellow-400/20" title="VIP Listing" />
+                  )}
+                  {ad.pinned && (
+                    <Pin className="w-3 h-3 text-yellow-500 fill-current" title="Pinned" />
+                  )}
                 </div>
-                <div className="absolute -bottom-1 -right-1 scale-90">
-                  {getPlatformIconSmall(ad.platform)}
+              )}
+
+              {/* Thumbnail & Title + Price/Subs Row */}
+              <div className="flex items-center gap-2 mb-2">
+                <div className="relative flex-shrink-0">
+                  <div
+                    className={`w-9 h-9 rounded-none overflow-hidden border ${
+                      isVipListing ? 'border-amber-400' : 'border-xsm-medium-gray/40'
+                    }`}
+                  >
+                    <img
+                      src={getImageUrl(ad.thumbnail && String(ad.thumbnail).trim() !== '0' ? ad.thumbnail : null) || '/default-avatar.png'}
+                      alt="Thumbnail"
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                  <div className="absolute -bottom-1 -right-1 scale-90">
+                    {getPlatformIconSmall(ad.platform)}
+                  </div>
+                </div>
+
+                <div className="min-w-0 flex-1 pr-6">
+                  <h4
+                    className="text-white font-bold text-xs truncate hover:text-xsm-yellow transition-colors"
+                    title={ad.title}
+                  >
+                    {ad.title}
+                  </h4>
+                  <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
+                    <span className="text-xsm-yellow font-extrabold text-xs">
+                      {formatPrice(ad.price)}
+                    </span>
+                    <span className="text-xsm-medium-gray/60">•</span>
+                    <span className="text-blue-400 font-medium">
+                      {formatSubscribers(ad.subscribers)} subs
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="min-w-0 flex-1 pr-6">
-                <h4
-                  className="text-white font-bold text-xs truncate hover:text-xsm-yellow transition-colors"
-                  title={ad.title}
-                >
-                  {ad.title}
-                </h4>
-                <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
-                  <span className="text-xsm-yellow font-extrabold text-xs">
-                    {formatPrice(ad.price)}
+              {/* Monetization & Purchase Button Row */}
+              <div className="flex items-center justify-between pt-1.5 border-t border-xsm-medium-gray/20">
+                {ad.isMonetized ? (
+                  <span
+                    className="inline-flex items-center justify-center p-1 rounded-none bg-green-500/15 text-green-400 border border-green-500/30 shadow-sm"
+                    title="Monetized"
+                  >
+                    <DollarSign className="w-3.5 h-3.5 text-green-400" />
                   </span>
-                  <span className="text-xsm-medium-gray/60">•</span>
-                  <span className="text-blue-400 font-medium">
-                    {formatSubscribers(ad.subscribers)} subs
+                ) : (
+                  <span
+                    className="inline-flex items-center justify-center p-1 rounded-none bg-red-500/15 text-red-400 border border-red-500/30 shadow-sm"
+                    title="Demonetized / Non-Monetized"
+                  >
+                    <svg
+                      className="w-3.5 h-3.5 text-red-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <line x1="12" y1="1" x2="12" y2="23" />
+                      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                      <line x1="3" y1="3" x2="21" y2="21" stroke="#ef4444" strokeWidth="2.5" />
+                    </svg>
                   </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Monetization & Purchase Button Row */}
-            <div className="flex items-center justify-between pt-1.5 border-t border-xsm-medium-gray/20">
-              <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded-none ${
-                ad.isMonetized ? 'bg-green-500/10 text-green-400 border border-green-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'
-              }`}>
-                {ad.isMonetized ? 'Monetized' : 'Non-Monetized'}
-              </span>
+                )}
 
               <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
                 <button

@@ -301,7 +301,7 @@ function createDeal($data) {
         // Validate required fields
         $required_fields = ['seller_id', 'channel_id', 'channel_title', 'channel_price', 'escrow_fee', 'transaction_type', 'buyer_email', 'payment_methods'];
         foreach ($required_fields as $field) {
-            if (!isset($data[$field]) || empty($data[$field])) {
+            if (!isset($data[$field]) || $data[$field] === '' || $data[$field] === null) {
                 throw new Exception("Missing required field: $field");
             }
         }
@@ -312,7 +312,8 @@ function createDeal($data) {
             throw new Exception("Authentication required");
         }
         
-        $buyer_id = $currentUser['userId'];
+        $buyer_id = (int)$currentUser['userId'];
+        $seller_id = (int)$data['seller_id'];
         
         // Start database transaction
         $pdo->beginTransaction();
@@ -329,7 +330,6 @@ function createDeal($data) {
         $max_row  = $max_stmt->fetch(PDO::FETCH_ASSOC);
         $next_seq = ((int)($max_row['max_seq'] ?? 0)) + 1;
         // Dynamic zero-padding: minimum 4 digits, grows automatically with sequence
-        // TXN0001 → TXN0010 → TXN0100 → TXN1000 → TXN10000 → TXN100000
         $pad_length = max(4, strlen((string)$next_seq));
         $transaction_id = 'TXN' . str_pad($next_seq, $pad_length, '0', STR_PAD_LEFT);
         
@@ -347,11 +347,11 @@ function createDeal($data) {
         $stmt->execute([
             $transaction_id,
             $buyer_id,
-            $data['seller_id'],
+            $seller_id,
             $data['channel_id'],
             $data['channel_title'],
-            $data['channel_price'],
-            $data['escrow_fee'],
+            floatval($data['channel_price']),
+            floatval($data['escrow_fee']),
             $data['transaction_type'],
             $data['buyer_email'],
             $payment_methods_json
@@ -360,17 +360,20 @@ function createDeal($data) {
         $deal_id = $pdo->lastInsertId();
         
         // Insert payment methods
-        foreach ($data['payment_methods'] as $method) {
-            $stmt = $pdo->prepare("
-                INSERT INTO deal_payment_methods (deal_id, payment_method_id, payment_method_name, payment_method_category)
-                VALUES (?, ?, ?, ?)
-            ");
-            $stmt->execute([
-                $deal_id,
-                $method['id'],
-                $method['name'],
-                $method['category']
-            ]);
+        if (!empty($data['payment_methods']) && is_array($data['payment_methods'])) {
+            foreach ($data['payment_methods'] as $method) {
+                if (empty($method['id'])) continue;
+                $stmt = $pdo->prepare("
+                    INSERT INTO deal_payment_methods (deal_id, payment_method_id, payment_method_name, payment_method_category)
+                    VALUES (?, ?, ?, ?)
+                ");
+                $stmt->execute([
+                    $deal_id,
+                    $method['id'],
+                    $method['name'] ?? '',
+                    $method['category'] ?? ''
+                ]);
+            }
         }
         
         // Insert history record
@@ -394,7 +397,7 @@ function createDeal($data) {
             ORDER BY c.updatedAt DESC, c.createdAt DESC
             LIMIT 1
         ");
-        $stmt->execute([$buyer_id, $data['seller_id']]);
+        $stmt->execute([$buyer_id, $seller_id]);
         $existingChat = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($existingChat) {
@@ -408,22 +411,24 @@ function createDeal($data) {
             $stmt->execute();
             $chat_id = $pdo->lastInsertId();
             
-            // Add participants
+            // Add participants safely with INSERT IGNORE to prevent duplicate key error
             $stmt = $pdo->prepare("
-                INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                INSERT IGNORE INTO chat_participants (chatId, userId, role, joinedAt, isActive)
                 VALUES (?, ?, 'admin', NOW(), 1)
             ");
             $stmt->execute([$chat_id, $buyer_id]);
             
-            $stmt = $pdo->prepare("
-                INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
-                VALUES (?, ?, 'member', NOW(), 1)
-            ");
-            $stmt->execute([$chat_id, $data['seller_id']]);
+            if ($seller_id !== $buyer_id) {
+                $stmt = $pdo->prepare("
+                    INSERT IGNORE INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    VALUES (?, ?, 'member', NOW(), 1)
+                ");
+                $stmt->execute([$chat_id, $seller_id]);
+            }
         }
         
         // Insert a chat message linking the deal with Transaction ID
-        $chat_message = "🤝 Deal Initiated! I want to purchase your listing '" . $data['channel_title'] . "' for $" . number_format($data['channel_price'], 2) . ". Transaction ID: " . $transaction_id;
+        $chat_message = "🤝 Deal Initiated! I want to purchase your listing '" . $data['channel_title'] . "' for $" . number_format((float)$data['channel_price'], 2) . ". Transaction ID: " . $transaction_id;
         
         $stmt = $pdo->prepare("
             INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
@@ -438,6 +443,10 @@ function createDeal($data) {
             WHERE id = ?
         ");
         $stmt->execute([$chat_id]);
+
+        // Link chat_id in deals table
+        $stmt = $pdo->prepare("UPDATE deals SET chat_id = ? WHERE id = ?");
+        $stmt->execute([$chat_id, $deal_id]);
         
         // Commit transaction
         $pdo->commit();

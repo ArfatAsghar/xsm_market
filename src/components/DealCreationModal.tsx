@@ -234,8 +234,8 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
       
       // Prepare deal data for API
       const dealData = {
-        seller_id: sellerId,
-        channel_id: channelTitle.toLowerCase().replace(/\s+/g, '-'), // Create a channel ID from title
+        seller_id: Number(sellerId) || sellerId,
+        channel_id: (channelTitle || 'channel').toLowerCase().replace(/[^a-z0-9]/g, '-') || 'channel',
         channel_title: channelTitle,
         channel_price: numericPrice,
         escrow_fee: escrowFee, // Use escrow_fee key instead of service_fee
@@ -262,7 +262,13 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
         body: JSON.stringify(dealData)
       });
 
-      const result = await response.json();
+      let result: any = {};
+      try {
+        result = await response.json();
+      } catch (e) {
+        const text = await response.text().catch(() => '');
+        throw new Error(text || `Server error (${response.status})`);
+      }
       
       if (response.ok) {
         const officialTxnId = result.transaction_id || (result.deal_id ? String(result.deal_id).padStart(6, '0') : '000001');
@@ -295,15 +301,15 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
   const getModalWidthClass = () => {
     switch (step) {
       case 'fee-selection':
-        return 'max-w-md'; // 1st popup: reduced compact width
+        return 'max-w-xl'; // comfortable width
       case 'payment-selection':
-        return 'max-w-2xl'; // 2nd popup: wider for payment grid & tabs
+        return 'max-w-2xl'; // wider for payment grid & tabs
       case 'email-confirmation':
-        return 'max-w-md'; // 3rd popup: reduced compact width
+        return 'max-w-lg'; // compact width
       case 'terms-conditions':
-        return 'max-w-lg'; // 4th popup: compact width for terms
+        return 'max-w-2xl'; // increased width for terms & summary
       default:
-        return 'max-w-md';
+        return 'max-w-xl';
     }
   };
 
@@ -799,8 +805,8 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
               {/* Terms & Conditions */}
               <div className="mb-3">
                 <h3 className="text-sm font-semibold mb-2" style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Terms & Conditions Agreement</h3>
-                <div className="rounded-lg p-3 max-h-44 overflow-y-auto custom-scrollbar border" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
-                  <div className="space-y-2 text-xs">
+                <div className="rounded-lg p-3.5 max-h-56 overflow-y-auto custom-scrollbar border" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                  <div className="space-y-2.5 text-xs">
                     <div>
                       <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">1. Website Agent Service Agreement</h4>
                       <p className="text-[11px]" style={{ color: 'var(--xsm-text)' }}>By proceeding, you agree to use our secure website agent service. All transactions must follow the established process for buyer and seller protection.</p>
@@ -847,7 +853,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                 </div>
               </div>
 
-              {/* By Continuing Agreement Notice (Checkbox removed as requested) */}
+              {/* By Continuing Agreement Notice */}
               <div className="mb-3 p-2.5 rounded-lg border text-center sm:text-left" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
                 <p className="text-xs leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
                   By continuing, you agree to the <strong className="text-xsm-yellow">Terms & Conditions</strong> above and acknowledge that all communication must happen through the platform chat for transaction security.
@@ -856,12 +862,12 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
 
               {/* Transaction Summary */}
               <div className="mb-3">
-                <div className="rounded-lg p-2.5 border" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
+                <div className="rounded-lg p-3 border" style={{ background: 'var(--xsm-medium-gray)', borderColor: 'var(--xsm-border)' }}>
                   <h4 className="text-xsm-yellow font-semibold text-xs mb-1.5">Transaction Summary</h4>
-                  <div className="grid grid-cols-4 gap-2 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                     <div>
                       <span className="text-[10px] block" style={{ color: 'var(--xsm-light-gray)' }}>Channel:</span>
-                      <p className="font-medium text-xs truncate" style={{ color: 'var(--xsm-text)' }}>{channelTitle}</p>
+                      <p className="font-medium text-xs truncate" style={{ color: 'var(--xsm-text)' }} title={channelTitle}>{channelTitle}</p>
                     </div>
                     <div>
                       <span className="text-[10px] block" style={{ color: 'var(--xsm-light-gray)' }}>Price:</span>
@@ -873,7 +879,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                     </div>
                     <div>
                       <span className="text-[10px] block" style={{ color: 'var(--xsm-light-gray)' }}>Transfer Email:</span>
-                      <p className="font-medium text-xs truncate" style={{ color: 'var(--xsm-text)' }} title={buyerEmail}>{buyerEmail}</p>
+                      <p className="font-medium text-xs break-all" style={{ color: 'var(--xsm-text)' }} title={buyerEmail}>{buyerEmail}</p>
                     </div>
                   </div>
                 </div>

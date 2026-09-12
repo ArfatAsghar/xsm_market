@@ -102,6 +102,12 @@ function getCurrentUser() {
         try {
             $user = AuthMiddleware::optionalAuth();
             if ($user && is_array($user)) {
+                if (!isset($user['userId']) && isset($user['id'])) {
+                    $user['userId'] = (int)$user['id'];
+                }
+                if (!isset($user['id']) && isset($user['userId'])) {
+                    $user['id'] = (int)$user['userId'];
+                }
                 if (!isset($user['isAdmin'])) {
                     $user['isAdmin'] = (!empty($user['is_admin']) || strtolower($user['role'] ?? '') === 'admin') ? 1 : 0;
                 }
@@ -312,8 +318,40 @@ function createDeal($data) {
             throw new Exception("Authentication required");
         }
         
-        $buyer_id = (int)$currentUser['userId'];
-        $seller_id = (int)$data['seller_id'];
+        $buyer_id = (int)($currentUser['userId'] ?? $currentUser['id'] ?? 0);
+        if ($buyer_id <= 0) {
+            throw new Exception("Invalid authenticated user ID ($buyer_id)");
+        }
+
+        $seller_id = (int)($data['seller_id'] ?? 0);
+        if ($seller_id <= 0) {
+            // If seller_id was passed as username/email, resolve it to integer user ID
+            if (!empty($data['seller_id']) && is_string($data['seller_id'])) {
+                $sStmt = $pdo->prepare("SELECT id FROM users WHERE username = ? OR email = ? LIMIT 1");
+                $sStmt->execute([$data['seller_id'], $data['seller_id']]);
+                $sRow = $sStmt->fetch(PDO::FETCH_ASSOC);
+                if ($sRow) {
+                    $seller_id = (int)$sRow['id'];
+                }
+            }
+        }
+        if ($seller_id <= 0) {
+            throw new Exception("Invalid seller ID: {$data['seller_id']}");
+        }
+
+        // Verify buyer exists in users table to prevent FK constraint failure
+        $bCheck = $pdo->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+        $bCheck->execute([$buyer_id]);
+        if (!$bCheck->fetch()) {
+            throw new Exception("Buyer account not found in database (ID: $buyer_id)");
+        }
+
+        // Verify seller exists in users table to prevent FK constraint failure
+        $sCheck = $pdo->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+        $sCheck->execute([$seller_id]);
+        if (!$sCheck->fetch()) {
+            throw new Exception("Seller account not found in database (ID: $seller_id)");
+        }
         
         // Start database transaction
         $pdo->beginTransaction();

@@ -35,6 +35,7 @@ const Signup: React.FC<SignupProps> = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
+  const [referralCode, setReferralCode] = useState(() => localStorage.getItem('xsm_referrer') || localStorage.getItem('referral_code') || '');
   
   const recaptchaRef = useRef<ReCAPTCHA>(null);
   const { toast } = useToast();
@@ -130,7 +131,7 @@ const Signup: React.FC<SignupProps> = () => {
 
     try {
       console.log("Sending registration request to backend...");
-      const response = await register(username, email, password, recaptchaToken);
+      const response = await register(username, email, password, recaptchaToken, undefined, referralCode);
       console.log("Registration response:", response);
       
       // Check if response indicates verification is required
@@ -246,7 +247,7 @@ const Signup: React.FC<SignupProps> = () => {
         throw new Error('No credential received from Google');
       }
       
-      const response = await googleSignIn(credentialResponse.credential);
+      const response = await googleSignIn(credentialResponse.credential, referralCode);
       
       if (response.user) {
         setUser(response.user);
@@ -293,6 +294,12 @@ const Signup: React.FC<SignupProps> = () => {
             <Alert variant="destructive" className="mb-6">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
+          )}
+          {referralCode && (
+            <div className="mb-6 p-3 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-2 text-xs text-yellow-300">
+              <span className="text-base">🎁</span>
+              <span>Referred by <strong>{referralCode}</strong>. Complete KYC to receive 1 Free 72-Hour Pin!</span>
+            </div>
           )}
           <form className="space-y-6" onSubmit={handleSignup} noValidate>
             <div>
@@ -395,42 +402,28 @@ const Signup: React.FC<SignupProps> = () => {
               />
             </div>
 
-            <div>
+            {/* Sign Up + Google – side by side in one row */}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 items-center pt-0.5">
               <Button 
                 type="submit" 
-                className="w-full bg-xsm-yellow hover:bg-yellow-500 text-black"
+                className="w-full bg-xsm-yellow hover:bg-yellow-500 text-black font-semibold h-[40px] text-sm truncate px-2"
                 disabled={isLoading || !recaptchaToken}
-                onClick={(e) => {
-                  if (!isLoading) {
-                    console.log("Sign up button clicked");
-                    // Don't call handleSignup here, as the form's onSubmit will handle it
-                  }
-                }}
               >
-                {isLoading ? 'Creating account...' : 'Sign up'}
+                {isLoading ? 'Creating account...' : 'Sign Up'}
               </Button>
-            </div>
 
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-xsm-medium-gray" />
+              <div className="w-full h-[40px] flex items-center justify-center overflow-hidden rounded-md">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  useOneTap={false}
+                  theme="filled_black"
+                  size="large"
+                  text="continue_with"
+                  shape="rectangular"
+                  width="100%"
+                />
               </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-xsm-dark-gray px-2 text-xsm-light-gray">Or continue with</span>
-              </div>
-            </div>
-
-            <div className="w-full">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={handleGoogleError}
-                useOneTap={false}
-                theme="filled_black"
-                size="large"
-                text="signup_with"
-                shape="rectangular"
-                width="100%"
-              />
             </div>
           </form>
         </CardContent>

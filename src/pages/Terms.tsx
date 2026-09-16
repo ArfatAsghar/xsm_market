@@ -10,7 +10,8 @@ import {
   Ban,
   Lock,
   RefreshCcw,
-  CreditCard
+  CreditCard,
+  Zap
 } from 'lucide-react';
 
 const Terms: React.FC = () => {
@@ -111,8 +112,19 @@ const Terms: React.FC = () => {
       ]
     },
     {
+      icon: <Zap className="w-6 h-6 text-xsm-yellow" />,
+      title: '12. Fast Transaction Responsibility',
+      content: [
+        'A Fast Transaction (also referred to as an Express or Instant Deal) is a transaction where the buyer provides payment before the seller initiates the transfer of ownership of the asset.',
+        'By agreeing to a Fast Transaction, the seller accepts full and sole responsibility for completing the transfer promptly and honestly. Failure to deliver the asset after receiving payment will be treated as fraud and may result in immediate account suspension, permanent ban, and escalation to relevant authorities.',
+        'XSM Market does not guarantee the outcome of Fast Transactions. Both parties agree to conduct Fast Transactions at their own risk. XSM Market bears no liability for losses incurred during Fast Transactions.',
+        'Sellers who receive payment and fail to complete the transfer within the agreed timeframe may be subject to dispute resolution procedures. XSM Market reserves the right to take corrective action, including but not limited to restricting platform access, flagging accounts, or sharing information with law enforcement where applicable.',
+        'By initiating or accepting a Fast Transaction, both the buyer and seller acknowledge that they have read, understood, and agreed to the terms outlined in this section.'
+      ]
+    },
+    {
       icon: <RefreshCcw className="w-6 h-6 text-xsm-yellow" />,
-      title: '12. Changes to These Terms',
+      title: '13. Changes to These Terms',
       content: [
         'We may update these Terms from time to time to improve platform safety, reflect new features, or comply with legal and operational requirements.',
         'Updated Terms will be posted on this page. Continued use of XSM Market after changes are posted means you accept the updated Terms.'

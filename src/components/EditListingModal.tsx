@@ -141,6 +141,7 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [existingScreenshots, setExistingScreenshots] = useState<string[]>([]);
   const [customEarningInput, setCustomEarningInput] = useState<string>('');
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const handleAddCustomEarningMethod = () => {
     const trimmed = customEarningInput.trim();
@@ -156,48 +157,32 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
     setCustomEarningInput('');
   };
 
-  const [isFreshlyMonetized, setIsFreshlyMonetized] = useState<boolean>(false);
-  const [hasAdsenseChangeButton, setHasAdsenseChangeButton] = useState<boolean>(false);
+  // Mutually exclusive: 'freshly' | 'adsense' | null
+  const [monetizationOption, setMonetizationOption] = useState<'freshly' | 'adsense' | null>(null);
+  const isFreshlyMonetized = monetizationOption === 'freshly';
+  const hasAdsenseChangeButton = monetizationOption === 'adsense';
 
-  const toggleFreshlyMonetized = () => {
-    const nextVal = !isFreshlyMonetized;
-    setIsFreshlyMonetized(nextVal);
+  const selectMonetizationOption = (option: 'freshly' | 'adsense') => {
+    const nextOption = monetizationOption === option ? null : option;
+    setMonetizationOption(nextOption);
     const current = (formData.incomeDetails || '')
       .split(',')
       .map(s => s.trim())
-      .filter(Boolean);
+      .filter(Boolean)
+      .filter(m => m.toLowerCase() !== 'freshly monetized' && !m.toLowerCase().includes('adsense change'));
     let updated: string[];
-    if (nextVal) {
-      if (!current.some(m => m.toLowerCase() === 'freshly monetized')) {
-        updated = ['Freshly Monetized', ...current];
-      } else {
-        updated = current;
-      }
+    if (nextOption === 'freshly') {
+      updated = ['Freshly Monetized', ...current];
+    } else if (nextOption === 'adsense') {
+      updated = ['AdSense Change Button On', ...current];
     } else {
-      updated = current.filter(m => m.toLowerCase() !== 'freshly monetized');
+      updated = current;
     }
     setFormData(prev => ({ ...prev, incomeDetails: updated.join(', ') }));
   };
 
-  const toggleAdsenseChangeButton = () => {
-    const nextVal = !hasAdsenseChangeButton;
-    setHasAdsenseChangeButton(nextVal);
-    const current = (formData.incomeDetails || '')
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-    let updated: string[];
-    if (nextVal) {
-      if (!current.some(m => m.toLowerCase().includes('adsense change'))) {
-        updated = ['AdSense Change Button On', ...current];
-      } else {
-        updated = current;
-      }
-    } else {
-      updated = current.filter(m => !m.toLowerCase().includes('adsense change'));
-    }
-    setFormData(prev => ({ ...prev, incomeDetails: updated.join(', ') }));
-  };
+  const toggleFreshlyMonetized = () => selectMonetizationOption('freshly');
+  const toggleAdsenseChangeButton = () => selectMonetizationOption('adsense');
 
   const handleRemoveEarningMethod = (methodToRemove: string) => {
     const current = (formData.incomeDetails || '')
@@ -205,11 +190,11 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
       .map(s => s.trim())
       .filter(Boolean);
     const updated = current.filter(m => m !== methodToRemove);
-    if (methodToRemove.toLowerCase() === 'freshly monetized') {
-      setIsFreshlyMonetized(false);
-    }
-    if (methodToRemove.toLowerCase().includes('adsense change')) {
-      setHasAdsenseChangeButton(false);
+    if (
+      methodToRemove.toLowerCase() === 'freshly monetized' ||
+      methodToRemove.toLowerCase().includes('adsense change')
+    ) {
+      setMonetizationOption(null);
     }
     setFormData(prev => ({ ...prev, incomeDetails: updated.join(', ') }));
   };
@@ -241,11 +226,12 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
           : []
       });
 
-      // Pre-fill Freshly Monetized & AdSense Change Button states
+      // Pre-fill Freshly Monetized & AdSense Change Button states (mutually exclusive)
       const incStr = (ad.incomeDetails || '').toLowerCase();
       const tagsList = Array.isArray(ad.tags) ? ad.tags.map((t: any) => String(t).toLowerCase()) : [];
-      setIsFreshlyMonetized(incStr.includes('freshly monetized') || tagsList.some((t: string) => t.includes('freshly')));
-      setHasAdsenseChangeButton(incStr.includes('adsense change') || tagsList.some((t: string) => t.includes('adsense change')));
+      const hasFreshly = incStr.includes('freshly monetized') || tagsList.some((t: string) => t.includes('freshly'));
+      const hasAdsense = incStr.includes('adsense change') || tagsList.some((t: string) => t.includes('adsense change'));
+      setMonetizationOption(hasFreshly ? 'freshly' : hasAdsense ? 'adsense' : null);
 
       setExistingScreenshots(existingPreviewUrls);
       setImagePreviews(existingPreviewUrls);
@@ -913,8 +899,7 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
                 type="button"
                 onClick={() => {
                   setFormData(prev => ({ ...prev, isMonetized: false }));
-                  setIsFreshlyMonetized(false);
-                  setHasAdsenseChangeButton(false);
+                  setMonetizationOption(null);
                 }}
                 className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex items-start gap-3.5 ${
                   !formData.isMonetized

@@ -204,7 +204,7 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
 
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-2.5">
         {ads.map((ad) => {
           const isVipListing = Boolean(
             (ad as any).isVip ||
@@ -217,7 +217,7 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
           return (
             <div
               key={ad.id}
-              className={`relative rounded-none p-2.5 cursor-pointer transition-all duration-300 ${
+              className={`relative rounded-none p-2 cursor-pointer transition-all duration-300 ${
                 isVipListing
                   ? 'bg-gradient-to-b from-amber-950/40 via-xsm-black/90 to-xsm-black border border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.2)] hover:border-amber-400'
                   : 'bg-xsm-black/80 border border-xsm-medium-gray/30 hover:border-xsm-yellow/40'
@@ -237,7 +237,7 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
               )}
 
               {/* Thumbnail & Title + Price/Subs Row */}
-              <div className="flex items-center gap-2 mb-2">
+              <div className="flex items-center gap-2 mb-1.5">
                 <div className="relative flex-shrink-0">
                   <div
                     className={`w-9 h-9 rounded-none overflow-hidden border ${

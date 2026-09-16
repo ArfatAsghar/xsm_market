@@ -476,19 +476,19 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="bg-xsm-black/70 border border-xsm-medium-gray/30 rounded-none p-3 animate-pulse space-y-3">
-            <div className="flex items-center gap-2.5">
-              <div className="w-11 h-11 rounded-none bg-xsm-medium-gray/40 flex-shrink-0" />
-              <div className="flex-1 space-y-1.5">
-                <div className="h-3.5 bg-xsm-medium-gray/40 rounded-none w-4/5" />
-                <div className="h-2.5 bg-xsm-medium-gray/30 rounded-none w-2/5" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="bg-xsm-black/70 border border-xsm-medium-gray/30 rounded-none p-2 animate-pulse space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-none bg-xsm-medium-gray/40 flex-shrink-0" />
+              <div className="flex-1 space-y-1">
+                <div className="h-3 bg-xsm-medium-gray/40 rounded-none w-4/5" />
+                <div className="h-2 bg-xsm-medium-gray/30 rounded-none w-2/5" />
               </div>
             </div>
-            <div className="flex items-center justify-between pt-2 border-t border-xsm-medium-gray/20">
-              <div className="h-4 bg-xsm-medium-gray/40 rounded-none w-12" />
-              <div className="h-4 bg-xsm-medium-gray/30 rounded-none w-16" />
+            <div className="flex items-center justify-between pt-1.5 border-t border-xsm-medium-gray/20">
+              <div className="h-3.5 bg-xsm-medium-gray/40 rounded-none w-10" />
+              <div className="h-3.5 bg-xsm-medium-gray/30 rounded-none w-14" />
             </div>
           </div>
         ))}
@@ -513,14 +513,14 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Inject custom scrollbar styles */}
       <style dangerouslySetInnerHTML={{ __html: scrollbarStyles }} />
       
       {/* Header with count */}
       <div className="flex items-center justify-between">
-        <h3 className="text-xl font-bold text-xsm-yellow">My Listings</h3>
-        <span className="text-2xl font-bold text-xsm-yellow">
+        <h3 className="text-base sm:text-lg font-bold text-xsm-yellow">My Listings</h3>
+        <span className="text-lg sm:text-xl font-bold text-xsm-yellow">
           {ads.length}
         </span>
       </div>
@@ -535,8 +535,8 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
           </p>
         </div>
       ) : (
-        <div className="max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="max-h-[620px] overflow-y-auto pr-1 custom-scrollbar">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-2">
             {ads.map((ad, adIndex) => {
               const isVipListing = Boolean(
                 (user as any)?.isVip ||
@@ -551,9 +551,9 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
               return (
                 <div
                   key={ad.id}
-                  className={`rounded-none p-2.5 shadow-md flex flex-col justify-between transition-all duration-300 w-full cursor-pointer relative overflow-hidden ${
+                  className={`rounded-none p-1.5 shadow-md flex flex-col justify-between transition-all duration-300 w-full cursor-pointer relative overflow-hidden ${
                     isVipListing
-                      ? 'bg-gradient-to-b from-amber-950/40 via-xsm-black/90 to-xsm-black border border-amber-500/80 shadow-[0_0_12px_rgba(245,158,11,0.2)] hover:border-amber-400'
+                      ? 'bg-gradient-to-b from-amber-950/40 via-xsm-black/90 to-xsm-black border border-amber-500/80 shadow-[0_0_10px_rgba(245,158,11,0.18)] hover:border-amber-400'
                       : 'bg-xsm-black/80 border border-xsm-medium-gray/30 hover:border-xsm-yellow/40'
                   }`}
                   style={isDeleting ? { opacity: 0, transform: 'scale(0.8)', pointerEvents: 'none', transition: 'opacity 0.35s ease, transform 0.35s ease' } : { transition: 'opacity 0.35s ease, transform 0.35s ease' }}
@@ -572,10 +572,10 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                   )}
 
                   {/* Thumbnail & Title + Price/Subs Row */}
-                  <div className="flex items-center gap-2 mb-2">
+                  <div className="flex items-center gap-1.5 mb-1">
                     <div className="relative flex-shrink-0">
                       <div
-                        className={`w-9 h-9 rounded-none overflow-hidden border ${
+                        className={`w-7 h-7 rounded-none overflow-hidden border ${
                           isVipListing ? 'border-amber-400' : 'border-xsm-medium-gray/40'
                         }`}
                         onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
@@ -590,33 +590,33 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                           className="w-full h-full object-cover"
                         />
                       </div>
-                      <div className="absolute -bottom-1 -right-1 scale-90">
+                      <div className="absolute -bottom-0.5 -right-0.5 scale-75">
                         {getPlatformIconSmall(ad.platform)}
                       </div>
                     </div>
 
-                    <div className="min-w-0 flex-1 pr-6">
+                    <div className="min-w-0 flex-1 pr-4">
                       <h4
-                        className="text-white font-bold text-xs truncate hover:text-xsm-yellow transition-colors"
+                        className="text-white font-bold text-[10px] truncate hover:text-xsm-yellow transition-colors leading-tight"
                         onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
                         title={ad.title}
                       >
                         {ad.title}
                       </h4>
-                      <div className="flex items-center gap-1.5 text-[10px] mt-0.5">
-                        <span className="text-xsm-yellow font-extrabold text-xs">
+                      <div className="flex items-center gap-1 text-[9px] mt-0.5">
+                        <span className="text-xsm-yellow font-extrabold text-[10px]">
                           {formatPrice(ad.price)}
                         </span>
-                        <span className="text-xsm-medium-gray/60">•</span>
-                        <span className="text-blue-400 font-medium">
-                          {formatNumber(ad.subscribers)} subs
+                        <span className="text-xsm-medium-gray/50">•</span>
+                        <span className="text-blue-400 font-medium text-[9px]">
+                          {formatNumber(ad.subscribers)}
                         </span>
                       </div>
                     </div>
                   </div>
 
                   {/* Monetization & Action Buttons Row */}
-                  <div className="flex items-center justify-between pt-1.5 border-t border-xsm-medium-gray/20">
+                  <div className="flex items-center justify-between pt-1 border-t border-xsm-medium-gray/20">
                     {ad.isMonetized ? (
                       <span
                         className="inline-flex items-center justify-center p-1 rounded-none bg-green-500/15 text-green-400 border border-green-500/30 shadow-sm"

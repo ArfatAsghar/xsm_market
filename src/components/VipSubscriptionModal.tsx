@@ -94,8 +94,13 @@ const VipSubscriptionModal: React.FC<VipSubscriptionModalProps> = ({ isOpen, onC
   const { toast } = useToast();
 
   const [selectedPlan, setSelectedPlan] = useState<1 | 2 | 3>(2);
-  const [paymentMethod, setPaymentMethod] = useState<'crypto' | 'direct' | 'admin'>('crypto');
+  const [paymentMethod, setPaymentMethod] = useState<'crypto' | 'direct' | 'admin' | 'referral_credit'>('crypto');
   const [selectedCrypto, setSelectedCrypto] = useState('usdttrc20');
+  const [creditBalance, setCreditBalance] = useState<number>(0);
+  const [vipCouponsAvailable, setVipCouponsAvailable] = useState<number>(0);
+  const [applyCoupon, setApplyCoupon] = useState<boolean>(false);
+  const [applyCredits, setApplyCredits] = useState<boolean>(false);
+  const [isCreditPaying, setIsCreditPaying] = useState<boolean>(false);
   
   // Crypto checkout state
   const [step, setStep] = useState<'plan' | 'checkout'>('plan');
@@ -110,6 +115,11 @@ const VipSubscriptionModal: React.FC<VipSubscriptionModalProps> = ({ isOpen, onC
 
   const isAdmin = Boolean(user?.isAdmin || (user as any)?.role === 'admin');
   const plan = VIP_PLANS.find(p => p.months === selectedPlan)!;
+
+  const couponDiscount = (applyCoupon && vipCouponsAvailable > 0) ? 2.00 : 0;
+  const priceAfterCoupon = Math.max(0, plan.price - couponDiscount);
+  const creditDeduction = applyCredits ? Math.min(priceAfterCoupon, creditBalance) : 0;
+  const finalPrice = Math.max(0, priceAfterCoupon - creditDeduction);
 
   // Clean up timer on unmount or when modal closes
   useEffect(() => {
@@ -165,7 +175,16 @@ const VipSubscriptionModal: React.FC<VipSubscriptionModalProps> = ({ isOpen, onC
   const handleStartCryptoPayment = async () => {
     setIsInitializing(true);
     try {
-      const res = await createVipCryptoPayment(selectedPlan, selectedCrypto);
+      const res = await createVipCryptoPayment(selectedPlan, selectedCrypto, creditDeduction, applyCoupon);
+      if (res.paidInFull && res.vipUntil) {
+        toast({
+          title: '👑 VIP Membership Activated!',
+          description: res.message || `Activated with referral perks until ${new Date(res.vipUntil).toLocaleDateString()}`
+        });
+        onSuccess?.(res.vipUntil);
+        onClose();
+        return;
+      }
       if (res.success && res.payment) {
         setPaymentData(res.payment);
         setPaymentStatus(res.payment.status || 'waiting');
@@ -234,6 +253,51 @@ const VipSubscriptionModal: React.FC<VipSubscriptionModalProps> = ({ isOpen, onC
       });
     } finally {
       setIsAdminActivating(false);
+    }
+  };
+
+  // Fetch user referral credit balance & VIP coupons when modal opens
+  useEffect(() => {
+    if (isOpen && user) {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (token) {
+        const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'https://xsmmarket.com/api');
+        fetch(`${apiUrl}/referral/dashboard`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+          .then(res => res.json())
+          .then(res => {
+            if (res.success && res.data) {
+              if (res.data.user?.referral_credit_balance !== undefined) {
+                setCreditBalance(parseFloat(res.data.user.referral_credit_balance) || 0);
+              }
+              const coupons = res.data.user?.vip_coupons_available ?? res.data.rewards?.vip_coupons_available ?? 0;
+              setVipCouponsAvailable(Number(coupons) || 0);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [isOpen, user]);
+
+  const handlePayWithCredit = async () => {
+    setIsCreditPaying(true);
+    try {
+      const result = await buyVip(selectedPlan, creditDeduction || priceAfterCoupon, applyCoupon);
+      toast({
+        title: '👑 VIP Membership Activated!',
+        description: result.message || `Activated with referral perks until ${new Date(result.vipUntil).toLocaleDateString()}`
+      });
+      onSuccess?.(result.vipUntil);
+      onClose();
+    } catch (err) {
+      toast({
+        title: 'Payment Failed',
+        description: err instanceof Error ? err.message : 'Insufficient referral credits or activation error',
+        variant: 'destructive'
+      });
+    } finally {
+      setIsCreditPaying(false);
     }
   };
 
@@ -411,6 +475,70 @@ const VipSubscriptionModal: React.FC<VipSubscriptionModalProps> = ({ isOpen, onC
                 </div>
               </div>
 
+              {/* Referral Discounts & Coupons */}
+              {(vipCouponsAvailable > 0 || creditBalance > 0) && (
+                <div 
+                  className="p-3.5 rounded-xl border space-y-2.5 transition-all"
+                  style={{ backgroundColor: 'var(--xsm-bg)', borderColor: 'var(--xsm-medium-gray)' }}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-500 flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5" />
+                      Referral Rewards & Discounts
+                    </span>
+                    {(couponDiscount > 0 || creditDeduction > 0) && (
+                      <span className="text-xs font-extrabold text-emerald-400">
+                        Total Discount: -${(couponDiscount + creditDeduction).toFixed(2)}
+                      </span>
+                    )}
+                  </div>
+
+                  {vipCouponsAvailable > 0 && (
+                    <label className="flex items-center justify-between p-2 rounded-lg bg-black/20 hover:bg-black/30 cursor-pointer transition-colors">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={applyCoupon}
+                          onChange={(e) => setApplyCoupon(e.target.checked)}
+                          className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 accent-amber-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-white">
+                          Use VIP Discount Coupon (Available: {vipCouponsAvailable})
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-400">-$2.00</span>
+                    </label>
+                  )}
+
+                  {creditBalance > 0 && (
+                    <label className="flex items-center justify-between p-2 rounded-lg bg-black/20 hover:bg-black/30 cursor-pointer transition-colors">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={applyCredits}
+                          onChange={(e) => setApplyCredits(e.target.checked)}
+                          className="w-4 h-4 rounded text-amber-500 focus:ring-amber-400 accent-amber-500 cursor-pointer"
+                        />
+                        <span className="text-xs font-medium text-white">
+                          Apply Referral Credits (Balance: ${creditBalance.toFixed(2)})
+                        </span>
+                      </div>
+                      <span className="text-xs font-bold text-emerald-400">
+                        -${(applyCredits ? Math.min(priceAfterCoupon, creditBalance) : Math.min(priceAfterCoupon, creditBalance)).toFixed(2)}
+                      </span>
+                    </label>
+                  )}
+
+                  {/* Summary row */}
+                  <div className="flex items-center justify-between pt-1.5 border-t border-white/10 text-xs font-semibold">
+                    <span className="text-gray-400">Net Amount to Pay:</span>
+                    <span className={`text-sm font-bold ${finalPrice === 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {finalPrice === 0 ? 'FREE (Covered 100% by Rewards!)' : `$${finalPrice.toFixed(2)}`}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               {/* Payment Method Selector */}
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider mb-2.5" style={{ color: 'var(--xsm-light-gray)' }}>
@@ -473,6 +601,36 @@ const VipSubscriptionModal: React.FC<VipSubscriptionModalProps> = ({ isOpen, onC
                       </div>
                       <p className="text-[11px] mt-0.5" style={{ color: 'var(--xsm-light-gray)' }}>
                         Direct TRC-20 transfer or pay via Live Escrow Support Agent.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    onClick={() => setPaymentMethod('referral_credit')}
+                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                      paymentMethod === 'referral_credit'
+                        ? 'border-yellow-500 bg-yellow-500/10'
+                        : 'hover:border-yellow-500/30'
+                    }`}
+                    style={{
+                      backgroundColor: paymentMethod === 'referral_credit' ? undefined : 'var(--xsm-bg)',
+                      borderColor: paymentMethod === 'referral_credit' ? '#f59e0b' : 'var(--xsm-medium-gray)'
+                    }}
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-yellow-500/20 text-yellow-500 flex items-center justify-center font-bold text-sm flex-shrink-0 mt-0.5">
+                      <Zap className="w-4 h-4 text-yellow-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold" style={{ color: 'var(--xsm-heading)' }}>
+                          Referral Credits
+                        </span>
+                        <span className="text-[10px] bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 font-bold px-1.5 py-0.5 rounded">
+                          Balance: ${Number(creditBalance).toFixed(2)}
+                        </span>
+                      </div>
+                      <p className="text-[11px] mt-0.5" style={{ color: 'var(--xsm-light-gray)' }}>
+                        Pay instantly using your accumulated referral reward credits.
                       </p>
                     </div>
                   </div>
@@ -539,40 +697,87 @@ const VipSubscriptionModal: React.FC<VipSubscriptionModalProps> = ({ isOpen, onC
 
               {/* Action Buttons */}
               <div className="space-y-2.5 pt-2">
-                {paymentMethod === 'crypto' && (
+                {finalPrice === 0 ? (
                   <button
                     onClick={handleStartCryptoPayment}
                     disabled={isInitializing}
-                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-black text-sm transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-95 shadow-lg shadow-amber-500/20"
-                    style={{
-                      background: 'linear-gradient(135deg, #eab308, #f59e0b, #d97706)'
-                    }}
+                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-black text-sm transition-all duration-200 disabled:opacity-60 hover:opacity-95 shadow-lg shadow-emerald-500/20 bg-gradient-to-r from-emerald-400 via-teal-300 to-green-400"
                   >
                     {isInitializing ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Generating Crypto Invoice…</span>
+                        <span>Activating Free VIP Membership…</span>
                       </>
                     ) : (
                       <>
-                        <Crown className="w-4 h-4 text-black" />
-                        <span>Pay ${plan.price} with Crypto — {plan.months} Month{plan.months > 1 ? 's' : ''} VIP</span>
+                        <Sparkles className="w-4 h-4 text-black" />
+                        <span>Activate VIP for FREE (100% Covered by Rewards!)</span>
                       </>
                     )}
                   </button>
-                )}
+                ) : (
+                  <>
+                    {paymentMethod === 'crypto' && (
+                      <button
+                        onClick={handleStartCryptoPayment}
+                        disabled={isInitializing}
+                        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-black text-sm transition-all duration-200 disabled:opacity-60 disabled:cursor-not-allowed hover:opacity-95 shadow-lg shadow-amber-500/20"
+                        style={{
+                          background: 'linear-gradient(135deg, #eab308, #f59e0b, #d97706)'
+                        }}
+                      >
+                        {isInitializing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Generating Crypto Invoice…</span>
+                          </>
+                        ) : (
+                          <>
+                            <Crown className="w-4 h-4 text-black" />
+                            <span>Pay ${finalPrice.toFixed(2)} with Crypto — {plan.months} Month{plan.months > 1 ? 's' : ''} VIP</span>
+                          </>
+                        )}
+                      </button>
+                    )}
 
-                {paymentMethod === 'direct' && (
-                  <button
-                    onClick={() => {
-                      onClose();
-                      navigate('/chat');
-                    }}
-                    className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-white text-sm transition-all duration-200 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    <span>Open Live Chat to Verify & Activate VIP</span>
-                  </button>
+                    {paymentMethod === 'direct' && (
+                      <button
+                        onClick={() => {
+                          onClose();
+                          navigate('/chat');
+                        }}
+                        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-white text-sm transition-all duration-200 bg-blue-600 hover:bg-blue-500 shadow-lg shadow-blue-500/20"
+                      >
+                        <MessageCircle className="w-4 h-4" />
+                        <span>Open Live Chat to Verify & Activate VIP (${finalPrice.toFixed(2)})</span>
+                      </button>
+                    )}
+
+                    {paymentMethod === 'referral_credit' && (
+                      <button
+                        onClick={handlePayWithCredit}
+                        disabled={isCreditPaying || creditBalance < priceAfterCoupon}
+                        className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-black text-sm transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-95 shadow-lg shadow-amber-500/20"
+                        style={{
+                          background: 'linear-gradient(135deg, #eab308, #f59e0b, #d97706)'
+                        }}
+                      >
+                        {isCreditPaying ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            <span>Activating with Referral Credits…</span>
+                          </>
+                        ) : creditBalance < priceAfterCoupon ? (
+                          <span>Insufficient Referral Credits (${Number(creditBalance).toFixed(2)} / ${priceAfterCoupon.toFixed(2)} Needed)</span>
+                        ) : (
+                          <>
+                            <Crown className="w-4 h-4 text-black" />
+                            <span>Pay ${priceAfterCoupon.toFixed(2)} with Referral Credits — Instant VIP</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </>
                 )}
 
                 {/* Admin Quick Activate Button (Only visible to admin accounts for easy testing) */}

@@ -32,6 +32,7 @@ interface Ad {
     isVip?: boolean;
   };
   createdAt: string;
+  lastPulledAt?: string;
 }
 
 interface AdListProps {
@@ -75,6 +76,15 @@ const AdList: React.FC<AdListProps> = ({
     navigate(`/ad/${slug}`);
   };
 
+  // Effective timestamp for marketplace ordering: bumped timestamp (lastPulledAt) takes priority if newer than createdAt
+  const getEffectiveAdTime = (ad: any): number => {
+    const rawPull = ad?.lastPulledAt ? new Date(ad.lastPulledAt).getTime() : 0;
+    const rawCreate = ad?.createdAt ? new Date(ad.createdAt).getTime() : 0;
+    const pullTime = isNaN(rawPull) ? 0 : rawPull;
+    const createTime = isNaN(rawCreate) ? 0 : rawCreate;
+    return Math.max(pullTime, createTime);
+  };
+
   // Fetch all ads once on component mount
   useEffect(() => {
     const fetchAds = async () => {
@@ -107,9 +117,11 @@ const AdList: React.FC<AdListProps> = ({
             }
           }));
           
-          // Sort: newest first by createdAt (profile pinning does not affect marketplace)
+          // Sort: bumped listings (lastPulledAt) rise to Position #1 on marketplace, otherwise newest by createdAt
           formattedAds.sort((a: any, b: any) => {
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            const diff = getEffectiveAdTime(b) - getEffectiveAdTime(a);
+            if (diff !== 0) return diff;
+            return (Number(b.id) || 0) - (Number(a.id) || 0);
           });
 
           console.log('📡 AdList: Formatted ads:', formattedAds.length);
@@ -215,9 +227,11 @@ const AdList: React.FC<AdListProps> = ({
       });
     }
 
-    // Always keep newest-first order (by createdAt DESC, profile pinning does not affect marketplace)
+    // Always keep bumped-first / newest-first order on marketplace (bumped listings rise to Position #1)
     filtered.sort((a: any, b: any) => {
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      const diff = getEffectiveAdTime(b) - getEffectiveAdTime(a);
+      if (diff !== 0) return diff;
+      return (Number(b.id) || 0) - (Number(a.id) || 0);
     });
 
     console.log('📊 AdList: Filtered results:', filtered.length, 'out of', allAds.length);

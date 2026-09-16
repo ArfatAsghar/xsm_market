@@ -7,9 +7,12 @@ ROOT_DIR = os.path.abspath(os.path.dirname(__file__) + "/..")
 DIST_DIR = os.path.join(ROOT_DIR, "dist")
 PHP_BACKEND_DIR = os.path.join(ROOT_DIR, "php-backend")
 
+desktop_dir = os.path.join(os.environ.get("USERPROFILE", os.path.expanduser("~")), "Desktop")
+
 OUTPUT_ZIPS = [
     os.path.join(ROOT_DIR, "xsm-market-deploy.zip"),
     os.path.join(ROOT_DIR, "xsm-dmarket-deploy.zip"),
+    os.path.join(desktop_dir, "xsm-market-deploy.zip"),
 ]
 
 # Ensure uploads subdirectories exist with .gitkeep
@@ -28,7 +31,7 @@ EXCLUDE_NAMES = {
     ".DS_Store", "Thumbs.db", "__pycache__", ".git", ".gitignore",
     "image.png", "debug-check.php", "route-test.php", "check.php", "deals-test.php",
     "create-deals-table.php", "deal-agree.php", "DealController.php",
-    ".env", ".env.development", "create.php"
+    ".env.development", "create.php"
 }
 
 def should_exclude_file(filename):

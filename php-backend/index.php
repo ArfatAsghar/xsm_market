@@ -89,6 +89,9 @@ require_once __DIR__ . '/controllers/ChatController.php';
 require_once __DIR__ . '/controllers/ChatUploadController.php';
 require_once __DIR__ . '/controllers/AdUploadController.php';
 require_once __DIR__ . '/controllers/AdminController.php';
+require_once __DIR__ . '/controllers/ReferralController.php';
+require_once __DIR__ . '/controllers/KycController.php';
+require_once __DIR__ . '/controllers/AdminReferralController.php';
 
 // Error reporting — keep display_errors OFF in production to prevent HTML leaking into JSON
 error_reporting(E_ALL);
@@ -233,6 +236,26 @@ try {
     elseif (strpos($path, '/webhooks/nowpayments') === 0) {
         require_once __DIR__ . '/webhooks/nowpayments.php';
         exit(); // Exit after handling webhook to prevent further processing
+    }
+    // Referral user routes
+    elseif (strpos($path, '/referral') === 0) {
+        $referralController = new ReferralController();
+        handleReferralRoutes($referralController, $path, $method);
+    }
+    // KYC user routes (/user/kyc or /kyc)
+    elseif (strpos($path, '/user/kyc') === 0 || strpos($path, '/kyc') === 0) {
+        $kycController = new KycController();
+        handleKycRoutes($kycController, $path, $method);
+    }
+    // Admin KYC review routes
+    elseif (strpos($path, '/admin/kyc') === 0) {
+        $kycController = new KycController();
+        handleAdminKycRoutes($kycController, $path, $method);
+    }
+    // Admin Referral routes
+    elseif (strpos($path, '/admin/referrals') === 0) {
+        $adminReferralController = new AdminReferralController();
+        handleAdminReferralRoutes($adminReferralController, $path, $method);
     }
     // Email Pool Manager routes
     elseif (strpos($path, '/admin/email-pool') === 0) {
@@ -1034,5 +1057,81 @@ function handleCryptoPaymentsRoutes($path, $method) {
 
 function handleTestNOWPayments() {
     require_once __DIR__ . '/test_nowpayments_integration.php';
+}
+
+function handleReferralRoutes($controller, $path, $method) {
+    switch (true) {
+        case $path === '/referral/dashboard' && $method === 'GET':
+            $controller->getDashboard();
+            break;
+        case $path === '/referral/leaderboard' && $method === 'GET':
+            $controller->getLeaderboard();
+            break;
+        case $path === '/referral/use-pin' && $method === 'POST':
+            $controller->usePin();
+            break;
+        case $path === '/referral/use-bump' && $method === 'POST':
+            $controller->useBump();
+            break;
+        case $path === '/referral/claim-milestone' && $method === 'POST':
+            $controller->claimMilestone();
+            break;
+        default:
+            Response::error('Referral route not found', 404);
+    }
+}
+
+function handleKycRoutes($controller, $path, $method) {
+    switch (true) {
+        case ($path === '/user/kyc/submit' || $path === '/kyc/submit') && $method === 'POST':
+            $controller->submit();
+            break;
+        case ($path === '/user/kyc/status' || $path === '/kyc/status') && $method === 'GET':
+            $controller->getStatus();
+            break;
+        default:
+            Response::error('KYC route not found', 404);
+    }
+}
+
+function handleAdminKycRoutes($controller, $path, $method) {
+    switch (true) {
+        case $path === '/admin/kyc/pending' && $method === 'GET':
+            $controller->getPending();
+            break;
+        case $path === '/admin/kyc/review' && $method === 'POST':
+            $controller->review();
+            break;
+        default:
+            Response::error('Admin KYC route not found', 404);
+    }
+}
+
+function handleAdminReferralRoutes($controller, $path, $method) {
+    switch (true) {
+        case $path === '/admin/referrals/stats' && $method === 'GET':
+            $controller->getStats();
+            break;
+        case $path === '/admin/referrals/list' && $method === 'GET':
+            $controller->getList();
+            break;
+        case $path === '/admin/referrals/adjust-credit' && $method === 'POST':
+            $controller->adjustCredit();
+            break;
+        case $path === '/admin/referrals/toggle-flag' && $method === 'POST':
+            $controller->toggleFlag();
+            break;
+        case $path === '/admin/referrals/revoke' && $method === 'POST':
+            $controller->revoke();
+            break;
+        case $path === '/admin/referrals/settings' && $method === 'GET':
+            $controller->getSettings();
+            break;
+        case $path === '/admin/referrals/settings' && in_array($method, ['POST', 'PUT']):
+            $controller->updateSettings();
+            break;
+        default:
+            Response::error('Admin Referral route not found', 404);
+    }
 }
 ?>

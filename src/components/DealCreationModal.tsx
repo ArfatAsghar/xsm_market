@@ -528,32 +528,65 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                 </div>
                 <div className="p-2" style={{ background: 'var(--xsm-medium-gray)' }}>
                   {activePlatform === 'youtube' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
-                      <div className="flex items-start gap-1.5">
-                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">1</span>
-                        <span>Buyer deposits escrow fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>).</span>
+                    selectedTransactionType === 'fastest' ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-blue-500/20 text-blue-400 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                          <span>Buyer pays complete payment (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)} + ${numericPrice}</span>) to start escrow.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-blue-500/20 text-blue-400 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                          <span>Seller designates agent's email as <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Owner</strong>.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-blue-500/20 text-blue-400 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                          <span>Agent verifies channel & shares screenshots in deal chat.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-blue-500/20 text-blue-400 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                          <span>Buyer confirms screenshots & replies <strong className="text-xsm-yellow font-bold">PROCEED</strong>.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-blue-500/20 text-blue-400 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                          <span>Agent adds Buyer's Email as <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager</strong>.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-blue-500/20 text-blue-400 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">6</span>
+                          <span>After 7 days, Agent transfers Primary Ownership to buyer.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5 col-span-1 sm:col-span-2">
+                          <span className="w-3.5 h-3.5 rounded-full bg-blue-500/20 text-blue-400 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">7</span>
+                          <span>Agent removes all temporary access once transfer is complete.</span>
+                        </div>
                       </div>
-                      <div className="flex items-start gap-1.5">
-                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">2</span>
-                        <span>Seller invites agent as <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager</strong>.</span>
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                          <span>Buyer deposits escrow fee (<span className="font-semibold text-xsm-yellow">${escrowFee.toFixed(2)}</span>).</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                          <span>Seller invites agent as <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager</strong>.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                          <span>Agent remains Manager for <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>7 days</strong>.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">4</span>
+                          <span>Seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to agent.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">5</span>
+                          <span>Agent verifies channel & notifies buyer to pay.</span>
+                        </div>
+                        <div className="flex items-start gap-1.5">
+                          <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">6</span>
+                          <span>Seller confirms payment → Agent transfers to buyer.</span>
+                        </div>
                       </div>
-                      <div className="flex items-start gap-1.5">
-                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">3</span>
-                        <span>Agent remains Manager for <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>7 days</strong>.</span>
-                      </div>
-                      <div className="flex items-start gap-1.5">
-                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">4</span>
-                        <span>Seller transfers <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership</strong> to agent.</span>
-                      </div>
-                      <div className="flex items-start gap-1.5">
-                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">5</span>
-                        <span>Agent verifies channel & notifies buyer to pay.</span>
-                      </div>
-                      <div className="flex items-start gap-1.5">
-                        <span className="w-3.5 h-3.5 rounded-full bg-amber-500/20 text-amber-500 font-bold text-[8px] flex items-center justify-center shrink-0 mt-0.5">6</span>
-                        <span>Seller confirms payment → Agent transfers to buyer.</span>
-                      </div>
-                    </div>
+                    )
                   )}
                   {activePlatform === 'tiktok' && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1 text-[10px] leading-tight" style={{ color: 'var(--xsm-text)' }}>
@@ -817,17 +850,53 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
                       <p className="text-[11px]" style={{ color: 'var(--xsm-text)' }}>⚠️ <strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>IMPORTANT:</strong> All communication MUST occur through our platform's chat system. Communication outside the website is FORBIDDEN for safety.</p>
                     </div>
                     
-                    <div>
-                      <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">3. Transaction Process</h4>
-                      <ul className="list-disc list-inside space-y-0.5 text-[11px] ml-2" style={{ color: 'var(--xsm-text)' }}>
-                        <li>Buyer pays service fee (${escrowFee.toFixed(2)})</li>
-                        <li>Seller designates website agent as account manager</li>
-                        <li>After 7 days, seller transfers primary ownership to website agent</li>
-                        <li>Website agent verifies account and notifies buyer</li>
-                        <li>Buyer pays seller through agreed payment method</li>
-                        <li>After seller confirmation, account is transferred to buyer</li>
-                      </ul>
-                    </div>
+                    {selectedTransactionType === 'fastest' && activePlatform === 'youtube' ? (
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <h4 className="font-semibold text-xsm-yellow text-xs">3. Fast Transaction Process (YouTube)</h4>
+                          <span className="text-[9px] px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 font-bold uppercase tracking-wide">
+                            Express Transfer
+                          </span>
+                        </div>
+                        <ol className="list-decimal list-inside space-y-1 text-[11px] ml-1" style={{ color: 'var(--xsm-text)' }}>
+                          <li><strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Payment:</strong> The buyer pays the complete payment (<span className="text-xsm-yellow font-semibold">${escrowFee.toFixed(2)} service fee + ${numericPrice} channel price</span>) to initiate the escrow process.</li>
+                          <li><strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Owner Access:</strong> The seller designates the website agent's email as an <strong className="text-xsm-yellow">OWNER</strong> of the YouTube channel.</li>
+                          <li><strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Channel Verification:</strong> As soon as the Website Agent receives Owner access, the Website Agent will take screenshots of all relevant channel details and share them inside the transaction/deal chat for verification.</li>
+                          <li><strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Buyer Confirmation:</strong> Buyer confirms the screenshots of the channel and must reply <strong className="text-xsm-yellow font-bold">PROCEED</strong> in the deal chat.</li>
+                          <li><strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Manager Role Added:</strong> Website Agent will add Buyer's Email (<span className="text-xsm-yellow">{buyerEmail}</span>) as Manager.</li>
+                          <li><strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Primary Ownership Transfer After 7 Days:</strong> After 7 days, the Website Agent will automatically transfer Primary Ownership of the YouTube channel to the buyer.</li>
+                          <li><strong style={{ color: 'var(--xsm-heading, var(--xsm-text))' }}>Completion of Transfer:</strong> Once Primary Ownership has been successfully transferred to the buyer, the Website Agent will remove the Website Agent's access and any other temporary access/permissions related to the transaction, as applicable.</li>
+                        </ol>
+
+                        {/* Important Notice - Fast Transaction Responsibility */}
+                        <div className="p-2.5 rounded border my-2.5 bg-amber-500/10 border-amber-500/40">
+                          <div className="flex items-center gap-1.5 mb-1.5 text-amber-400 font-bold text-xs">
+                            <span>⚠️</span>
+                            <span>Important Notice – Fast Transaction Responsibility</span>
+                          </div>
+                          <ul className="list-disc list-inside space-y-1 text-[10.5px] leading-relaxed" style={{ color: 'var(--xsm-text)' }}>
+                            <li>Fast Transaction is an accelerated transfer method and is <strong className="text-amber-300">not the recommended/safest</strong> transaction method.</li>
+                            <li>The website <strong className="text-amber-300">strongly recommends using the Safe Transaction option</strong> for better protection and security.</li>
+                            <li>If the buyer chooses to proceed with a Fast Transaction, the buyer accepts responsibility for the transaction after the transfer process.</li>
+                            <li>If the YouTube channel is later removed, suspended, terminated, restricted, reclaimed, or any other issue occurs with the channel after a Fast Transaction, the risk and responsibility will be borne by the buyer.</li>
+                            <li>The website does not provide a guarantee or warranty against future channel-related issues for transactions completed through the Fast Transaction method.</li>
+                            <li>By choosing Fast Transaction, the buyer acknowledges that they were recommended to use Safe Transaction but voluntarily chose the faster method and accepted its associated risks.</li>
+                          </ul>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">3. Transaction Process</h4>
+                        <ul className="list-disc list-inside space-y-0.5 text-[11px] ml-2" style={{ color: 'var(--xsm-text)' }}>
+                          <li>Buyer pays service fee (${escrowFee.toFixed(2)})</li>
+                          <li>Seller designates website agent as account manager</li>
+                          <li>After 7 days, seller transfers primary ownership to website agent</li>
+                          <li>Website agent verifies account and notifies buyer</li>
+                          <li>Buyer pays seller through agreed payment method</li>
+                          <li>After seller confirmation, account is transferred to buyer</li>
+                        </ul>
+                      </div>
+                    )}
                     
                     <div>
                       <h4 className="font-semibold text-xsm-yellow text-xs mb-0.5">4. Refund Policy</h4>

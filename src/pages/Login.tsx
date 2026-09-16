@@ -194,22 +194,23 @@ const Login: React.FC<LoginProps> = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-xsm-black py-12 px-4 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-md space-y-8 bg-xsm-dark-gray border-xsm-medium-gray">
-        <CardHeader>
+    <div className="min-h-screen flex items-center justify-center bg-xsm-black px-4 sm:px-6 lg:px-8">
+      <Card className="w-full max-w-md bg-xsm-dark-gray border-xsm-medium-gray">
+        <CardHeader className="pb-3">
           <h2 className="text-center text-3xl font-bold tracking-tight text-xsm-yellow">
             Sign in to your account
           </h2>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           {error && (
-            <Alert variant="destructive" className="mb-6">
+            <Alert variant="destructive" className="mb-4">
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
-          <form className="space-y-6" onSubmit={handleLogin}>
+          <form className="space-y-3" onSubmit={handleLogin}>
+            {/* Email */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-white">
+              <label htmlFor="email" className="block text-xs sm:text-sm font-medium text-white mb-1">
                 Email address
               </label>
               <Input
@@ -220,14 +221,15 @@ const Login: React.FC<LoginProps> = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1"
+                className="bg-xsm-black h-10 text-sm"
                 placeholder="Enter your email"
                 disabled={isLoading}
               />
             </div>
 
+            {/* Password */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-white">
+              <label htmlFor="password" className="block text-xs sm:text-sm font-medium text-white mb-1">
                 Password
               </label>
               <div className="relative">
@@ -239,7 +241,7 @@ const Login: React.FC<LoginProps> = () => {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="mt-1 pr-10"
+                  className="bg-xsm-black h-10 text-sm pr-10"
                   placeholder="Enter your password"
                   disabled={isLoading}
                 />
@@ -252,21 +254,21 @@ const Login: React.FC<LoginProps> = () => {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              {/* Forgot Password – left-aligned directly under password */}
+              <div className="mt-1 text-left">
+                <button
+                  type="button"
+                  onClick={() => navigate('/forgot-password')}
+                  className="text-xs text-xsm-light-gray hover:text-xsm-yellow transition-colors"
+                  disabled={isLoading}
+                >
+                  Forgot your password?
+                </button>
+              </div>
             </div>
 
-            <div className="text-center">
-              <button
-                type="button"
-                onClick={() => navigate('/forgot-password')}
-                className="text-sm text-xsm-light-gray hover:text-xsm-yellow transition-colors"
-                disabled={isLoading}
-              >
-                Forgot your password?
-              </button>
-            </div>
-
-            {/* reCAPTCHA */}
-            <div className="flex justify-center">
+            {/* reCAPTCHA - moved slightly upward */}
+            <div className="flex justify-center pt-0.5 pb-0.5">
               <ReCAPTCHA
                 ref={recaptchaRef}
                 sitekey={import.meta.env.VITE_RECAPTCHA_SITE_KEY}
@@ -275,55 +277,45 @@ const Login: React.FC<LoginProps> = () => {
               />
             </div>
 
-            <div>
-              <Button 
-                type="submit" 
-                className="w-full bg-xsm-yellow hover:bg-yellow-500 text-black"
+            {/* Sign In + Google – side by side in one row */}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 items-center pt-0.5">
+              <Button
+                type="submit"
+                className="w-full bg-xsm-yellow hover:bg-yellow-500 text-black font-semibold h-[40px] text-sm"
                 disabled={isLoading || !recaptchaToken}
               >
-                {isLoading ? 'Signing in...' : 'Sign in'}
+                {isLoading ? 'Signing in…' : 'Sign In'}
               </Button>
+
+              <div className="w-full h-[40px] flex items-center justify-center overflow-hidden rounded-md">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  useOneTap={false}
+                  theme="filled_black"
+                  size="large"
+                  text="continue_with"
+                  shape="rectangular"
+                  width="100%"
+                />
+              </div>
             </div>
 
             {/* Show verify email button if there's a verification error */}
             {error && error.includes('verify your email') && (
-              <div>
-                <Button 
-                  type="button"
-                  variant="outline"
-                  className="w-full border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
-                  onClick={() => navigate('/email-verify')}
-                  disabled={isLoading}
-                >
-                  Verify Email Now
-                </Button>
-              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                onClick={() => navigate('/email-verify')}
+                disabled={isLoading}
+              >
+                Verify Email Now
+              </Button>
             )}
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-xsm-medium-gray" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-xsm-dark-gray px-2 text-xsm-light-gray">Or continue with</span>
-              </div>
-            </div>
-
-            <div className="w-full">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={handleGoogleError}
-                useOneTap={false}
-                theme="filled_black"
-                size="large"
-                text="signin_with"
-                shape="rectangular"
-                width="100%"
-              />
-            </div>
           </form>
         </CardContent>
-        <CardFooter className="text-center">
+        <CardFooter className="text-center pt-2">
           <p className="text-sm text-xsm-light-gray">
             Don't have an account?{' '}
             <button

@@ -205,14 +205,23 @@ class Ad {
                 $params[':search'] = '%' . $filters['search'] . '%';
             }
             
-            // Sort order
+            // Sort order — bump uses lastPulledAt to rise to top without changing createdAt
             $sortBy = $filters['sortBy'] ?? 'createdAt';
             $sortOrder = strtoupper($filters['sortOrder'] ?? 'DESC');
             if ($sortOrder !== 'ASC' && $sortOrder !== 'DESC') $sortOrder = 'DESC';
             $validSortFields = ['createdAt', 'price', 'subscribers', 'views'];
             $sortField = in_array($sortBy, $validSortFields) ? $sortBy : 'createdAt';
-            
-            $sql .= " ORDER BY a.{$sortField} {$sortOrder} LIMIT :limit OFFSET :offset";
+
+            if ($sortField === 'createdAt') {
+                // Bumped listings rise to top: CASE WHEN ensures 100% reliable max comparison across all SQL dialects
+                $sql .= " ORDER BY CASE 
+                            WHEN a.lastPulledAt IS NOT NULL AND a.lastPulledAt != '' AND a.lastPulledAt > a.createdAt 
+                            THEN a.lastPulledAt 
+                            ELSE a.createdAt 
+                        END {$sortOrder} LIMIT :limit OFFSET :offset";
+            } else {
+                $sql .= " ORDER BY a.{$sortField} {$sortOrder} LIMIT :limit OFFSET :offset";
+            }
             
             $stmt = $pdo->prepare($sql);
             $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
@@ -227,7 +236,7 @@ class Ad {
         } catch (Throwable $e) {
             error_log("Ad::getAll main query failed: " . $e->getMessage() . ". Trying simple fallback.");
             try {
-                $fallbackSql = "SELECT * FROM " . self::$table . " WHERE status = 'active' ORDER BY createdAt DESC LIMIT :limit OFFSET :offset";
+                $fallbackSql = "SELECT * FROM " . self::$table . " WHERE status = 'active' ORDER BY CASE WHEN lastPulledAt IS NOT NULL AND lastPulledAt != '' AND lastPulledAt > createdAt THEN lastPulledAt ELSE createdAt END DESC LIMIT :limit OFFSET :offset";
                 $stmt = $pdo->prepare($fallbackSql);
                 $stmt->bindValue(':limit', (int)$limit, PDO::PARAM_INT);
                 $stmt->bindValue(':offset', (int)$offset, PDO::PARAM_INT);
@@ -500,7 +509,18 @@ class Ad {
         }
     }
     
+    public static function cleanExpiredPins() {
+        try {
+            $pdo = Database::getConnection();
+            $sql = "UPDATE " . self::$table . " SET pinned = 0, pinnedAt = NULL WHERE pinned = 1 AND pinnedAt IS NOT NULL AND pinnedAt < DATE_SUB(NOW(), INTERVAL 72 HOUR)";
+            $pdo->exec($sql);
+        } catch (Throwable $e) {
+            error_log('cleanExpiredPins error: ' . $e->getMessage());
+        }
+    }
+    
     public static function updatePin($id, $pinned, $pinnedAt = null) {
+        self::cleanExpiredPins();
         $pdo = Database::getConnection();
         
         $sql = "UPDATE " . self::$table . " SET pinned = :pinned, pinnedAt = :pinnedAt WHERE id = :id";
@@ -516,14 +536,14 @@ class Ad {
     public static function pullUpAd($id, $pulledAt) {
         $pdo = Database::getConnection();
         
-        // Update lastPulledAt and also update createdAt to make it appear at top of listings
-        $sql = "UPDATE " . self::$table . " SET lastPulledAt = :pulledAt, createdAt = :createdAt WHERE id = :id";
+        // Update only lastPulledAt — do NOT modify createdAt so the profile page order stays intact.
+        // The marketplace sorts by COALESCE(lastPulledAt, createdAt) DESC, so bumped ads rise to #1.
+        $sql = "UPDATE " . self::$table . " SET lastPulledAt = :pulledAt WHERE id = :id";
         
         $stmt = $pdo->prepare($sql);
         return $stmt->execute([
-            ':id' => $id,
+            ':id'      => $id,
             ':pulledAt' => $pulledAt,
-            ':createdAt' => $pulledAt
         ]);
     }
 

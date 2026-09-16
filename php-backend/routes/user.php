@@ -144,6 +144,19 @@ class UserController {
             error_log('Error counting user ads: ' . $e->getMessage());
         }
 
+        // Compute online status and last seen
+        $lastSeenAt = $user['lastSeenAt'] ?? null;
+        $isOnline = false;
+        if (!empty($lastSeenAt)) {
+            $diffSeconds = time() - strtotime($lastSeenAt);
+            if ($diffSeconds <= 300) {
+                $isOnline = true;
+            }
+        }
+        if (!empty($user['isOnline'])) {
+            $isOnline = true;
+        }
+
         // Return public information with additional fields
         $publicUser = [
             'id' => $user['id'],
@@ -153,7 +166,9 @@ class UserController {
             'description' => $user['description'] ?? null,
             'createdAt' => $user['createdAt'],
             'isEmailVerified' => (bool)$user['isEmailVerified'],
-            'adCount' => $adCount
+            'adCount' => $adCount,
+            'lastSeenAt' => $lastSeenAt,
+            'isOnline' => $isOnline
         ];
 
         successResponse($publicUser);

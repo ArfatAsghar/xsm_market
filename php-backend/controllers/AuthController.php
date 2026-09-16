@@ -67,6 +67,7 @@ class AuthController {
         $email = trim($input['email'] ?? '');
         $password = $input['password'] ?? '';
         $recaptchaToken = $input['recaptchaToken'] ?? '';
+        $referralCode = trim($input['referralCode'] ?? $input['ref'] ?? '');
         
         // Log registration attempt (filter out password)
         error_log('Registration attempt: ' . json_encode(['username' => $username, 'email' => $email]));
@@ -165,12 +166,13 @@ class AuthController {
                 }
                 $userId = $existingUserByEmail['id'];
             } else {
-                // Create new user
+                // Create new user (store registrationIp for referral fraud detection)
+                $clientIpForInsert = $_SERVER['REMOTE_ADDR'] ?? null;
                 $stmt = $this->db->prepare("
-                    INSERT INTO users (username, email, password, emailOTP, otpExpires, isEmailVerified, authProvider, createdAt, updatedAt) 
-                    VALUES (?, ?, ?, ?, ?, 0, 'email', NOW(), NOW())
+                    INSERT INTO users (username, email, password, emailOTP, otpExpires, isEmailVerified, authProvider, registrationIp, createdAt, updatedAt) 
+                    VALUES (?, ?, ?, ?, ?, 0, 'email', ?, NOW(), NOW())
                 ");
-                $result = $stmt->execute([$username, $email, $hashedPassword, $otp, $otpExpires]);
+                $result = $stmt->execute([$username, $email, $hashedPassword, $otp, $otpExpires, $clientIpForInsert]);
                 if (!$result) {
                     $this->db->rollback();
                     Response::error('Failed to create user account. Please try again.', 500);
@@ -182,6 +184,24 @@ class AuthController {
             // Commit the transaction first
             $this->db->commit();
             
+            // Record referral if referral code was provided
+            if (!empty($referralCode) && !empty($userId)) {
+                require_once __DIR__ . '/../services/ReferralService.php';
+                try {
+                    $clientIp = $_SERVER['REMOTE_ADDR'] ?? null;
+                    $referralId = ReferralService::recordReferral($userId, $referralCode, $clientIp);
+                    if ($referralId) {
+                        error_log("Referral recorded successfully: referral_id=$referralId, referred_user=$userId, code=$referralCode");
+                    } else {
+                        error_log("Referral not recorded (code=$referralCode, user=$userId) — code not found, self-referral, or already referred.");
+                    }
+                } catch (Throwable $refEx) {
+                    error_log('Referral record error (full): ' . $refEx->getMessage() . ' | Trace: ' . substr($refEx->getTraceAsString(), 0, 500));
+                }
+            } else {
+                error_log("No referral code provided during registration for user=$userId");
+            }
+
             error_log('Registration database operations completed for: ' . $email);
             
             // Send response immediately to prevent timeout issues
@@ -650,13 +670,33 @@ class AuthController {
                 $hashedPassword = password_hash($randomPassword, PASSWORD_DEFAULT);
                 
                 $stmt = $this->db->prepare("
-                    INSERT INTO users (username, email, password, googleId, profilePicture, authProvider, isEmailVerified, createdAt, updatedAt) 
-                    VALUES (?, ?, ?, ?, NULL, 'google', 1, NOW(), NOW())
+                    INSERT INTO users (username, email, password, googleId, profilePicture, authProvider, isEmailVerified, registrationIp, createdAt, updatedAt) 
+                    VALUES (?, ?, ?, ?, NULL, 'google', 1, ?, NOW(), NOW())
                 ");
-                $stmt->execute([$uniqueUsername, $email, $hashedPassword, $googleId]);
+                $googleRegIp = $_SERVER['REMOTE_ADDR'] ?? null;
+                $stmt->execute([$uniqueUsername, $email, $hashedPassword, $googleId, $googleRegIp]);
                 
                 $userId = $this->db->lastInsertId();
                 
+                // Record referral for new Google user if referral code provided
+                $googleRefCode = trim($input['referralCode'] ?? $input['referral_code'] ?? $input['ref'] ?? '');
+                if (!empty($googleRefCode) && !empty($userId)) {
+                    require_once __DIR__ . '/../services/ReferralService.php';
+                    try {
+                        $clientIp = $_SERVER['REMOTE_ADDR'] ?? null;
+                        $googleReferralId = ReferralService::recordReferral($userId, $googleRefCode, $clientIp);
+                        if ($googleReferralId) {
+                            error_log("Google referral recorded: referral_id=$googleReferralId, referred_user=$userId, code=$googleRefCode");
+                        } else {
+                            error_log("Google referral not recorded (code=$googleRefCode, user=$userId) — code not found, self-referral, or already referred.");
+                        }
+                    } catch (Throwable $refEx) {
+                        error_log('Google referral record error (full): ' . $refEx->getMessage() . ' | Trace: ' . substr($refEx->getTraceAsString(), 0, 500));
+                    }
+                } else {
+                    error_log("No referral code in Google signup for new user=$userId");
+                }
+
                 // Fetch the created user
                 $stmt = $this->db->prepare("SELECT * FROM users WHERE id = ?");
                 $stmt->execute([$userId]);

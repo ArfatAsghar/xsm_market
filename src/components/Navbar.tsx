@@ -4,7 +4,7 @@ import {
   FaStore, FaInbox, FaTag, FaBell, FaUser, FaSignOutAlt,
   FaFileAlt, FaCrown, FaTachometerAlt, FaBars, FaTimes,
   FaChevronDown, FaEnvelope, FaCheck, FaBan, FaCheckCircle,
-  FaSun, FaMoon
+  FaSun, FaMoon, FaGift
 } from 'react-icons/fa';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
@@ -427,6 +427,14 @@ const Navbar: React.FC = () => {
                       <span className="text-sm font-medium">Seller Deals</span>
                     </DropdownMenuItem>
 
+                    <DropdownMenuItem
+                      onClick={() => navigateTo('/referral')}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 focus:bg-amber-500/10 focus:text-amber-300 transition-colors font-medium"
+                    >
+                      <FaGift className="text-amber-400 text-sm flex-shrink-0" />
+                      <span className="text-sm">Refer a Friend</span>
+                    </DropdownMenuItem>
+
                     {isUserAdmin && (
                       <>
                         <DropdownMenuSeparator className="my-1" style={{ background: 'var(--xsm-border)' }} />
@@ -575,6 +583,7 @@ const Navbar: React.FC = () => {
               {[
                 { path: '/sell', icon: <FaTag />, label: 'Sell', requireAuth: true },
                 { path: '/', icon: <FaStore />, label: 'Marketplace' },
+                { path: '/referral', icon: <FaGift />, label: 'Refer a Friend', requireAuth: true },
                 { path: '/chat', icon: <FaInbox />, label: 'Inbox', badge: unreadCount, requireAuth: true },
               ].map(item => (
                 <button
@@ -633,6 +642,9 @@ const Navbar: React.FC = () => {
                     </button>
                     <button onClick={() => navigateTo('/seller-deals')} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm text-gray-400 hover:text-white hover:bg-white/[0.04] transition-colors">
                       <FaFileAlt className="text-sm text-gray-600" /><span>Seller Deals</span>
+                    </button>
+                    <button onClick={() => navigateTo('/referral')} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-medium text-amber-400 hover:bg-amber-500/10 transition-colors">
+                      <FaGift className="text-sm" /><span>Refer a Friend</span>
                     </button>
                     {isUserAdmin && (
                       <button onClick={() => navigateTo('/admin-dashboard')} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors">

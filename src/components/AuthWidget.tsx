@@ -39,6 +39,8 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [recaptchaToken, setRecaptchaToken] = useState<string | null>(null);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  // Read referral code from localStorage (set by ReferralRedirect when user visits /ref/:code)
+  const [referralCode] = useState(() => localStorage.getItem('xsm_referrer') || localStorage.getItem('referral_code') || '');
   
   
   const recaptchaRef = useRef<ReCAPTCHA>(null);
@@ -210,7 +212,7 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
 
     try {
       console.log("Sending registration request to backend...");
-      const response = await register(username, email, password, recaptchaToken);
+      const response = await register(username, email, password, recaptchaToken, undefined, referralCode);
       console.log("Registration response:", response);
       
       // Check if response indicates verification is required
@@ -275,7 +277,7 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
         throw new Error('No credential received from Google');
       }
       
-      const response = await googleSignIn(credentialResponse.credential);
+      const response = await googleSignIn(credentialResponse.credential, referralCode);
       
       if (response.user) {
         setIsLoggedIn(true);
@@ -360,56 +362,61 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
 
   return (
     <div 
-      className="fixed inset-0 bg-black/50 flex items-start sm:items-center justify-center z-[9999] animate-fadeIn px-3 py-4 sm:p-6 overflow-y-auto min-h-[100dvh]"
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] animate-fadeIn p-3 sm:p-4 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
         }
       }}
     >
-      <Card className="w-full max-w-[min(92vw,560px)] mx-auto bg-xsm-dark-gray border-xsm-medium-gray relative animate-scaleIn max-h-[calc(100dvh-2rem)] overflow-y-auto">
+      <Card className="w-full max-w-[470px] mx-auto bg-xsm-dark-gray border-xsm-medium-gray relative animate-scaleIn shadow-2xl">
         <button
           onClick={onClose}
-          className="absolute top-2 right-2 text-gray-400 hover:text-white z-10"
+          className="absolute top-2.5 right-2.5 text-gray-400 hover:text-white z-10 transition-colors p-1"
         >
           <X className="w-4 h-4" />
         </button>
         
-        <div className="p-5 sm:p-6">
-          <h2 className="text-2xl sm:text-3xl font-bold text-xsm-yellow mb-6 text-center">
+        <div className="p-4 sm:p-5">
+          <h2 className="text-xl sm:text-2xl font-bold text-xsm-yellow mb-3 text-center">
             {isLogin ? 'Sign in to your account' : 'Create your account'}
           </h2>
 
           {error && (
-            <Alert variant="destructive" className="mb-2">
+            <Alert variant="destructive" className="mb-2.5 py-2">
               <AlertDescription className="text-xs">{error}</AlertDescription>
             </Alert>
           )}
 
-          <form onSubmit={isLogin ? handleLogin : handleSignup} className="space-y-4" noValidate>
+          <form onSubmit={isLogin ? handleLogin : handleSignup} className="space-y-2.5" noValidate>
+            {!isLogin && (localStorage.getItem('xsm_referrer') || localStorage.getItem('referral_code')) && (
+              <div className="p-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 flex items-center gap-2 text-xs text-yellow-300">
+                <span>🎁</span>
+                <span>Referred by <strong>{localStorage.getItem('xsm_referrer') || localStorage.getItem('referral_code')}</strong>. Free 72h Pin upon KYC approval!</span>
+              </div>
+            )}
+
             {!isLogin && (
-              <>
-                <div>
-                  <label htmlFor="username" className="block text-sm font-medium text-white mb-2">
-                    Username
-                  </label>
-                  <Input
-                    id="username"
-                    name="username"
-                    type="text"
-                    required
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Choose a username"
-                    disabled={isLoading}
-                    className="bg-xsm-black h-12 text-base"
-                  />
-                </div>
-              </>
+              <div>
+                <label htmlFor="username" className="block text-xs font-medium text-white mb-1">
+                  Username
+                </label>
+                <Input
+                  id="username"
+                  name="username"
+                  type="text"
+                  required
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  placeholder="Choose a username"
+                  disabled={isLoading}
+                  className="bg-xsm-black h-10 text-sm"
+                />
+              </div>
             )}
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-white mb-2">
+              <label htmlFor="email" className="block text-xs font-medium text-white mb-1">
                 Email address
               </label>
               <Input
@@ -422,12 +429,12 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="Enter your email"
                 disabled={isLoading}
-                className="bg-xsm-black h-12 text-base"
+                className="bg-xsm-black h-10 text-sm"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-white mb-2">
+              <label htmlFor="password" className="block text-xs font-medium text-white mb-1">
                 Password
               </label>
               <div className="relative">
@@ -441,7 +448,7 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={isLogin ? "Enter your password" : "Create a password"}
                   disabled={isLoading}
-                  className="bg-xsm-black pr-10 h-12 text-base"
+                  className="bg-xsm-black pr-10 h-10 text-sm"
                 />
                 <button
                   type="button"
@@ -449,14 +456,26 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white"
                   disabled={isLoading}
                 >
-                  {showPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
+              {isLogin && (
+                <div className="mt-1 text-left">
+                  <button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    className="text-xs text-xsm-light-gray hover:text-xsm-yellow transition-colors"
+                    disabled={isLoading}
+                  >
+                    Forgot your password?
+                  </button>
+                </div>
+              )}
             </div>
 
             {!isLogin && (
               <div>
-                <label htmlFor="confirmPassword" className="block text-sm font-medium text-white mb-2">
+                <label htmlFor="confirmPassword" className="block text-xs font-medium text-white mb-1">
                   Confirm Password
                 </label>
                 <div className="relative">
@@ -469,7 +488,7 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     placeholder="Confirm your password"
                     disabled={isLoading}
-                    className="bg-xsm-black pr-10 h-12 text-base"
+                    className="bg-xsm-black pr-10 h-10 text-sm"
                   />
                   <button
                     type="button"
@@ -477,24 +496,24 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
                     className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-white"
                     disabled={isLoading}
                   >
-                    {showConfirmPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
               </div>
             )}
 
             {!isLogin && (
-              <div className="flex items-start space-x-2">
+              <div className="flex items-start space-x-2 pt-0.5">
                 <input
                   type="checkbox"
                   id="agreeToTerms"
                   checked={agreeToTerms}
                   onChange={(e) => setAgreeToTerms(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-gray-300 text-xsm-yellow focus:ring-xsm-yellow"
+                  className="mt-0.5 h-3.5 w-3.5 rounded border-gray-300 text-xsm-yellow focus:ring-xsm-yellow"
                   disabled={isLoading}
                   required
                 />
-                <label htmlFor="agreeToTerms" className="text-sm text-white">
+                <label htmlFor="agreeToTerms" className="text-xs text-white">
                   I agree to the{' '}
                   <button
                     type="button"
@@ -512,20 +531,8 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
               </div>
             )}
 
-            {isLogin && (
-              <div className="text-center pt-3 pb-2">
-                <button
-                  type="button"
-                  onClick={() => setShowForgotPassword(true)}
-                  className="text-sm text-xsm-light-gray hover:text-xsm-yellow transition-colors"
-                  disabled={isLoading}
-                >
-                  Forgot your password?
-                </button>
-              </div>
-            )}
-            {/* reCAPTCHA */}
-            <div className="flex justify-center py-2">
+            {/* reCAPTCHA - moved slightly upward */}
+            <div className="flex justify-center pt-1 pb-0.5">
               <div className="relative w-[304px] h-[78px] overflow-hidden">
                 <ReCAPTCHA
                   ref={recaptchaRef}
@@ -550,25 +557,48 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
               </div>
             </div>
 
-            <Button 
-              type="submit" 
-              className="w-full bg-xsm-yellow hover:bg-yellow-500 text-black h-14 text-lg"
-              disabled={isLoading || !recaptchaToken}
-            >
-              {isLoading ? (
-                isLogin ? 'Signing in...' : 'Creating account...'
-              ) : (
-                isLogin ? 'Sign in' : 'Sign up'
-              )}
-            </Button>
+            {/* Side-by-side buttons in one row */}
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 items-center pt-0.5">
+              <Button 
+                type="submit" 
+                className="w-full bg-xsm-yellow hover:bg-yellow-500 text-black font-semibold h-[40px] text-sm truncate px-2"
+                disabled={isLoading || !recaptchaToken}
+              >
+                {isLoading ? (
+                  isLogin ? 'Signing in...' : 'Signing up...'
+                ) : (
+                  isLogin ? 'Sign In' : 'Sign Up'
+                )}
+              </Button>
+
+              <div className="w-full h-[40px] flex items-center justify-center overflow-hidden rounded-md">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => {
+                    setError('Google sign-in was cancelled or failed');
+                    toast({
+                      variant: "destructive",
+                      title: "Error",
+                      description: 'Google sign-in was cancelled or failed',
+                    });
+                  }}
+                  useOneTap={false}
+                  theme="filled_black"
+                  size="large"
+                  text="continue_with"
+                  shape="rectangular"
+                  width="100%"
+                />
+              </div>
+            </div>
 
             {/* Show verify email button if there's a verification error */}
             {error && error.includes('verify your email') && (
-              <div>
+              <div className="pt-1">
                 <Button 
                   type="button"
                   variant="outline"
-                  className="w-full border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black"
+                  className="w-full border-yellow-400 text-yellow-400 hover:bg-yellow-400 hover:text-black h-9 text-xs"
                   onClick={() => setShowOTPVerification(true)}
                   disabled={isLoading}
                 >
@@ -576,39 +606,10 @@ const AuthWidget: React.FC<AuthWidgetProps> = ({ onClose, onNavigate }) => {
                 </Button>
               </div>
             )}
-
-            <div className="relative my-4">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-xsm-medium-gray" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-xsm-dark-gray px-2 text-xsm-light-gray">Or continue with</span>
-              </div>
-            </div>
-
-            <div className="w-full">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={() => {
-                  setError('Google sign-in was cancelled or failed');
-                  toast({
-                    variant: "destructive",
-                    title: "Error",
-                    description: 'Google sign-in was cancelled or failed',
-                  });
-                }}
-                useOneTap={false}
-                theme="filled_black"
-                size="large"
-                text={isLogin ? "signin_with" : "signup_with"}
-                shape="rectangular"
-                width="100%"
-              />
-            </div>
           </form>
 
-          <div className="mt-8 text-center">
-            <p className="text-sm text-xsm-light-gray">
+          <div className="mt-3.5 text-center">
+            <p className="text-xs sm:text-sm text-xsm-light-gray">
               {isLogin ? "Don't have an account?" : "Already have an account?"}{' '}
               <button
                 onClick={() => setIsLogin(!isLogin)}

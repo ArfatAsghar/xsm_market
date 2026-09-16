@@ -36,6 +36,8 @@ import SellerDeals from './components/SellerDeals';
 import BuyerDeals from './components/BuyerDeals';
 import AdDetails from './pages/AdDetails';
 import Notifications from './pages/Notifications';
+import ReferralDashboard from './pages/ReferralDashboard';
+import ReferralRedirect from './pages/ReferralRedirect';
 import { getBanData, handleBanResponse, BanData, clearBanData, API_URL } from '@/services/auth';
 
 // Inner component that has access to AuthContext
@@ -179,6 +181,9 @@ const AppContent: React.FC = () => {
                 )
               } 
             />
+            <Route path="/referral" element={<ReferralDashboard />} />
+            <Route path="/refer-a-friend" element={<ReferralDashboard />} />
+            <Route path="/ref/:referralCode" element={<ReferralRedirect />} />
             {/* 404 page */}
             <Route path="/notifications" element={<Notifications />} />
             <Route path="/404" element={<NotFound />} />

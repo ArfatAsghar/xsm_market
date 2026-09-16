@@ -488,6 +488,21 @@ class AdController {
             $newPinnedStatus = !$ad['pinned'];
             $pinnedAt = $newPinnedStatus ? date('Y-m-d H:i:s') : null;
             
+            if ($newPinnedStatus) {
+                // Pinning requires either VIP membership or an active Free Pin reward
+                $vipUntil = $user['vipUntil'] ?? null;
+                $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
+                
+                if (!$isVip) {
+                    require_once __DIR__ . '/../services/ReferralService.php';
+                    $usedPin = ReferralService::useFreePin($user['id'], $adId);
+                    if (!$usedPin) {
+                        Response::error('You need an active Free Pin reward or VIP membership to pin this listing. Invite friends or complete KYC verification to earn Free 72-Hour Pins!', 400);
+                        return;
+                    }
+                }
+            }
+            
             $result = Ad::updatePin($adId, $newPinnedStatus, $pinnedAt);
             
             if ($result) {
@@ -546,22 +561,26 @@ class AdController {
                 $nextPullTime->add(new DateInterval('P' . $cooldownDays . 'D'));
                 
                 if ($currentTime < $nextPullTime) {
-                    $timeUntilNextPull = $currentTime->diff($nextPullTime);
-                    
-                    Response::error('Bump cooldown active', 400, [
-                        'cooldownActive' => true,
-                        'isVip' => $isVip,
-                        'cooldownDays' => $cooldownDays,
-                        'lastPulledAt' => $ad['lastPulledAt'],
-                        'nextPullAllowedAt' => $nextPullTime->format('Y-m-d H:i:s'),
-                        'timeRemaining' => [
-                            'days' => $timeUntilNextPull->days,
-                            'hours' => $timeUntilNextPull->h,
-                            'minutes' => $timeUntilNextPull->i,
-                            'seconds' => $timeUntilNextPull->s
-                        ]
-                    ]);
-                    return;
+                    require_once __DIR__ . '/../services/ReferralService.php';
+                    $usedFreeBump = ReferralService::useFreeBump($user['id'], $adId);
+                    if (!$usedFreeBump) {
+                        $timeUntilNextPull = $currentTime->diff($nextPullTime);
+                        
+                        Response::error('Bump cooldown active', 400, [
+                            'cooldownActive' => true,
+                            'isVip' => $isVip,
+                            'cooldownDays' => $cooldownDays,
+                            'lastPulledAt' => $ad['lastPulledAt'],
+                            'nextPullAllowedAt' => $nextPullTime->format('Y-m-d H:i:s'),
+                            'timeRemaining' => [
+                                'days' => $timeUntilNextPull->days,
+                                'hours' => $timeUntilNextPull->h,
+                                'minutes' => $timeUntilNextPull->i,
+                                'seconds' => $timeUntilNextPull->s
+                            ]
+                        ]);
+                        return;
+                    }
                 }
             }
             

@@ -630,9 +630,10 @@ const Profile: React.FC<ProfileProps> = () => {
         <div className="grid lg:grid-cols-3 gap-8">
           {/* Profile Overview */}
           <div className="lg:col-span-1">
-            <div className="xsm-card text-center mb-6">
-              <div className="w-24 h-24 rounded-full mx-auto mb-4 flex items-center justify-center relative">
-                {/* Green ring for active status */}
+            <div className="xsm-card text-center mb-4">
+              {/* Avatar with dynamic online ring */}
+              <div className="w-24 h-24 rounded-full mx-auto mb-3 flex items-center justify-center relative">
+                {/* Green ring — always online for own profile */}
                 <div className="absolute inset-0 rounded-full border-2 border-green-400 animate-pulse"></div>
                 <div className="w-[90px] h-[90px] rounded-full overflow-hidden relative">
                   {(isEditing ? editForm.profilePicture : profile.profilePicture) ? (
@@ -658,28 +659,43 @@ const Profile: React.FC<ProfileProps> = () => {
                     title="Change profile picture"
                   />
                 </div>
-              </div>
-              <h2 className="text-2xl font-bold text-white mb-2 flex items-center justify-center gap-1.5">
-                {profile.username}
-                {(user as any)?.isVip && (
-                  <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400/20 animate-pulse" title="VIP Member" />
-                )}
-              </h2>
-              <p className="text-gray-300 font-medium mb-2">{profile.email}</p>
-              
-              {/* Joining Date */}
-              <p className="text-sm text-gray-300 font-medium mb-4">
-                {formatJoinDate(profile.joinDate)}
-              </p>
-              
-              <div className="text-xs font-semibold text-green-400 text-center mb-3">
-                Active now
+                {/* Online green dot indicator */}
+                <span className="absolute top-0 right-0 w-3.5 h-3.5 rounded-full bg-green-400 border-2 border-xsm-dark-gray"></span>
               </div>
 
-              {/* Dynamic Average Response Time Badge */}
-              <div className="mb-4 inline-flex items-center gap-1.5 bg-xsm-yellow/10 border border-xsm-yellow/30 px-3 py-1.5 rounded-full text-xs font-semibold text-xsm-yellow">
-                <Clock className="w-3.5 h-3.5" />
-                <span>{(user as any)?.sellerMetrics?.responseTime || (user as any)?.averageResponseTime || 'Usually replies in 10 minutes'}</span>
+              {/* Username + VIP */}
+              <h2 className="text-xl font-bold text-white mb-1 flex items-center justify-center gap-1.5">
+                {profile.username}
+                {(user as any)?.isVip && (
+                  <Crown className="w-4 h-4 text-yellow-400 fill-yellow-400/20 animate-pulse" title="VIP Member" />
+                )}
+              </h2>
+
+              {/* Email */}
+              <p className="text-gray-400 text-xs mb-1">{profile.email}</p>
+
+              {/* Join date + Online status in one compact row */}
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <span className="text-xs text-gray-400">{formatJoinDate(profile.joinDate)}</span>
+                <span className="w-1 h-1 rounded-full bg-gray-600"></span>
+                <span className="flex items-center gap-1 text-xs font-semibold text-green-400">
+                  <span className="w-2 h-2 rounded-full bg-green-400 inline-block"></span>
+                  Online
+                </span>
+              </div>
+
+              {/* Response Time Badge — clickable with info */}
+              <div className="relative group inline-block mb-3">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1.5 bg-xsm-yellow/10 border border-xsm-yellow/30 px-3 py-1 rounded-full text-xs font-semibold text-xsm-yellow hover:bg-xsm-yellow/20 transition-colors cursor-help"
+                >
+                  <Clock className="w-3 h-3" />
+                  <span>Usually Replies Within 1+ Day</span>
+                </button>
+                <div className="absolute left-1/2 bottom-full mb-2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-50 w-56 bg-gray-900/95 text-gray-200 text-[11px] p-2 rounded-lg border border-xsm-yellow/30 shadow-2xl pointer-events-none text-center leading-relaxed">
+                  Average response time based on past conversations. Faster replies improve your reputation score.
+                </div>
               </div>
 
               {/* 🛡️ Seller Profile Card — 4 Metrics (Lucide Icons) */}
@@ -776,15 +792,36 @@ const Profile: React.FC<ProfileProps> = () => {
               </div>
 
               <div>
-                <div className="mb-6">
+                <div className="mb-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <h4 className="text-sm font-semibold text-xsm-light-gray">About</h4>
+                    {isEditing && (
+                      <span className={`text-[11px] font-medium ${
+                        ((editForm.description || '').trim() ? (editForm.description || '').trim().split(/\s+/).length : 0) >= 200
+                          ? 'text-amber-400 font-bold'
+                          : 'text-gray-400'
+                      }`}>
+                        {((editForm.description || '').trim() ? (editForm.description || '').trim().split(/\s+/).length : 0)}/200 words
+                      </span>
+                    )}
+                  </div>
                   <div className="relative">
                     <textarea
                       value={isEditing ? editForm.description : profile.description}
-                      onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                      onChange={(e) => {
+                        const text = e.target.value;
+                        const words = text.trim() ? text.trim().split(/\s+/) : [];
+                        if (words.length <= 200) {
+                          setEditForm({ ...editForm, description: text });
+                        } else {
+                          const truncated = words.slice(0, 200).join(' ');
+                          setEditForm({ ...editForm, description: truncated });
+                        }
+                      }}
                       disabled={!isEditing}
-                      className={`xsm-input w-full min-h-[120px] resize-y pr-12 ${!isEditing ? 'opacity-60' : ''}`}
-                      placeholder="Tell others about yourself..."
-                      maxLength={500}
+                      className={`xsm-input w-full pr-12 text-xs sm:text-sm leading-relaxed ${!isEditing ? 'opacity-75' : ''}`}
+                      style={{ height: '105px', maxHeight: '105px', overflowY: 'auto', resize: 'none' }}
+                      placeholder="Tell others about yourself (maximum 200 words)..."
                     />
                     
                     {/* Edit button inside textarea - top right corner */}
@@ -839,8 +876,8 @@ const Profile: React.FC<ProfileProps> = () => {
                   </div>
                   
                   {isEditing && (
-                    <p className="text-gray-400 text-sm mt-2">
-                      {editForm.description?.length || 0}/500 characters
+                    <p className="text-gray-400 text-xs mt-1">
+                      {editForm.description?.trim().split(/\s+/).filter(Boolean).length || 0}/200 words
                     </p>
                   )}
                 </div>

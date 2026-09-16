@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import ChannelCard from '../components/ChannelCard';
 import AdList from '../components/AdList';
 import AuthWidget from '../components/AuthWidget';
-import { TrendingUp, Zap, Shield, Search, Check, Sliders, Bell, X } from 'lucide-react';
+import { TrendingUp, Zap, Shield, Search, Check, Sliders, Bell, X, Gift } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useToast } from "@/components/ui/use-toast";
 import { getAllAds } from '../services/ads';
@@ -694,6 +694,37 @@ const Home: React.FC<HomeProps> = () => {
             </span>
           ))}
         </div>
+      </div>
+
+      {/* ── Floating Referral Button (Marketplace Only) ── */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <button
+          onClick={() => {
+            if (!isLoggedIn) {
+              setShowAuthWidget(true);
+            } else {
+              navigate('/referral');
+            }
+          }}
+          className="group relative flex items-center gap-2.5 px-4 py-3 sm:px-5 sm:py-3.5 rounded-full text-black font-extrabold text-xs sm:text-sm transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-[0_4px_25px_rgba(255,208,0,0.5)] hover:shadow-[0_6px_35px_rgba(255,208,0,0.8)] border border-yellow-300/50 cursor-pointer overflow-hidden"
+          style={{
+            background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 50%, #FF8C00 100%)',
+          }}
+          title="Refer a Friend & Earn Free Pins, VIP Credits, and Bumps!"
+        >
+          {/* Subtle shine animation on hover */}
+          <div className="absolute inset-0 bg-white/20 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-700 pointer-events-none" />
+
+          <div className="relative flex items-center justify-center">
+            <Gift className="w-5 h-5 transition-transform duration-300 group-hover:rotate-12 group-hover:scale-110" />
+            <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-600 rounded-full border border-white animate-pulse" />
+          </div>
+
+          <div className="flex flex-col text-left leading-tight">
+            <span className="tracking-wide font-black">Refer a Friend</span>
+            <span className="text-[10px] text-black/80 font-bold hidden sm:inline">Earn Free Pins & $1 Credits</span>
+          </div>
+        </button>
       </div>
     </>
   );

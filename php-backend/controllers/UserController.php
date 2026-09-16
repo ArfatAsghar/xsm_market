@@ -289,7 +289,7 @@ class UserController {
         } elseif ($mins < 1440) {
             return '🟠 Within a few hours';
         } else {
-            return '🔴 Usually 1+ day';
+            return '🔴 Usually Replies Within 1+ Day';
         }
     }
 
@@ -1309,7 +1309,7 @@ public function getUserByUsername($username) {
         // Find user by username.
         // Do not block seller profile only because local/test account is not email verified.
         $stmt = $pdo->prepare("
-            SELECT id, username, fullName, profilePicture, description, isEmailVerified, createdAt, vipUntil
+            SELECT id, username, fullName, profilePicture, description, isEmailVerified, createdAt, vipUntil, lastSeenAt, isOnline
             FROM users
             WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
             LIMIT 1
@@ -1326,6 +1326,19 @@ public function getUserByUsername($username) {
         $vipUntil = $userData['vipUntil'] ?? null;
         $isVip = !empty($vipUntil) && strtotime($vipUntil) > time();
         $avgResponseTime = self::calculateAverageResponseTime($userData['id']);
+
+        // Compute online status and last seen
+        $lastSeenAt = $userData['lastSeenAt'] ?? null;
+        $isOnline = false;
+        if (!empty($lastSeenAt)) {
+            $diffSeconds = time() - strtotime($lastSeenAt);
+            if ($diffSeconds <= 300) { // active within 5 minutes
+                $isOnline = true;
+            }
+        }
+        if (!empty($userData['isOnline'])) {
+            $isOnline = true;
+        }
 
         // Get active listing count for this user
         $adCount = 0;
@@ -1364,7 +1377,9 @@ public function getUserByUsername($username) {
             'vipUntil' => $vipUntil,
             'isVip' => $isVip,
             'averageResponseTime' => $avgResponseTime,
-            'sellerMetrics' => $sellerMetrics
+            'sellerMetrics' => $sellerMetrics,
+            'lastSeenAt' => $lastSeenAt,
+            'isOnline' => $isOnline
         ];
 
         Response::json([
@@ -1415,12 +1430,41 @@ public function getUserByUsername($username) {
             $update = $pdo->prepare("UPDATE users SET vipUntil = ? WHERE id = ?");
             $update->execute([$newVipUntil, $user['id']]);
 
+            // Check if user is using a VIP coupon ($2.00 value)
+            require_once __DIR__ . '/../services/ReferralService.php';
+            $useCoupon = !empty($input['useCoupon']) || !empty($input['use_coupon']);
+            $couponDiscount = 0;
+            if ($useCoupon) {
+                if (ReferralService::useVipCoupon($user['id'])) {
+                    $couponDiscount = 2.00;
+                }
+            }
+
+            // Check if user is using referral credits
+            $netPrice = max(0, $price - $couponDiscount);
+            $requestedCredits = floatval($input['useCredits'] ?? $input['use_credits'] ?? 0);
+            $useCredits = min($netPrice, max(0, $requestedCredits));
+            if ($useCredits > 0) {
+                $creditApplied = ReferralService::applyCredit($user['id'], $useCredits, "Applied referral credit towards {$months} month(s) VIP purchase");
+                if (!$creditApplied) {
+                    Response::error('Insufficient referral credit balance', 400);
+                    return;
+                }
+            }
+
             // Log purchase in vip_purchases
             try {
                 $logStmt = $pdo->prepare("INSERT INTO vip_purchases (user_id, months, amount) VALUES (?, ?, ?)");
                 $logStmt->execute([$user['id'], $months, $price]);
             } catch (Exception $logEx) {
                 error_log("Failed to log vip_purchases: " . $logEx->getMessage());
+            }
+
+            // Trigger referral reward for the user's referrer (User A gets $1 credit + coupon + 5 bumps + 3 fee deals)
+            try {
+                ReferralService::rewardVipPurchase($user['id'], $months, $price);
+            } catch (Throwable $refVipEx) {
+                error_log('Referral VIP reward error: ' . $refVipEx->getMessage());
             }
 
             // In-app bell notification for VIP purchase
@@ -1441,6 +1485,8 @@ public function getUserByUsername($username) {
                 'vipUntil' => $newVipUntil,
                 'isVip' => true,
                 'price' => $price,
+                'couponDiscount' => $couponDiscount,
+                'creditsUsed' => $useCredits,
                 'months' => $months
             ]);
         } catch (Exception $e) {
@@ -1465,12 +1511,72 @@ public function getUserByUsername($username) {
             $prices = [1 => 10.00, 2 => 18.00, 3 => 25.00];
             $price = $prices[$months];
 
+            require_once __DIR__ . '/../services/ReferralService.php';
+            $useCoupon = !empty($input['use_coupon']) || !empty($input['useCoupon']);
+            $couponDiscount = 0;
+            if ($useCoupon && ReferralService::getVipCouponCount($user['id']) > 0) {
+                $couponDiscount = 2.00;
+            }
+
+            $payable = max(0, $price - $couponDiscount);
+            $requestedCredits = floatval($input['useCredits'] ?? $input['use_credits'] ?? 0);
+            $appliedCredits = min($payable, max(0, $requestedCredits));
+            $finalPrice = max(0, $payable - $appliedCredits);
+
+            // If coupon + credits cover 100% of price, activate VIP directly!
+            if ($finalPrice <= 0) {
+                if ($couponDiscount > 0) {
+                    ReferralService::useVipCoupon($user['id']);
+                }
+                if ($appliedCredits > 0) {
+                    ReferralService::applyCredit($user['id'], $appliedCredits, "VIP membership ({$months} month(s)) paid with referral credits");
+                }
+
+                $pdo = Database::getConnection();
+                $stmt = $pdo->prepare("SELECT vipUntil FROM users WHERE id = ?");
+                $stmt->execute([$user['id']]);
+                $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+                $currentVipUntil = $row['vipUntil'] ?? null;
+                $base = (!empty($currentVipUntil) && strtotime($currentVipUntil) > time()) ? new DateTime($currentVipUntil) : new DateTime();
+                $base->modify("+{$months} months");
+                $newVipUntil = $base->format('Y-m-d H:i:s');
+
+                $pdo->prepare("UPDATE users SET vipUntil = ? WHERE id = ?")->execute([$newVipUntil, $user['id']]);
+
+                try {
+                    $pdo->prepare("INSERT INTO vip_purchases (user_id, months, amount, payment_status) VALUES (?, ?, ?, 'completed')")
+                        ->execute([$user['id'], $months, 0.00]);
+                } catch (Throwable $e) {}
+
+                try {
+                    ReferralService::rewardVipPurchase($user['id'], $months, $price);
+                } catch (Throwable $e) {}
+
+                try {
+                    $pdo->prepare("
+                        INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                        VALUES (?, 'vip', 'VIP Status Activated 👑',
+                                'Congratulations! Your VIP membership has been activated for {$months} month(s) until {$newVipUntil} using your referral rewards!',
+                                '/profile', 0, NOW())
+                    ")->execute([(int)$user['id']]);
+                } catch (Throwable $notifEx) {}
+
+                Response::json([
+                    'success' => true,
+                    'paidInFull' => true,
+                    'message' => "VIP membership activated successfully with credits/coupons!",
+                    'vipUntil' => $newVipUntil
+                ]);
+                return;
+            }
+
             require_once __DIR__ . '/../utils/NOWPaymentsAPI.php';
             $nowPayments = new NOWPaymentsAPI();
             $orderId = "vip_{$user['id']}_{$months}_" . time();
 
             $paymentData = [
-                'price_amount' => $price,
+                'price_amount' => $finalPrice,
                 'price_currency' => 'usd',
                 'pay_currency' => $payCurrency,
                 'order_id' => $orderId,

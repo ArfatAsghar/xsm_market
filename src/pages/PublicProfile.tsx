@@ -22,7 +22,133 @@ interface PublicUser {
   vipUntil?: string | null;
   averageResponseTime?: string;
   sellerMetrics?: SellerMetrics;
+  lastSeenAt?: string | null;
+  isOnline?: boolean;
 }
+
+// Format response time label to ensure "Usually replies in __ mins" is communicated clearly and completely
+const formatResponseTimeLabel = (rawResponseTime?: string) => {
+  if (!rawResponseTime) return 'Usually replies in 15 mins';
+  
+  // Clean emojis, unicode replacement characters, or leading non-alphanumeric chars
+  const clean = rawResponseTime
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\uFFFD]/gu, '')
+    .replace(/^[^a-zA-Z0-9]+/, '')
+    .trim();
+  
+  if (!clean) return 'Usually replies in 15 mins';
+
+  // If format is like "Under 15 min" or "Under 5 min" -> "Usually replies in 15 mins"
+  const underMinMatch = clean.match(/under\s+(\d+)\s*min/i);
+  if (underMinMatch) {
+    return `Usually replies in ${underMinMatch[1]} mins`;
+  }
+
+  // If format is "15 minutes" or "15 min"
+  const minMatch = clean.match(/(\d+)\s*min/i);
+  if (minMatch && !/hour|day/i.test(clean)) {
+    return `Usually replies in ${minMatch[1]} mins`;
+  }
+
+  // If "Under 1 hour" or "Within 1 hour"
+  if (/1\s*hour/i.test(clean)) {
+    return 'Usually replies in 1 hour';
+  }
+
+  // If "Within a few hours" or "few hours"
+  if (/few\s*hours/i.test(clean)) {
+    return 'Usually replies in few hours';
+  }
+
+  // If "1+ day" or "1+ Day"
+  if (/1\+\s*day/i.test(clean)) {
+    return 'Usually replies within 1+ day';
+  }
+
+  // If already starts with "usually replies in"
+  if (/^usually\s+replies\s+in\s+/i.test(clean)) {
+    return clean.replace(/minutes/i, 'mins');
+  }
+
+  // If starts with "usually replies within"
+  if (/^usually\s+replies\s+within\s+/i.test(clean)) {
+    return clean;
+  }
+
+  // If starts with "usually"
+  if (/^usually\s+/i.test(clean)) {
+    return clean.replace(/^usually\s+/i, 'Usually replies in ');
+  }
+
+  return `Usually replies in ${clean}`;
+};
+
+// Calculate online/offline and dynamic last seen status
+const getOnlineStatusDisplay = (lastSeenAt?: string | null, isOnlineFlag?: boolean, isOwn?: boolean) => {
+  if (isOwn) {
+    return {
+      isOnline: true,
+      badgeText: 'Online',
+      detailText: 'Active Now',
+    };
+  }
+
+  if (isOnlineFlag) {
+    return {
+      isOnline: true,
+      badgeText: 'Online',
+      detailText: 'Active Now',
+    };
+  }
+
+  if (!lastSeenAt) {
+    return {
+      isOnline: false,
+      badgeText: 'Offline',
+      detailText: 'Offline',
+    };
+  }
+
+  let lastSeen: Date;
+  if (lastSeenAt.includes('T') || lastSeenAt.includes('Z')) {
+    lastSeen = new Date(lastSeenAt);
+  } else {
+    lastSeen = new Date(lastSeenAt.replace(' ', 'T') + 'Z');
+    if (isNaN(lastSeen.getTime())) {
+      lastSeen = new Date(lastSeenAt);
+    }
+  }
+
+  const now = new Date();
+  const diffInMinutes = Math.floor((now.getTime() - lastSeen.getTime()) / (1000 * 60));
+
+  if (diffInMinutes >= 0 && diffInMinutes < 5) {
+    return {
+      isOnline: true,
+      badgeText: 'Online',
+      detailText: 'Active Now',
+    };
+  }
+
+  let text = 'Offline';
+  if (diffInMinutes <= 1 || isNaN(diffInMinutes)) {
+    text = 'Last seen 1 minute ago';
+  } else if (diffInMinutes < 60) {
+    text = `Last seen ${diffInMinutes} minutes ago`;
+  } else if (diffInMinutes < 1440) {
+    const hours = Math.floor(diffInMinutes / 60);
+    text = `Last seen ${hours} hour${hours > 1 ? 's' : ''} ago`;
+  } else {
+    const days = Math.floor(diffInMinutes / 1440);
+    text = `Last seen ${days} day${days > 1 ? 's' : ''} ago`;
+  }
+
+  return {
+    isOnline: false,
+    badgeText: 'Offline',
+    detailText: text,
+  };
+};
 
 // Helper sub-component for Reviews Dropdown in Right Sidebar
 const ReviewsDropdownList: React.FC<{ reviews?: ReviewItem[] }> = ({ reviews = [] }) => {
@@ -83,12 +209,24 @@ const PublicProfile: React.FC = () => {
   const [profileUser, setProfileUser] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Response Time Info Modal State
+  const [showResponseInfoModal, setShowResponseInfoModal] = useState(false);
+  const [, setTick] = useState(0);
+
   // Edit Profile / Description Modal State
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFullName, setEditFullName] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editProfilePicture, setEditProfilePicture] = useState('');
   const [savingProfile, setSavingProfile] = useState(false);
+
+  // Timer to dynamically update relative last seen times every 30s
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick(t => t + 1);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -107,6 +245,21 @@ const PublicProfile: React.FC = () => {
     };
 
     fetchProfile();
+
+    // Background polling every 45 seconds to keep online/last seen status accurate
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await getPublicProfile(username);
+        const userData = res?.data ? res.data : res;
+        if (userData) {
+          setProfileUser(prev => prev ? { ...prev, ...userData } : userData);
+        }
+      } catch {
+        // ignore background poll errors
+      }
+    }, 45000);
+
+    return () => clearInterval(pollInterval);
   }, [username]);
 
   const handleOpenEditModal = () => {
@@ -307,6 +460,7 @@ const PublicProfile: React.FC = () => {
   }
 
   const isOwnProfile = isLoggedIn && !!currentUser && currentUser.username?.toLowerCase() === profileUser.username?.toLowerCase();
+  const onlineStatusInfo = getOnlineStatusDisplay(profileUser.lastSeenAt, profileUser.isOnline, isOwnProfile);
 
   return (
     <div className="min-h-screen bg-xsm-black text-white pt-6 pb-12">
@@ -316,100 +470,151 @@ const PublicProfile: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
 
           {/* ── LEFT SIDEBAR (3 Columns on Desktop) ── */}
-          <div className="lg:col-span-3 space-y-6">
-            <div className="bg-xsm-dark-gray rounded-xl p-5 shadow-lg border border-xsm-medium-gray/30 text-center">
+          <div className="lg:col-span-3">
+            <div className="bg-xsm-dark-gray rounded-xl p-3.5 shadow-lg border border-xsm-medium-gray/30 space-y-2.5">
               
-              {/* Profile Avatar */}
-              <div className="relative w-28 h-28 mx-auto mb-4">
-                <div className="w-full h-full rounded-full bg-xsm-yellow flex items-center justify-center overflow-hidden ring-4 ring-xsm-yellow/20 shadow-lg">
-                  {profileUser.profilePicture ? (
-                    <img
-                      src={profileUser.profilePicture}
-                      alt={`${profileUser.username}'s profile`}
-                      className="w-full h-full object-cover"
-                      onError={(e) => {
-                        const target = e.target as HTMLImageElement;
-                        target.style.display = 'none';
-                      }}
+              {/* ── Compact Profile Picture + Status Row (Left: Response Time | Center: Avatar | Right: Online/Offline) ── */}
+              <div className="bg-xsm-black/50 border border-xsm-medium-gray/30 rounded-xl p-2 flex items-center justify-between gap-1.5 shadow-inner">
+                
+                {/* Left: Response Time Box (Clickable) */}
+                <button
+                  type="button"
+                  onClick={() => setShowResponseInfoModal(true)}
+                  className="flex-1 min-w-0 min-h-[74px] h-[74px] flex flex-col items-center justify-center p-1.5 rounded-lg bg-xsm-dark-gray/90 border border-xsm-yellow/30 hover:border-xsm-yellow hover:bg-xsm-black/80 transition-all text-center group cursor-pointer shadow-sm"
+                  title="Click to view seller response time info"
+                >
+                  <Clock className="w-3.5 h-3.5 text-xsm-yellow mb-1 flex-shrink-0 group-hover:scale-110 transition-transform" />
+                  <span className="text-[9.5px] font-semibold text-xsm-yellow leading-[1.25] px-0.5 break-words">
+                    {formatResponseTimeLabel(profileUser.sellerMetrics?.responseTime || profileUser.averageResponseTime)}
+                  </span>
+                </button>
+
+                {/* Center: Profile Picture + Online Green Ring/Dot */}
+                <div className="relative flex-shrink-0 flex items-center justify-center">
+                  <div className={`w-[74px] h-[74px] rounded-full overflow-hidden flex items-center justify-center transition-all ${
+                    onlineStatusInfo.isOnline
+                      ? 'ring-3 ring-emerald-500 shadow-[0_0_14px_rgba(16,185,129,0.45)]'
+                      : 'ring-2 ring-xsm-medium-gray/40 shadow'
+                  }`}>
+                    {profileUser.profilePicture ? (
+                      <img
+                        src={profileUser.profilePicture}
+                        alt={`${profileUser.username}'s profile`}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const target = e.target as HTMLImageElement;
+                          target.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-xsm-yellow flex items-center justify-center">
+                        <UserIcon className="w-9 h-9 text-black" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Online Status Dot */}
+                  {onlineStatusInfo.isOnline && (
+                    <span
+                      className="absolute top-0 right-0.5 w-3.5 h-3.5 bg-emerald-500 border-2 border-xsm-dark-gray rounded-full shadow-sm"
+                      title="Currently Online"
                     />
-                  ) : (
-                    <UserIcon className="w-14 h-14 text-black" />
+                  )}
+
+                  {/* Edit Profile Picture Button (Own Profile) */}
+                  {isOwnProfile && (
+                    <button
+                      type="button"
+                      onClick={handleOpenEditModal}
+                      className="absolute -bottom-1 -right-1 bg-xsm-yellow text-black p-1.5 rounded-full hover:bg-yellow-400 transition-colors shadow-lg border border-black/40"
+                      title="Upload Profile Picture"
+                    >
+                      <Camera className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </div>
 
-                {isOwnProfile && (
-                  <button
-                    type="button"
-                    onClick={handleOpenEditModal}
-                    className="absolute bottom-0 right-0 bg-xsm-yellow text-black p-2 rounded-full hover:bg-yellow-500 transition-colors shadow-lg"
-                    title="Upload Profile Picture"
-                  >
-                    <Camera className="w-4 h-4" />
-                  </button>
-                )}
+                {/* Right: Online / Offline Status Box */}
+                <div className={`flex-1 min-w-0 min-h-[74px] h-[74px] flex flex-col items-center justify-center p-1.5 rounded-lg border text-center transition-all shadow-sm ${
+                  onlineStatusInfo.isOnline
+                    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400'
+                    : 'bg-xsm-dark-gray/90 border-xsm-medium-gray/30 text-gray-300'
+                }`}>
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      onlineStatusInfo.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'
+                    }`} />
+                    <span className={`text-[10px] font-bold ${
+                      onlineStatusInfo.isOnline ? 'text-emerald-400' : 'text-gray-400'
+                    }`}>
+                      {onlineStatusInfo.isOnline ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+                  <span className={`text-[9.5px] font-medium leading-[1.25] px-0.5 break-words ${
+                    onlineStatusInfo.isOnline ? 'text-emerald-300' : 'text-gray-400'
+                  }`}>
+                    {onlineStatusInfo.isOnline ? 'Active Now' : onlineStatusInfo.detailText}
+                  </span>
+                </div>
+
               </div>
 
-              {/* User Info */}
-              <div className="mb-4">
-                <h1 className="text-xl font-bold text-white mb-1 flex items-center justify-center gap-1.5">
+              {/* User Info (Username, Crown, VIP badge) */}
+              <div className="text-center pt-0.5">
+                <h1 className="text-lg font-bold text-white flex items-center justify-center gap-1.5 leading-snug">
                   {profileUser.fullName || profileUser.username}
                   {profileUser.isVip && (
-                    <Crown className="w-5 h-5 text-yellow-400 fill-yellow-400/20 animate-pulse" title="VIP Seller" />
+                    <Crown className="w-4 h-4 text-yellow-400 fill-yellow-400/20 animate-pulse" title="VIP Seller" />
                   )}
                 </h1>
 
-                <p className="text-xsm-light-gray text-xs mb-3 font-mono">
+                <p className="text-xsm-light-gray text-xs font-mono">
                   @{profileUser.username}
                 </p>
 
-                <div className="flex justify-center gap-2 mb-3">
-                  {profileUser.isVip && (
-                    <span className="flex items-center gap-0.5 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-black shadow shadow-yellow-900/40">
+                {profileUser.isVip && (
+                  <div className="flex justify-center mt-1">
+                    <span className="inline-flex items-center gap-1 bg-gradient-to-r from-yellow-500 to-amber-500 text-black text-[10px] px-2 py-0.5 rounded-full font-black shadow-sm">
                       <Crown className="w-2.5 h-2.5" /> VIP Seller
                     </span>
-                  )}
-                </div>
-
-                {/* SINGLE Response Time Badge */}
-                <div className="mb-4 inline-flex items-center gap-1.5 bg-xsm-yellow/10 border border-xsm-yellow/30 px-3 py-1.5 rounded-full text-xs font-semibold text-xsm-yellow">
-                  <Clock className="w-3.5 h-3.5 text-xsm-yellow" />
-                  <span>{profileUser.sellerMetrics?.responseTime || 'Usually replies in 10 minutes'}</span>
-                </div>
-
-                {/* 🛡️ Reputation Score Card (Compact height) */}
-                <div className="w-full text-left bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl py-2 px-3 mb-2 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1 rounded-md bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="font-semibold text-white text-xs">Reputation Score</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-bold text-xsm-yellow text-xs leading-tight">{(profileUser.sellerMetrics?.reputationScore ?? 0).toLocaleString()}</div>
-                      <div className="text-[9px] text-emerald-400 font-semibold leading-none">
-                        +{(profileUser.sellerMetrics?.thisMonthPoints ?? 0).toLocaleString()} this month
-                      </div>
-                    </div>
                   </div>
-                </div>
+                )}
+              </div>
 
-                {/* 🔁 Returning Partners Card (Compact height) */}
-                <div className="w-full text-left bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl py-2 px-3 mb-3 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="p-1 rounded-md bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
-                        <Users className="w-3.5 h-3.5" />
-                      </div>
-                      <span className="font-semibold text-white text-xs">Returning Partners</span>
+              {/* 🛡️ Reputation Score Card (Compact height) */}
+              <div className="w-full text-left bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl py-2 px-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-md bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
+                      <ShieldCheck className="w-3.5 h-3.5" />
                     </div>
-                    <span className="font-bold text-white text-xs">{(profileUser.sellerMetrics?.returningPartners ?? 0).toLocaleString()}</span>
+                    <span className="font-semibold text-white text-xs">Reputation Score</span>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-bold text-xsm-yellow text-xs leading-tight">{(profileUser.sellerMetrics?.reputationScore ?? 0).toLocaleString()}</div>
+                    <div className="text-[9px] text-emerald-400 font-semibold leading-none">
+                      +{(profileUser.sellerMetrics?.thisMonthPoints ?? 0).toLocaleString()} this month
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {isOwnProfile && (
-                <div className="mb-4">
+              {/* 🔁 Returning Partners Card (Compact height) */}
+              <div className="w-full text-left bg-xsm-black/80 border border-xsm-medium-gray/40 rounded-xl py-2 px-3 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1 rounded-md bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
+                      <Users className="w-3.5 h-3.5" />
+                    </div>
+                    <span className="font-semibold text-white text-xs">Returning Partners</span>
+                  </div>
+                  <span className="font-bold text-white text-xs">{(profileUser.sellerMetrics?.returningPartners ?? 0).toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Action Button: Edit Profile or Message Seller */}
+              {isOwnProfile ? (
+                <div>
                   <button
                     type="button"
                     onClick={handleOpenEditModal}
@@ -419,59 +624,135 @@ const PublicProfile: React.FC = () => {
                     Edit Profile
                   </button>
                 </div>
-              )}
-
-              {/* Profile Stats */}
-              <div className="pt-3 border-t border-xsm-medium-gray/20 text-xs">
-                <div className="flex items-center justify-between">
-                  <span className="text-xsm-light-gray">Member since</span>
-                  <span className="text-white font-medium flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-xsm-yellow" />
-                    {formatDate(profileUser.createdAt)}
-                  </span>
-                </div>
-              </div>
-
-              {!isOwnProfile && (
-                <div className="mt-4">
+              ) : (
+                <div>
                   <button
                     type="button"
                     onClick={handleMessageSeller}
-                    className="w-full bg-xsm-yellow text-black px-4 py-2.5 rounded-lg hover:bg-yellow-500 transition-colors font-bold text-xs flex items-center justify-center gap-2 shadow-lg"
+                    className="w-full bg-xsm-yellow text-black px-4 py-2 rounded-lg hover:bg-yellow-500 transition-colors font-bold text-xs flex items-center justify-center gap-2 shadow-md"
                   >
-                    <MessageCircle className="w-4 h-4" />
+                    <MessageCircle className="w-3.5 h-3.5" />
                     Message Seller
                   </button>
                 </div>
               )}
+
+              {/* Profile Stats */}
+              <div className="pt-2 border-t border-xsm-medium-gray/20 text-xs flex items-center justify-between">
+                <span className="text-xsm-light-gray">Member since</span>
+                <span className="text-white font-medium flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-xsm-yellow" />
+                  {formatDate(profileUser.createdAt)}
+                </span>
+              </div>
+
             </div>
           </div>
 
-          {/* ── MIDDLE MAIN CONTENT SECTION (6 Columns on Desktop) ── */}
-          <div className="lg:col-span-6 space-y-6">
-            {/* Profile Description (Always available with default description) */}
-            <div className="bg-xsm-dark-gray rounded-xl p-5 shadow-lg border border-xsm-medium-gray/30">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-bold text-xsm-yellow">About</h2>
-                {isOwnProfile && (
-                  <button
-                    type="button"
-                    onClick={handleOpenEditModal}
-                    className="text-xsm-light-gray hover:text-xsm-yellow transition-colors flex items-center gap-1 text-xs font-semibold"
-                    title="Edit Description"
-                  >
-                    <Edit className="w-3.5 h-3.5" /> Edit
-                  </button>
-                )}
+          {/* ── MAIN CONTENT AREA (9 Columns on Desktop) ── */}
+          <div className="lg:col-span-9 space-y-4">
+            
+            {/* Top Row: About Section (left) + Combined Deals & Volume Card (right) */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+              
+              {/* Profile Description (About Section) */}
+              <div className="lg:col-span-7 bg-xsm-dark-gray rounded-xl pt-3 pb-3.5 px-4 sm:px-5 shadow-lg border border-xsm-medium-gray/30 flex flex-col justify-between">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-base sm:text-lg font-bold text-xsm-yellow">About</h2>
+                  {isOwnProfile && (
+                    <button
+                      type="button"
+                      onClick={handleOpenEditModal}
+                      className="text-xsm-light-gray hover:text-xsm-yellow transition-colors flex items-center gap-1 text-xs font-semibold"
+                      title="Edit Description"
+                    >
+                      <Edit className="w-3.5 h-3.5" /> Edit
+                    </button>
+                  )}
+                </div>
+
+                {/* Fixed height container for ~5 lines with internal vertical scrollbar if longer */}
+                <div className="h-[105px] overflow-y-auto pr-1.5 custom-scrollbar flex-1">
+                  <p className="text-xsm-light-gray text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
+                    {profileUser.description || DEFAULT_DESCRIPTION}
+                  </p>
+                </div>
               </div>
 
-              <p className="text-xsm-light-gray text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">
-                {profileUser.description || DEFAULT_DESCRIPTION}
-              </p>
+              {/* Combined Completed Deals & Trading Volume Card */}
+              <div className="lg:col-span-5 bg-xsm-dark-gray border border-xsm-medium-gray/40 rounded-xl pt-3 pb-3 px-4 shadow-xl text-left flex flex-col justify-between space-y-2">
+                
+                {/* 1. Completed Deals Row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex-shrink-0">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-xs">Completed Deals</h3>
+                      <p className="text-[10px] text-gray-400">Successful sales</p>
+                    </div>
+                  </div>
+                  <span className="text-lg font-black text-white">
+                    {(profileUser.sellerMetrics?.completedDeals ?? 0).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* 2. Separator */}
+                <div className="border-t border-xsm-medium-gray/30 my-0.5" />
+
+                {/* 3. Trading Volume Row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="p-1.5 rounded-lg bg-xsm-yellow/20 border border-xsm-yellow/40 text-xsm-yellow flex-shrink-0">
+                      <DollarSign className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-white text-xs">Trading Volume</h3>
+                      <p className="text-[10px] text-gray-400">Total Value of Completed Transactions</p>
+                    </div>
+                  </div>
+                  <span className="text-lg font-black text-xsm-yellow">
+                    ${(profileUser.sellerMetrics?.tradingVolume ?? 0).toLocaleString()}
+                  </span>
+                </div>
+
+                {/* 4. Completed Deals & Transactions Information (Badges + Reviews Dropdown) */}
+                <div className="pt-2 border-t border-xsm-medium-gray/30 space-y-1.5">
+                  <div className="grid grid-cols-3 gap-1.5 text-center">
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg py-1.5 px-0.5 min-w-0">
+                      <div className="font-black text-emerald-400 text-sm leading-none tabular-nums">
+                        {(profileUser.sellerMetrics?.positiveReviews ?? 0) >= 1000
+                          ? `${((profileUser.sellerMetrics?.positiveReviews ?? 0) / 1000).toFixed(1)}k`
+                          : (profileUser.sellerMetrics?.positiveReviews ?? 0)}
+                      </div>
+                      <div className="text-[9px] text-emerald-400/80 mt-0.5 font-medium tracking-wide">Positive</div>
+                    </div>
+                    <div className="bg-gray-500/10 border border-gray-500/20 rounded-lg py-1.5 px-0.5 min-w-0">
+                      <div className="font-black text-gray-300 text-sm leading-none tabular-nums">
+                        {(profileUser.sellerMetrics?.noReviews ?? 0) >= 1000
+                          ? `${((profileUser.sellerMetrics?.noReviews ?? 0) / 1000).toFixed(1)}k`
+                          : (profileUser.sellerMetrics?.noReviews ?? 0)}
+                      </div>
+                      <div className="text-[9px] text-gray-400/80 mt-0.5 font-medium tracking-wide">No Review</div>
+                    </div>
+                    <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg py-1.5 px-0.5 min-w-0">
+                      <div className="font-black text-rose-400 text-sm leading-none tabular-nums">
+                        {(profileUser.sellerMetrics?.negativeReviews ?? 0) >= 1000
+                          ? `${((profileUser.sellerMetrics?.negativeReviews ?? 0) / 1000).toFixed(1)}k`
+                          : (profileUser.sellerMetrics?.negativeReviews ?? 0)}
+                      </div>
+                      <div className="text-[9px] text-rose-400/80 mt-0.5 font-medium tracking-wide">Negative</div>
+                    </div>
+                  </div>
+                  <ReviewsDropdownList reviews={profileUser.sellerMetrics?.recentReviews} />
+                </div>
+              </div>
+
             </div>
 
-            {/* Seller's Listings (Single clean rendering) */}
-            <div className="bg-xsm-dark-gray rounded-xl p-5 shadow-lg border border-xsm-medium-gray/30">
+            {/* Seller's Listings (Spans full width for channels) */}
+            <div className="bg-xsm-dark-gray rounded-xl p-4 shadow-lg border border-xsm-medium-gray/30">
               {isOwnProfile ? (
                 <UserAdList />
               ) : (
@@ -491,64 +772,6 @@ const PublicProfile: React.FC = () => {
                 </>
               )}
             </div>
-          </div>
-
-          {/* ── RIGHT SIDEBAR (3 Columns on Desktop): Trading Volume & Completed Deals with Reviews Dropdown ── */}
-          <div className="lg:col-span-3 space-y-6">
-
-            {/* 💵 Trading Volume Card */}
-            <div className="bg-xsm-dark-gray border border-xsm-yellow/40 rounded-xl p-4 shadow-xl text-left relative overflow-hidden bg-gradient-to-br from-xsm-dark-gray via-xsm-black/90 to-xsm-dark-gray">
-              <div className="flex items-center gap-3 mb-2">
-                <div className="p-2 rounded-xl bg-xsm-yellow/20 border border-xsm-yellow/40 text-xsm-yellow flex-shrink-0">
-                  <DollarSign className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-[11px] font-extrabold uppercase tracking-wider text-xsm-light-gray">Trading Volume</h3>
-                  <p className="text-xl font-black text-xsm-yellow">
-                    ${(profileUser.sellerMetrics?.tradingVolume ?? 0).toLocaleString()}
-                  </p>
-                </div>
-              </div>
-              <p className="text-[10px] text-gray-400">Total value of completed transactions</p>
-            </div>
-
-            {/* 🤝 Completed Deals & Ratings Card */}
-            <div className="bg-xsm-dark-gray border border-xsm-medium-gray/40 rounded-xl p-4 shadow-xl text-left space-y-3.5">
-              <div className="flex items-center justify-between pb-2.5 border-b border-xsm-medium-gray/30">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex-shrink-0">
-                    <CheckCircle2 className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-white text-xs">Completed Deals</h3>
-                    <p className="text-[10px] text-gray-400">Successful sales</p>
-                  </div>
-                </div>
-                <span className="text-lg font-black text-white">
-                  {(profileUser.sellerMetrics?.completedDeals ?? 0).toLocaleString()}
-                </span>
-              </div>
-
-              {/* Rating Breakdown Badges */}
-              <div className="grid grid-cols-3 gap-1.5 text-center text-xs">
-                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-1.5">
-                  <div className="font-bold text-emerald-400">{profileUser.sellerMetrics?.positiveReviews ?? 0}</div>
-                  <div className="text-[9px] text-emerald-300">Positive</div>
-                </div>
-                <div className="bg-gray-500/10 border border-gray-500/20 rounded-lg p-1.5">
-                  <div className="font-bold text-gray-300">{profileUser.sellerMetrics?.noReviews ?? 0}</div>
-                  <div className="text-[9px] text-gray-400">No Review</div>
-                </div>
-                <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-1.5">
-                  <div className="font-bold text-rose-400">{profileUser.sellerMetrics?.negativeReviews ?? 0}</div>
-                  <div className="text-[9px] text-rose-300">Negative</div>
-                </div>
-              </div>
-
-              {/* 💬 Completed Deals & Reviews Dropdown List */}
-              <ReviewsDropdownList reviews={profileUser.sellerMetrics?.recentReviews} />
-            </div>
-
           </div>
 
         </div>
@@ -673,6 +896,49 @@ const PublicProfile: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── SELLER RESPONSE TIME INFO MODAL ── */}
+      {showResponseInfoModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-xsm-dark-gray border border-xsm-yellow/40 rounded-2xl p-5 w-full max-w-sm shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-xsm-medium-gray/30 pb-3">
+              <h3 className="text-sm font-bold text-xsm-yellow flex items-center gap-2">
+                <Clock className="w-4 h-4 text-xsm-yellow" /> Typical Response Time
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowResponseInfoModal(false)}
+                className="text-gray-400 hover:text-white p-1 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-xsm-black/60 p-3.5 rounded-xl border border-xsm-medium-gray/30 space-y-2 text-center">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-xsm-yellow/10 border border-xsm-yellow/30 rounded-full text-xs font-bold text-xsm-yellow">
+                <Clock className="w-3.5 h-3.5" />
+                {formatResponseTimeLabel(profileUser.sellerMetrics?.responseTime || profileUser.averageResponseTime)}
+              </span>
+              <p className="text-xs text-gray-300 leading-relaxed pt-1">
+                This seller typically replies within this timeframe based on recent marketplace conversation activity.
+              </p>
+              <p className="text-[11px] text-gray-400">
+                Faster response times lead to faster deal completion and seamless escrow transactions.
+              </p>
+            </div>
+
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => setShowResponseInfoModal(false)}
+                className="w-full px-4 py-2 text-xs font-bold text-black bg-xsm-yellow hover:bg-yellow-400 rounded-lg transition-colors shadow"
+              >
+                Got It
+              </button>
+            </div>
           </div>
         </div>
       )}

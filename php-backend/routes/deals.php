@@ -1132,6 +1132,12 @@ try {
                 $action_description = "Transaction fee paid via $payment_method by $payer_type";
                 $stmt->execute([$deal_id, $currentUser['userId'], $action_description]);
                 
+                // Consume reduced escrow fee perk from referral rewards if available
+                try {
+                    require_once __DIR__ . '/../services/ReferralService.php';
+                    ReferralService::useReducedFeeDeal($currentUser['userId']);
+                } catch (Throwable $e) {}
+                
                 // After fee payment, allocate agent email from pool and send to seller via chat
                 try {
                     $admin_email = $_ENV['admin_email'] ?? 'novaflowa4@gmail.com';
@@ -2541,6 +2547,14 @@ try {
             }
             
             $pdo->commit();
+            
+            // Release Email Pool allocation so capacity slot is freed
+            try {
+                require_once __DIR__ . '/../services/EmailAllocationService.php';
+                EmailAllocationService::releaseDealAllocation($deal_id, 'completed');
+            } catch (Throwable $e) {
+                error_log('Failed to release email allocation on payment_confirmed for deal ' . $deal_id . ': ' . $e->getMessage());
+            }
             
             triggerDealNotificationAndEmail($deal_id, 'payment_confirmed');
             

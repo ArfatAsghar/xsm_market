@@ -395,12 +395,14 @@ export const login = async (email: string, password: string, recaptchaToken?: st
   }
 };
 
-export const register = async (username: string, email: string, password: string, recaptchaToken?: string, fullName?: string): Promise<AuthResponse> => {
+export const register = async (username: string, email: string, password: string, recaptchaToken?: string, fullName?: string, referralCode?: string): Promise<AuthResponse> => {
   try {
+    const activeReferral = referralCode?.trim() || localStorage.getItem('xsm_referrer') || localStorage.getItem('referral_code') || '';
     console.log('Attempting to register with:', { 
       username, 
       email,
       fullName,
+      referralCode: activeReferral,
       password: password ? '[FILTERED]' : undefined 
     });
     
@@ -438,7 +440,8 @@ export const register = async (username: string, email: string, password: string
         email: email.trim().toLowerCase(),
         password,
         recaptchaToken,
-        fullName: fullName?.trim() || ''
+        fullName: fullName?.trim() || '',
+        referralCode: activeReferral
       }),
       mode: 'cors',
       credentials: 'include'
@@ -554,18 +557,19 @@ export const setCurrentUser = (user: User): void => {
   localStorage.setItem(USER_KEY, JSON.stringify(user));
 };
 
-export const googleSignIn = async (tokenId: string): Promise<AuthResponse> => {
+export const googleSignIn = async (tokenId: string, explicitReferralCode?: string): Promise<AuthResponse> => {
   try {
     console.log('🚀 Starting Google sign-in process...');
     console.log('📡 API URL:', API_URL);
     console.log('🔑 Token length:', tokenId.length);
     
+    const activeReferral = explicitReferralCode || localStorage.getItem('xsm_referrer') || localStorage.getItem('referral_code') || '';
     const response = await fetch(`${API_URL}/auth/google-signin`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ token: tokenId }),
+      body: JSON.stringify({ token: tokenId, referralCode: activeReferral, referral_code: activeReferral }),
       credentials: 'include'
     }).catch(networkError => {
       console.error('❌ Network error during Google sign-in fetch:', networkError);
@@ -1073,16 +1077,24 @@ export const getPublicProfile = async (username: string) => {
 };
 
 // ── VIP: Purchase VIP Subscription ──────────────────────────────────────────
-export const buyVip = async (months: 1 | 2 | 3): Promise<{
+export const buyVip = async (
+  months: 1 | 2 | 3, 
+  useCredits?: boolean | number,
+  useCoupon?: boolean
+): Promise<{
   success: boolean;
   message: string;
   vipUntil: string;
   isVip: boolean;
   price: number;
   months: number;
+  couponDiscount?: number;
+  creditsUsed?: number;
 }> => {
   const token = getAuthToken();
   if (!token) throw new Error('Please sign in to purchase VIP membership.');
+
+  const creditAmount = typeof useCredits === 'number' ? useCredits : (useCredits ? 999 : 0);
 
   const response = await fetch(`${API_URL}/user/buy-vip`, {
     method: 'POST',
@@ -1090,7 +1102,11 @@ export const buyVip = async (months: 1 | 2 | 3): Promise<{
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ months })
+    body: JSON.stringify({ 
+      months, 
+      useCredits: creditAmount,
+      useCoupon: Boolean(useCoupon)
+    })
   });
 
   if (!response.ok) {
@@ -1149,7 +1165,10 @@ export const getBuyerStats = async (): Promise<{
 // ── VIP: Create Crypto Payment via NOWPayments ──────────────────────────
 export interface VipCryptoPaymentResponse {
   success: boolean;
-  payment: {
+  paidInFull?: boolean;
+  message?: string;
+  vipUntil?: string;
+  payment?: {
     payment_id: string;
     pay_address?: string;
     pay_amount?: number;
@@ -1163,7 +1182,12 @@ export interface VipCryptoPaymentResponse {
   };
 }
 
-export const createVipCryptoPayment = async (months: 1 | 2 | 3, payCurrency = 'usdttrc20'): Promise<VipCryptoPaymentResponse> => {
+export const createVipCryptoPayment = async (
+  months: 1 | 2 | 3, 
+  payCurrency = 'usdttrc20',
+  useCredits = 0,
+  useCoupon = false
+): Promise<VipCryptoPaymentResponse> => {
   const token = getAuthToken();
   if (!token) throw new Error('Please sign in to purchase VIP membership.');
 
@@ -1173,7 +1197,12 @@ export const createVipCryptoPayment = async (months: 1 | 2 | 3, payCurrency = 'u
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ months, pay_currency: payCurrency })
+    body: JSON.stringify({ 
+      months, 
+      pay_currency: payCurrency,
+      useCredits,
+      useCoupon
+    })
   });
 
   if (!response.ok) {
@@ -1181,7 +1210,19 @@ export const createVipCryptoPayment = async (months: 1 | 2 | 3, payCurrency = 'u
     throw new Error(err.message || 'Failed to initialize crypto payment');
   }
 
-  return response.json();
+  const data = await response.json();
+
+  if (data.paidInFull && data.vipUntil) {
+    try {
+      const current = getCurrentUser();
+      if (current) {
+        setCurrentUser({ ...current, isVip: true, vipUntil: data.vipUntil } as any);
+        window.dispatchEvent(new Event('storage'));
+      }
+    } catch { /* ignore */ }
+  }
+
+  return data;
 };
 
 // ── VIP: Check Crypto Payment Status ────────────────────────────────────

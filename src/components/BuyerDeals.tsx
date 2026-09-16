@@ -57,6 +57,7 @@ interface Deal {
   timer_completed?: boolean;
   buyer_paid_seller?: boolean;
   buyer_paid_seller_at?: string | null;
+  assigned_email?: string | null;
 }
 
 const BuyerDeals: React.FC = () => {
@@ -359,6 +360,17 @@ const BuyerDeals: React.FC = () => {
                     </div>
                   </div>
                 </div>
+
+                {/* Assigned Agent Escrow Email */}
+                {deal.assigned_email && (
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3.5 mb-4 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wider text-amber-400">Assigned Escrow Agent Email</p>
+                      <p className="text-sm font-mono font-medium text-white mt-0.5">{deal.assigned_email}</p>
+                    </div>
+                    <span className="text-xs px-2.5 py-1 rounded bg-amber-500/20 text-amber-300 font-medium">Verified Pool Agent</span>
+                  </div>
+                )}
 
                 {/* Payment Methods Preview */}
                 {deal.payment_methods && deal.payment_methods.length > 0 && (

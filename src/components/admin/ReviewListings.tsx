@@ -326,8 +326,8 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
 
   const filteredListings = listings.filter(listing => {
     const matchesSearch = 
-      listing.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      listing.seller.toLowerCase().includes(searchTerm.toLowerCase());
+      (listing.title ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (listing.seller ?? '').toLowerCase().includes(searchTerm.toLowerCase());
       
     if (filterStatus === 'all') return matchesSearch;
     if (filterStatus === 'banned') return matchesSearch && Boolean(listing.isBanned);

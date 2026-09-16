@@ -145,6 +145,15 @@ class Database {
             self::addColumnIfMissing($pdo, 'users', 'vipUntil', 'DATETIME NULL DEFAULT NULL');
             self::addColumnIfMissing($pdo, 'users', 'displayName', 'VARCHAR(100) NULL DEFAULT NULL');
             self::addColumnIfMissing($pdo, 'users', 'lastUnreadReminderAt', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'referral_code', 'VARCHAR(50) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'referred_by', 'INT NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'referral_credit_balance', 'DECIMAL(10,2) NOT NULL DEFAULT 0.00');
+            self::addColumnIfMissing($pdo, 'users', 'kyc_status', "VARCHAR(20) NOT NULL DEFAULT 'unverified'");
+            self::addColumnIfMissing($pdo, 'users', 'kyc_submitted_at', 'DATETIME NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'kyc_reviewed_at', 'DATETIME NULL DEFAULT NULL');
+            // IP columns referenced in referral fraud-detection (must exist for that query to work)
+            self::addColumnIfMissing($pdo, 'users', 'lastLoginIp', 'VARCHAR(50) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'users', 'registrationIp', 'VARCHAR(50) NULL DEFAULT NULL');
 
             // Set admin role for existing admins
             try {
@@ -319,6 +328,103 @@ class Database {
             }
         } catch (Throwable $e) {
             error_log('email_pool tables create warning: ' . $e->getMessage());
+        }
+
+        // ── Referral System & KYC Tables ──────────────────────────────────────────
+        try {
+            // 1. referral_settings
+            $pdo->exec("CREATE TABLE IF NOT EXISTS referral_settings (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                setting_key VARCHAR(100) NOT NULL UNIQUE,
+                setting_value TEXT NOT NULL,
+                description VARCHAR(255) NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )");
+
+            $refDefaults = [
+                ['kyc_pin_reward', '1', 'Number of Free Pins granted for KYC approval (both parties)'],
+                ['pin_duration_hours', '72', 'Duration of Free Pin in hours (72h)'],
+                ['vip_credit_amount', '1.00', 'USD Referral Credit awarded per referred user who buys VIP ($1.00)'],
+                ['vip_free_bumps', '5', 'Free Bumps awarded when a referred user buys VIP (5 bumps)'],
+                ['vip_coupon_amount', '2.00', 'VIP Discount Coupon credit amount ($2.00)'],
+                ['reduced_fee_deals_count', '3', 'Number of future deals eligible for reduced escrow fee (3 deals)'],
+                ['milestone_5_pins', '2', 'Free Pins awarded for reaching 5 qualified referrals'],
+                ['milestone_10_bumps', '5', 'Free Bumps awarded for reaching 10 qualified referrals'],
+                ['milestone_25_vip_months', '1', 'Months of VIP membership awarded for 25 qualified referrals'],
+                ['milestone_50_badge', 'Referral Champion', 'Badge title awarded for 50 qualified referrals']
+            ];
+            $refStmt = $pdo->prepare("INSERT INTO referral_settings (setting_key, setting_value, description) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE description = VALUES(description)");
+            foreach ($refDefaults as $rDef) {
+                $refStmt->execute($rDef);
+            }
+
+            // 2. referrals
+            $pdo->exec("CREATE TABLE IF NOT EXISTS referrals (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                referrer_id INT NOT NULL,
+                referred_user_id INT NOT NULL,
+                referral_code VARCHAR(50) NOT NULL,
+                status VARCHAR(30) NOT NULL DEFAULT 'registered',
+                kyc_reward_granted TINYINT(1) NOT NULL DEFAULT 0,
+                kyc_reward_granted_at DATETIME NULL,
+                vip_reward_granted TINYINT(1) NOT NULL DEFAULT 0,
+                vip_reward_granted_at DATETIME NULL,
+                is_suspicious TINYINT(1) NOT NULL DEFAULT 0,
+                suspicious_reason VARCHAR(255) NULL,
+                ip_address VARCHAR(50) NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY unique_referred (referred_user_id),
+                INDEX idx_referrer (referrer_id),
+                INDEX idx_status (status)
+            )");
+
+            // 3. user_rewards
+            $pdo->exec("CREATE TABLE IF NOT EXISTS user_rewards (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                reward_type VARCHAR(50) NOT NULL,
+                quantity INT NOT NULL DEFAULT 1,
+                used_quantity INT NOT NULL DEFAULT 0,
+                expires_at DATETIME NULL,
+                source_referral_id INT NULL,
+                source_description VARCHAR(255) NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'active',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_user_rewards (user_id, reward_type, status)
+            )");
+
+            // 4. referral_credit_transactions
+            $pdo->exec("CREATE TABLE IF NOT EXISTS referral_credit_transactions (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                amount DECIMAL(10,2) NOT NULL,
+                balance_after DECIMAL(10,2) NOT NULL,
+                type VARCHAR(50) NOT NULL,
+                description VARCHAR(255) NOT NULL,
+                related_referral_id INT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_user_credits (user_id, created_at)
+            )");
+
+            // 5. user_kyc
+            $pdo->exec("CREATE TABLE IF NOT EXISTS user_kyc (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                user_id INT NOT NULL,
+                document_type VARCHAR(50) NOT NULL,
+                document_url TEXT NOT NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                admin_notes TEXT NULL,
+                rejection_reason VARCHAR(255) NULL,
+                reviewed_by INT NULL,
+                reviewed_at DATETIME NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_user_kyc_user (user_id),
+                INDEX idx_user_kyc_status (status)
+            )");
+        } catch (Throwable $e) {
+            error_log('Referral & KYC tables create warning: ' . $e->getMessage());
         }
     }
 

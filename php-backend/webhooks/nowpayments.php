@@ -209,6 +209,15 @@ try {
                 ")->execute([$vipUserId]);
             } catch (Throwable $e) {}
 
+            // Trigger VIP Referral Reward
+            try {
+                require_once __DIR__ . '/../services/ReferralService.php';
+                $vipAmount = floatval($priceAmount ?: ($actuallyPaid ?: ($vipMonths * 10)));
+                ReferralService::rewardVipPurchase($vipUserId, $vipMonths, $vipAmount);
+            } catch (Throwable $e) {
+                logWebhook("Referral reward error: " . $e->getMessage());
+            }
+
             logWebhook("VIP activated via webhook for user {$vipUserId} until {$newVipUntil}");
         } else {
             $pdo->prepare("UPDATE vip_purchases SET payment_status = ? WHERE payment_id = ?")->execute([$paymentStatus, $paymentId]);

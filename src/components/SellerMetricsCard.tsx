@@ -81,13 +81,13 @@ export const SellerMetricsCard: React.FC<SellerMetricsCardProps> = ({ metrics, c
         </div>
       </div>
 
-      {/* 3. Trading Volume */}
+      {/* 3. Total Value of Completed Transactions */}
       <div className="relative group pb-2.5 border-b border-xsm-medium-gray/30 flex items-center justify-between cursor-help">
         <div className="flex items-center gap-2.5">
           <div className="p-1.5 rounded-lg bg-xsm-yellow/10 border border-xsm-yellow/20 text-xsm-yellow">
             <DollarSign className="w-4 h-4" />
           </div>
-          <span className="font-semibold text-white text-xs sm:text-sm">Trading Volume</span>
+          <span className="font-semibold text-white text-xs sm:text-sm">Total Value of Completed Transactions</span>
         </div>
         <span className="font-bold text-white text-sm">
           ${tradingVolume.toLocaleString()}

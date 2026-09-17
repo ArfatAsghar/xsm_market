@@ -423,6 +423,16 @@ class Database {
                 INDEX idx_user_kyc_user (user_id),
                 INDEX idx_user_kyc_status (status)
             )");
+
+            self::addColumnIfMissing($pdo, 'user_kyc', 'id_number', 'VARCHAR(100) NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'user_kyc', 'front_image_url', 'TEXT NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'user_kyc', 'back_image_url', 'TEXT NULL DEFAULT NULL');
+            self::addColumnIfMissing($pdo, 'user_kyc', 'selfie_image_url', 'TEXT NULL DEFAULT NULL');
+
+            if (self::tableExists($pdo, 'users')) {
+                self::addColumnIfMissing($pdo, 'users', 'kyc_id_number', 'VARCHAR(100) NULL DEFAULT NULL');
+                self::addColumnIfMissing($pdo, 'users', 'kyc_status', 'VARCHAR(50) NOT NULL DEFAULT "unverified"');
+            }
         } catch (Throwable $e) {
             error_log('Referral & KYC tables create warning: ' . $e->getMessage());
         }

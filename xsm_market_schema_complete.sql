@@ -280,6 +280,261 @@ CREATE TABLE `deal_payment_methods` (
   CONSTRAINT `deal_payment_methods_ibfk_1` FOREIGN KEY (`deal_id`) REFERENCES `deals` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- -----------------------------------------------------------------------------
+-- Table: notifications
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `notifications` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `userId` int(11) NOT NULL,
+  `type` varchar(50) NOT NULL DEFAULT 'system',
+  `title` varchar(255) NOT NULL,
+  `message` text NOT NULL,
+  `link` varchar(500) DEFAULT NULL,
+  `isRead` tinyint(1) NOT NULL DEFAULT 0,
+  `createdAt` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_userId` (`userId`),
+  KEY `idx_isRead` (`isRead`),
+  KEY `idx_createdAt` (`createdAt`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: vip_purchases
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `vip_purchases` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `months` int(11) NOT NULL DEFAULT 1,
+  `amount` decimal(10,2) NOT NULL DEFAULT 10.00,
+  `payment_id` varchar(255) DEFAULT NULL,
+  `payment_status` varchar(50) NOT NULL DEFAULT 'completed',
+  `pay_currency` varchar(50) DEFAULT NULL,
+  `pay_amount` decimal(20,8) DEFAULT NULL,
+  `pay_address` text DEFAULT NULL,
+  `payment_url` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_vip_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: crypto_payments
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `crypto_payments` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `payment_id` varchar(100) NOT NULL,
+  `user_id` int(11) DEFAULT NULL,
+  `deal_id` int(11) DEFAULT NULL,
+  `order_id` varchar(100) NOT NULL,
+  `payment_status` varchar(50) NOT NULL DEFAULT 'waiting',
+  `price_amount` decimal(12,2) NOT NULL,
+  `price_currency` varchar(10) NOT NULL DEFAULT 'usd',
+  `pay_amount` decimal(20,8) DEFAULT NULL,
+  `pay_currency` varchar(20) DEFAULT NULL,
+  `pay_address` text DEFAULT NULL,
+  `payment_url` text DEFAULT NULL,
+  `type` varchar(50) NOT NULL DEFAULT 'escrow',
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_payment_id` (`payment_id`),
+  KEY `idx_order_id` (`order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: user_kyc
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `user_kyc` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `document_type` varchar(50) NOT NULL,
+  `id_number` varchar(100) DEFAULT NULL,
+  `document_url` text NOT NULL,
+  `front_image_url` text DEFAULT NULL,
+  `back_image_url` text DEFAULT NULL,
+  `selfie_image_url` text DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'pending',
+  `admin_notes` text DEFAULT NULL,
+  `rejection_reason` varchar(255) DEFAULT NULL,
+  `reviewed_by` int(11) DEFAULT NULL,
+  `reviewed_at` datetime DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_user_kyc_user` (`user_id`),
+  KEY `idx_user_kyc_status` (`status`),
+  KEY `idx_user_kyc_id_number` (`id_number`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: referrals
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `referrals` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `referrer_id` int(11) NOT NULL,
+  `referred_user_id` int(11) NOT NULL,
+  `referral_code` varchar(50) NOT NULL,
+  `status` varchar(30) NOT NULL DEFAULT 'registered',
+  `kyc_reward_granted` tinyint(1) NOT NULL DEFAULT 0,
+  `kyc_reward_granted_at` datetime DEFAULT NULL,
+  `vip_reward_granted` tinyint(1) NOT NULL DEFAULT 0,
+  `vip_reward_granted_at` datetime DEFAULT NULL,
+  `is_suspicious` tinyint(1) NOT NULL DEFAULT 0,
+  `suspicious_reason` varchar(255) DEFAULT NULL,
+  `ip_address` varchar(50) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_referred` (`referred_user_id`),
+  KEY `idx_referrer` (`referrer_id`),
+  KEY `idx_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: referral_settings
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `referral_settings` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `setting_key` varchar(100) NOT NULL,
+  `setting_value` text NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_setting_key` (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: user_rewards
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `user_rewards` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `reward_type` varchar(50) NOT NULL,
+  `quantity` int(11) NOT NULL DEFAULT 1,
+  `used_quantity` int(11) NOT NULL DEFAULT 0,
+  `expires_at` datetime DEFAULT NULL,
+  `source_referral_id` int(11) DEFAULT NULL,
+  `source_description` varchar(255) DEFAULT NULL,
+  `status` varchar(20) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_user_rewards` (`user_id`,`reward_type`,`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: referral_credit_transactions
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `referral_credit_transactions` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `balance_after` decimal(10,2) NOT NULL,
+  `type` varchar(50) NOT NULL,
+  `description` varchar(255) NOT NULL,
+  `related_referral_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_user_credits` (`user_id`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: email_pool
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `email_pool` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `email_address` varchar(255) NOT NULL,
+  `status` enum('enabled','disabled') NOT NULL DEFAULT 'enabled',
+  `platform` enum('both','youtube','tiktok') NOT NULL DEFAULT 'both',
+  `max_active_deals` int(11) NOT NULL DEFAULT 5,
+  `max_brand_accounts` int(11) NOT NULL DEFAULT 5,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_pool_email` (`email_address`),
+  KEY `idx_pool_status` (`status`),
+  KEY `idx_pool_platform` (`platform`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: email_pool_allocations
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `email_pool_allocations` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `email_id` int(11) NOT NULL,
+  `deal_id` int(11) NOT NULL,
+  `buyer_id` int(11) NOT NULL,
+  `platform` enum('youtube','tiktok','other') NOT NULL DEFAULT 'youtube',
+  `account_identifier` varchar(255) DEFAULT NULL,
+  `allocation_type` enum('brand_account','tiktok_account','deal_general') NOT NULL DEFAULT 'deal_general',
+  `status` enum('active','completed','cancelled','reassigned') NOT NULL DEFAULT 'active',
+  `assigned_at` timestamp NULL DEFAULT current_timestamp(),
+  `completed_at` datetime DEFAULT NULL,
+  `reassigned_to_email_id` int(11) DEFAULT NULL,
+  `reassignment_reason` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_alloc_email_id` (`email_id`),
+  KEY `idx_alloc_deal_id` (`deal_id`),
+  KEY `idx_alloc_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: email_pool_brand_accounts
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `email_pool_brand_accounts` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `email_id` int(11) NOT NULL,
+  `deal_id` int(11) NOT NULL,
+  `buyer_id` int(11) NOT NULL,
+  `brand_name` varchar(255) NOT NULL,
+  `platform` varchar(50) NOT NULL DEFAULT 'youtube',
+  `status` enum('active','completed','transferred','removed') NOT NULL DEFAULT 'active',
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_brand_email_id` (`email_id`),
+  KEY `idx_brand_deal_id` (`deal_id`),
+  KEY `idx_brand_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: email_pool_history
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `email_pool_history` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `email_id` int(11) NOT NULL,
+  `admin_id` int(11) DEFAULT NULL,
+  `action` varchar(100) NOT NULL,
+  `old_value` text DEFAULT NULL,
+  `new_value` text DEFAULT NULL,
+  `details` text DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_hist_email_id` (`email_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: email_pool_settings
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `email_pool_settings` (
+  `setting_key` varchar(100) NOT NULL,
+  `setting_value` text NOT NULL,
+  PRIMARY KEY (`setting_key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- -----------------------------------------------------------------------------
+-- Table: website_updates
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `website_updates` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `title` varchar(255) NOT NULL,
+  `description` text NOT NULL,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- =============================================================================
 -- END OF SCHEMA
 -- =============================================================================

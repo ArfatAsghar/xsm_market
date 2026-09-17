@@ -14,6 +14,7 @@ import FinancialRecords from '@/components/admin/FinancialRecords';
 import AdminWebsiteUpdates from '@/components/admin/AdminWebsiteUpdates';
 import EmailPoolManager from '@/components/admin/EmailPoolManager';
 import AdminReferralManagement from '@/components/admin/AdminReferralManagement';
+import AdminKycManagement from '@/components/admin/AdminKycManagement';
 import { useAuth } from '@/context/useAuth';
 
 const AdminDashboard: React.FC = () => {
@@ -73,6 +74,7 @@ const AdminDashboard: React.FC = () => {
       case 'review-chats': return 'Chat & Dispute Moderation';
       case 'review-deals': return 'Escrow Deals Verification';
       case 'email-pool': return 'System Email Pool & Logs';
+      case 'kyc-verification': return 'KYC Identity Verification';
       case 'referral-management': return 'Referral & KYC Moderation';
       case 'financial-records': return 'Financial Analytics & Volume';
       case 'website-updates': return 'Announcements & Updates';
@@ -121,6 +123,16 @@ const AdminDashboard: React.FC = () => {
       icon: Users,
       accent: 'from-blue-500/20 to-blue-600/10 text-blue-600 dark:text-blue-400',
       tag: 'User Accounts'
+    },
+    {
+      id: 'kyc-verification',
+      name: 'KYC Verification',
+      desc: 'Verify CNIC, Driving License & Passport photos, live selfies, and prevent duplicate ID registrations.',
+      category: 'users',
+      categoryLabel: 'Identity & Security',
+      icon: ShieldCheck,
+      accent: 'from-indigo-500/20 to-indigo-600/10 text-indigo-500 dark:text-indigo-400',
+      tag: 'ID Verification'
     },
     ...(isCurrentUserAdmin || isCurrentUserManager ? [{
       id: 'referral-management',
@@ -186,6 +198,8 @@ const AdminDashboard: React.FC = () => {
         return <ReviewDeals />;
       case 'email-pool':
         return <EmailPoolManager />;
+      case 'kyc-verification':
+        return <AdminKycManagement />;
       case 'referral-management':
         return <AdminReferralManagement />;
       case 'financial-records':

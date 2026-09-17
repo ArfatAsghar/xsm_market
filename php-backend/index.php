@@ -960,8 +960,11 @@ function handleAdminRoutes($controller, $path, $method) {
             break;
 
         // ── KYC Admin Routes ──
-        case $path === '/admin/kyc/pending' && $method === 'GET':
+        case ($path === '/admin/kyc/pending' || $path === '/admin/kyc/list' || $path === '/admin/kyc/all') && $method === 'GET':
             (new KycController())->getPending();
+            break;
+        case $path === '/admin/kyc/check-duplicate' && $method === 'POST':
+            (new KycController())->checkDuplicate();
             break;
         case $path === '/admin/kyc/review' && $method === 'POST':
             (new KycController())->review();

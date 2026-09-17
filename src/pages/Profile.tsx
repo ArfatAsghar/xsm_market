@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User as UserIcon, Edit, LogOut, Save, X, Camera, Pin, Crown, Settings, Eye, EyeOff, Clock } from 'lucide-react';
+import { User as UserIcon, Edit, LogOut, Save, X, Camera, Pin, Crown, Settings, Eye, EyeOff, Clock, Shield } from 'lucide-react';
 import VerificationSection from '@/components/VerificationSection';
 import UserAdList from '@/components/UserAdList';
 import DualEmailVerificationModal from '@/components/DualEmailVerificationModal';
@@ -734,13 +734,36 @@ const Profile: React.FC<ProfileProps> = () => {
                   </div>
                 )}
               </div>
+
+              {/* KYC Verification Status Card */}
+              <div className="pt-2 border-t border-xsm-medium-gray/30 mt-2">
+                <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-3 text-center space-y-2">
+                  <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-white">
+                    <Shield className="w-3.5 h-3.5 text-xsm-yellow" />
+                    <span>ID Verification (KYC)</span>
+                  </div>
+                  <p className="text-[11px] text-gray-400">
+                    Verify CNIC or Passport to unlock Free 72h Pin & verified trust badge.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setActiveSettingsTab('verification');
+                      const settingsEl = document.getElementById('profile-settings-section');
+                      if (settingsEl) settingsEl.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="w-full bg-neutral-800 hover:bg-neutral-700 text-xsm-yellow border border-xsm-yellow/40 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                  >
+                    Manage Verification
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-8">
             {/* Profile Settings */}
-            <div className="xsm-card">
+            <div id="profile-settings-section" className="xsm-card">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-xl font-bold text-xsm-yellow">Profile Information</h3>
                 
@@ -956,6 +979,17 @@ const Profile: React.FC<ProfileProps> = () => {
               >
                 Password
               </button>
+              <button
+                onClick={() => setActiveSettingsTab('verification')}
+                className={`flex-1 py-2 px-2 rounded-md text-xs font-medium transition-colors flex items-center justify-center gap-1.5 ${
+                  activeSettingsTab === 'verification'
+                    ? 'bg-xsm-yellow text-xsm-black font-bold'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                <Shield className="w-3.5 h-3.5" />
+                <span>KYC Verification</span>
+              </button>
             </div>
 
             {/* Tab Content */}
@@ -1121,9 +1155,17 @@ const Profile: React.FC<ProfileProps> = () => {
                   </div>
                 </div>
               )}
+
+              {/* Identity Verification Tab */}
+              {activeSettingsTab === 'verification' && (
+                <div className="pt-2">
+                  <VerificationSection />
+                </div>
+              )}
             </div>
 
             {/* Action Buttons */}
+            {activeSettingsTab !== 'verification' && (
             <div className="flex space-x-3 mt-6">
               <button
                 onClick={async () => {
@@ -1300,6 +1342,7 @@ const Profile: React.FC<ProfileProps> = () => {
                 <span>Cancel</span>
               </button>
             </div>
+            )}
           </div>
         </div>
       )}

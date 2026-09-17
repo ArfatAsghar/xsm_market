@@ -57,6 +57,7 @@ interface DashboardData {
     free_pins_available: number;
     free_bumps_available: number;
     reduced_escrow_deals_remaining: number;
+    vip_coupons_available?: number;
   };
   stats: {
     total_referrals: number;
@@ -417,7 +418,7 @@ const ReferralDashboard: React.FC = () => {
         </div>
 
         {/* ── Summary Stat Cards ── */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 shadow-sm dark:shadow-none hover:shadow-md transition-all flex flex-col justify-between">
             <div className="flex items-center justify-between text-neutral-500 dark:text-gray-400 mb-2">
               <span className="text-xs font-semibold">Total Referrals</span>
@@ -447,20 +448,29 @@ const ReferralDashboard: React.FC = () => {
 
           <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 shadow-sm dark:shadow-none hover:shadow-md transition-all flex flex-col justify-between">
             <div className="flex items-center justify-between text-neutral-500 dark:text-gray-400 mb-2">
-              <span className="text-xs font-semibold">Free Pins Available</span>
+              <span className="text-xs font-semibold">Free Pins</span>
               <FaThumbtack className="text-xs text-amber-600 dark:text-xsm-yellow" />
             </div>
             <span className="text-2xl font-black text-amber-600 dark:text-xsm-yellow">{data?.user?.free_pins_available || 0}</span>
             <span className="text-[10px] text-neutral-500 dark:text-gray-400 mt-1">72 hours each</span>
           </div>
 
-          <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 shadow-sm dark:shadow-none hover:shadow-md transition-all flex flex-col justify-between col-span-2 md:col-span-1">
+          <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 shadow-sm dark:shadow-none hover:shadow-md transition-all flex flex-col justify-between">
             <div className="flex items-center justify-between text-neutral-500 dark:text-gray-400 mb-2">
               <span className="text-xs font-semibold">Free Bumps</span>
               <FaRocket className="text-xs text-orange-500 dark:text-orange-400" />
             </div>
             <span className="text-2xl font-black text-orange-600 dark:text-orange-400">{data?.user?.free_bumps_available || 0}</span>
-            <span className="text-[10px] text-neutral-500 dark:text-gray-400 mt-1">Position #1 Boosts</span>
+            <span className="text-[10px] text-neutral-500 dark:text-gray-400 mt-1">Top #1 Boosts</span>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-white dark:bg-neutral-900/80 border border-neutral-200 dark:border-neutral-800 shadow-sm dark:shadow-none hover:shadow-md transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between text-neutral-500 dark:text-gray-400 mb-2">
+              <span className="text-xs font-semibold">VIP Coupons</span>
+              <FaGift className="text-xs text-purple-500 dark:text-purple-400" />
+            </div>
+            <span className="text-2xl font-black text-purple-600 dark:text-purple-400">{data?.user?.vip_coupons_available || 0}</span>
+            <span className="text-[10px] text-neutral-500 dark:text-gray-400 mt-1">100% Free VIP Pass</span>
           </div>
         </div>
 

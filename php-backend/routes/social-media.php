@@ -703,154 +703,55 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
     $apiSignature = '';
     $followerFound = false;
 
-    // ── SOURCE 1: TikTok oEmbed API (fast, always returns title) ─────────
-    $oembedResp = fetchSocialPage('https://www.tiktok.com/oembed?url=' . urlencode('https://www.tiktok.com/@' . $handle));
-    if ($oembedResp) {
-        $oe = json_decode($oembedResp, true);
-        if (!empty($oe['author_name'])) {
-            $result['title'] = $oe['author_name'];
-        }
-        if (!empty($oe['thumbnail_url']) && empty($result['profilePicture'])) {
-            $result['profilePicture'] = $oe['thumbnail_url'];
-        }
-    }
-
-    // ── SOURCE 2: TikTok Web Profile HTML scrape (embedded JSON) ─────────
-    $rawHtml = fetchSocialPage('https://www.tiktok.com/@' . urlencode($handle));
-    if (!$rawHtml) {
-        // Try mobile user-agent
-        $rawHtml = fetchSocialPage('https://www.tiktok.com/@' . urlencode($handle), true);
-    }
-    if ($rawHtml) {
-        // Parse all embedded JSON blobs for user info
-        $jsonSources = [];
-
-        // __UNIVERSAL_DATA_FOR_REHYDRATION__ JSON state
-        if (preg_match('/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>\s*({.*?})\s*<\/script>/is', $rawHtml, $m)) {
-            $d = json_decode($m[1], true);
-            $uDetail = $d['__DEFAULT_SCOPE__']['webapp.user-detail']['userInfo'] ?? [];
-            if (!empty($uDetail['user'])) {
-                $u = $uDetail['user'];
-                $s = $uDetail['stats'] ?? [];
-                if (!empty($u['nickname'])) $result['title'] = $u['nickname'];
-                if (!empty($u['uniqueId'])) $result['channelName'] = '@' . $u['uniqueId'];
-                if (!empty($u['avatarLarger'])) $result['profilePicture'] = $u['avatarLarger'];
-                if (!empty($u['signature'])) {
-                    $result['description'] = $u['signature'];
-                    $apiSignature = $u['signature'];
+    // ── SOURCE 1: TikTok Mobile/Share API Endpoints ──────────────────
+    $ttApis = [
+        'https://www.tiktok.com/node/share/user/@' . urlencode($handle),
+        'https://www.tiktok.com/api/user/detail/?uniqueId=' . urlencode($handle)
+    ];
+    foreach ($ttApis as $apiUrl) {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $apiUrl,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => 6,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+            CURLOPT_HTTPHEADER     => [
+                'Accept: application/json, text/plain, */*',
+                'Referer: https://www.tiktok.com/@' . urlencode($handle),
+            ]
+        ]);
+        $resp = curl_exec($ch);
+        curl_close($ch);
+        if ($resp) {
+            $json = json_decode($resp, true);
+            $uInfo = $json['userInfo']['user'] ?? $json['user'] ?? $json['data']['user'] ?? [];
+            $sInfo = $json['userInfo']['stats'] ?? $json['stats'] ?? $json['data']['stats'] ?? [];
+            if (!empty($uInfo)) {
+                if (!empty($uInfo['nickname'])) $result['title'] = $uInfo['nickname'];
+                if (!empty($uInfo['uniqueId'])) $result['channelName'] = '@' . $uInfo['uniqueId'];
+                if (!empty($uInfo['avatarLarger']) || !empty($uInfo['avatarMedium'])) {
+                    $result['profilePicture'] = $uInfo['avatarLarger'] ?? $uInfo['avatarMedium'];
                 }
-                if (isset($s['followerCount']) && (int)$s['followerCount'] > 0) {
-                    $result['subscribers'] = (int)$s['followerCount'];
-                    $result['followers']   = (int)$s['followerCount'];
+                if (!empty($uInfo['signature'])) {
+                    $result['description'] = $uInfo['signature'];
+                    $apiSignature = $uInfo['signature'];
+                }
+                $fc = $sInfo['followerCount'] ?? $uInfo['followerCount'] ?? null;
+                if ($fc !== null) {
+                    $result['subscribers'] = (int)$fc;
+                    $result['followers']   = (int)$fc;
                     $followerFound = true;
                 }
-            }
-        }
-
-        // SIGI_STATE JSON state
-        if (empty($result['description']) && preg_match('/<script id="SIGI_STATE"[^>]*>\s*({.*?})\s*<\/script>/is', $rawHtml, $m)) {
-            $sigi = json_decode($m[1], true);
-            // Try both exact and lowercase handle
-            foreach ([$handle, strtolower($handle)] as $tryHandle) {
-                $uMod = $sigi['UserModule']['users'][$tryHandle] ?? [];
-                $sMod = $sigi['UserModule']['stats'][$tryHandle] ?? [];
-                if (!empty($uMod)) {
-                    if (!empty($uMod['nickname']) && $result['title'] === '@' . $handle . ' TikTok') $result['title'] = $uMod['nickname'];
-                    if (!empty($uMod['signature']) && empty($result['description'])) {
-                        $result['description'] = $uMod['signature'];
-                        $apiSignature = $uMod['signature'];
-                    }
-                    if (!empty($uMod['avatarLarger']) && empty($result['profilePicture'])) $result['profilePicture'] = $uMod['avatarLarger'];
-                    if (!empty($sMod['followerCount']) && !$followerFound) {
-                        $result['subscribers'] = (int)$sMod['followerCount'];
-                        $result['followers']   = (int)$sMod['followerCount'];
-                        $followerFound = true;
-                    }
+                if ($followerFound && !empty($result['description'])) {
                     break;
                 }
             }
         }
-
-        // Any JSON blob containing "signature" key (bio) — broad regex sweep
-        if (empty($result['description'])) {
-            // Look for signature in any script tag JSON
-            if (preg_match_all('/<script[^>]*>\s*window\.__[^=]+=\s*({.*?});?\s*<\/script>/is', $rawHtml, $allMs)) {
-                foreach ($allMs[1] as $blob) {
-                    $parsed = json_decode($blob, true);
-                    if (is_array($parsed)) {
-                        $sig = $parsed['signature'] ?? $parsed['user']['signature'] ?? null;
-                        if ($sig && is_string($sig) && strlen($sig) < 500) {
-                            $result['description'] = $sig;
-                            $apiSignature = $sig;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        // Raw regex fallback for "signature" key in any embedded JSON
-        if (empty($result['description'])) {
-            if (preg_match('/"signature"\s*:\s*"((?:[^"\\\\]|\\\\.)*?)"/s', $rawHtml, $sigM)) {
-                $sig = json_decode('"' . $sigM[1] . '"');
-                if ($sig && is_string($sig) && strlen($sig) > 1 && strlen($sig) < 500) {
-                    $result['description'] = $sig;
-                    $apiSignature = $sig;
-                }
-            }
-        }
-
-        // Follower count raw regex from page HTML
-        if (!$followerFound) {
-            if (preg_match('/"followerCount"\s*:\s*([0-9]+)/i', $rawHtml, $fM)) {
-                $result['subscribers'] = (int)$fM[1];
-                $result['followers']   = (int)$fM[1];
-                $followerFound = true;
-            } elseif (preg_match('/"fans"\s*:\s*([0-9]+)/i', $rawHtml, $fM)) {
-                $result['subscribers'] = (int)$fM[1];
-                $result['followers']   = (int)$fM[1];
-                $followerFound = true;
-            }
-        }
-
-        // Avatar from JSON
-        if (empty($result['profilePicture'])) {
-            if (preg_match('/"avatarLarger"\s*:\s*"(https:[^"]+)"/i', $rawHtml, $avM)) {
-                $result['profilePicture'] = json_decode('"' . str_replace('\\/', '/', $avM[1]) . '"');
-            }
-        }
-
-        // Meta title / image fallback
-        if (!$result['title'] && preg_match('/<meta property="og:title" content="([^"]+)"/i', $rawHtml, $m)) {
-            $result['title'] = html_entity_decode($m[1], ENT_QUOTES);
-        }
-        if (empty($result['profilePicture']) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $rawHtml, $m)) {
-            $result['profilePicture'] = $m[1];
-        }
-
-        // og:description — parse follower count + bio
-        if (preg_match('/<meta (?:name|property)="(?:og:)?description" content="([^"]+)"/i', $rawHtml, $m)) {
-            $metaDesc = html_entity_decode($m[1], ENT_QUOTES);
-            if (!$followerFound && preg_match('/([0-9.,]+[KMBkmb]?)\s+(?:Followers|Fans)/i', $metaDesc, $fm)) {
-                $fc = parseSocialNumber($fm[1]);
-                if ($fc > 0) { $result['subscribers'] = $fc; $result['followers'] = $fc; $followerFound = true; }
-            }
-            // Extract bio part after stats line
-            if (empty($result['description'])) {
-                // Pattern: "Xk Followers, X Following, Xk Likes - Bio text here"
-                $parts = preg_split('/(?:[0-9.,]+[KMBkmb]?\s+(?:Followers|Fans|Following|Likes)[^-]*-\s*)/i', $metaDesc);
-                if (!empty($parts[1])) {
-                    $bio = trim(strip_tags($parts[1]));
-                    $bio = preg_replace('/\s+/', ' ', $bio);
-                    if ($bio && strlen($bio) > 2 && !preg_match('/^(?:Watch short videos|TikTok|Sign up)/i', $bio)) {
-                        $result['description'] = $bio;
-                    }
-                }
-            }
-        }
     }
 
-    // ── SOURCE 3: RapidAPI Scrapers ──────────────────────────────────────
+    // ── SOURCE 2: RapidAPI Scrapers ──────────────────────────────
     if ((empty($result['description']) || !$followerFound) && $apiKey) {
         $rapidApis = [
             'https://tiktok-all-in-one-api.p.rapidapi.com/user/info?username=' . urlencode($handle) => 'tiktok-all-in-one-api.p.rapidapi.com',
@@ -871,28 +772,102 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
             ]);
             $response = curl_exec($ch);
             curl_close($ch);
-            if (!$response) continue;
-            $json = json_decode($response, true);
-            if (!is_array($json)) continue;
-            $userInfo = $json['user'] ?? $json['data']['user'] ?? $json['userInfo']['user'] ?? $json['data'] ?? [];
-            $stats    = $json['stats'] ?? $json['data']['stats'] ?? $json['userInfo']['stats'] ?? [];
-            if (!empty($userInfo)) {
-                if (!empty($userInfo['nickname'])) $result['title'] = $userInfo['nickname'];
-                if (!empty($userInfo['uniqueId'])) $result['channelName'] = '@' . $userInfo['uniqueId'];
-                if (!empty($userInfo['avatarLarger'] ?? $userInfo['avatarMedium'] ?? null)) {
-                    $result['profilePicture'] = $userInfo['avatarLarger'] ?? $userInfo['avatarMedium'];
+
+            if ($response) {
+                $json = json_decode($response, true);
+                $userInfo = $json['user'] ?? $json['data']['user'] ?? $json['userInfo']['user'] ?? $json['data'] ?? [];
+                $stats    = $json['stats'] ?? $json['data']['stats'] ?? $json['userInfo']['stats'] ?? [];
+
+                if (!empty($userInfo)) {
+                    if (!empty($userInfo['nickname'])) $result['title'] = $userInfo['nickname'];
+                    if (!empty($userInfo['uniqueId'])) $result['channelName'] = '@' . $userInfo['uniqueId'];
+                    if (!empty($userInfo['avatarLarger']) || !empty($userInfo['avatarMedium'])) {
+                        $result['profilePicture'] = $userInfo['avatarLarger'] ?? $userInfo['avatarMedium'];
+                    }
+                    if (!empty($userInfo['signature'])) {
+                        $result['description'] = $userInfo['signature'];
+                        $apiSignature = $userInfo['signature'];
+                    }
+                    $followerCount = $stats['followerCount'] ?? $userInfo['followerCount'] ?? null;
+                    if ($followerCount !== null) {
+                        $result['subscribers'] = (int)$followerCount;
+                        $result['followers']   = (int)$followerCount;
+                        $followerFound = true;
+                    }
+                    if ($followerFound && !empty($result['description'])) break;
                 }
-                if (!empty($userInfo['signature'])) {
-                    $result['description'] = $userInfo['signature'];
-                    $apiSignature = $userInfo['signature'];
+            }
+        }
+    }
+
+    // ── SOURCE 3: Direct Mobile & Desktop Web Scrape ────────────────
+    if (empty($result['description']) || !$followerFound || empty($result['profilePicture'])) {
+        $rawHtml = fetchSocialPage('https://www.tiktok.com/@' . urlencode($handle), true);
+        if ($rawHtml) {
+            // Check Universal Data JSON
+            if (preg_match('/<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>(.*?)<\/script>/is', $rawHtml, $m)) {
+                $jsonData = json_decode($m[1], true);
+                $uDetail = $jsonData['__DEFAULT_SCOPE__']['webapp.user-detail']['userInfo'] ?? [];
+                if (!empty($uDetail['user'])) {
+                    $u = $uDetail['user'];
+                    $s = $uDetail['stats'] ?? [];
+                    if (!empty($u['nickname'])) $result['title'] = $u['nickname'];
+                    if (!empty($u['uniqueId'])) $result['channelName'] = '@' . $u['uniqueId'];
+                    if (!empty($u['avatarLarger']) && empty($result['profilePicture'])) $result['profilePicture'] = $u['avatarLarger'];
+                    if (!empty($u['signature']) && empty($result['description'])) {
+                        $result['description'] = $u['signature'];
+                    }
+                    if (isset($s['followerCount']) && !$followerFound) {
+                        $result['subscribers'] = (int)$s['followerCount'];
+                        $result['followers']   = (int)$s['followerCount'];
+                        $followerFound = true;
+                    }
                 }
-                $followerCount = $stats['followerCount'] ?? $userInfo['followerCount'] ?? null;
-                if ($followerCount !== null) {
-                    $result['subscribers'] = (int)$followerCount;
-                    $result['followers']   = (int)$followerCount;
+            }
+
+            // Check SIGI_STATE JSON
+            if ((empty($result['description']) || !$followerFound) && preg_match('/<script id="SIGI_STATE"[^>]*>(.*?)<\/script>/is', $rawHtml, $m)) {
+                $sigi = json_decode($m[1], true);
+                $userModule = $sigi['UserModule']['users'][$handle] ?? [];
+                $statsModule = $sigi['UserModule']['stats'][$handle] ?? [];
+                if (!empty($userModule)) {
+                    if (!empty($userModule['nickname']) && $result['title'] === '@' . $handle . ' TikTok') $result['title'] = $userModule['nickname'];
+                    if (!empty($userModule['signature']) && empty($result['description'])) $result['description'] = $userModule['signature'];
+                    if (!empty($userModule['avatarLarger']) && empty($result['profilePicture'])) $result['profilePicture'] = $userModule['avatarLarger'];
+                }
+                if (!empty($statsModule['followerCount']) && !$followerFound) {
+                    $result['subscribers'] = (int)$statsModule['followerCount'];
+                    $result['followers']   = (int)$statsModule['followerCount'];
                     $followerFound = true;
                 }
-                if ($followerFound && !empty($result['description'])) break;
+            }
+
+            // Meta tags fallback
+            if (!$result['title'] && preg_match('/<meta property="og:title" content="([^"]+)"/i', $rawHtml, $m)) {
+                $result['title'] = html_entity_decode($m[1], ENT_QUOTES);
+            }
+            if (empty($result['profilePicture']) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $rawHtml, $m)) {
+                $result['profilePicture'] = $m[1];
+            }
+
+            // Parse followers and bio from Meta description
+            // Format: "12.5K Followers, 100 Following, 50K Likes - Watch videos from User (@handle)... <Bio>"
+            if (preg_match('/<meta (?:name|property)="(?:description|og:description)" content="([^"]+)"/i', $rawHtml, $m)) {
+                $metaDesc = html_entity_decode($m[1], ENT_QUOTES);
+                if (!$followerFound && preg_match('/([0-9.,]+[KMBkmb]?)\s+(?:Followers|Fans)/i', $metaDesc, $fm)) {
+                    $fc = parseSocialNumber($fm[1]);
+                    if ($fc > 0) {
+                        $result['subscribers'] = $fc;
+                        $result['followers']   = $fc;
+                        $followerFound = true;
+                    }
+                }
+                if (empty($result['description']) && preg_match('/(?:Likes|Fans|Followers)\.\s*(.*?)(?:Watch the latest videos|$)/is', $metaDesc, $bm)) {
+                    $bioText = trim(strip_tags($bm[1]));
+                    if ($bioText && !preg_match('/^(?:Watch short videos|TikTok)/i', $bioText)) {
+                        $result['description'] = $bioText;
+                    }
+                }
             }
         }
     }
@@ -1055,161 +1030,83 @@ function fetchInstagramProfileData($url, $verificationCode = '') {
     $htmlContent = '';
     $followerFound = false;
 
-    // ── SOURCE 0: Instagram official web profile API (most reliable) ─────
+    // ── SOURCE 0: Instagram official web profile API (most reliable) ───────
     applyInstagramExtract($result, fetchInstagramWebProfileApi($handle), $followerFound, $htmlContent);
 
-    // ── SOURCE 1: Instagram GraphQL endpoint ─────────────────────────────
-    if (empty($result['description']) || !$followerFound) {
-        $graphEndpoints = [
-            'https://www.instagram.com/api/v1/users/web_profile_info/?username=' . urlencode($handle),
-        ];
-        foreach ($graphEndpoints as $graphUrl) {
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_URL            => $graphUrl,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 8,
-                CURLOPT_CONNECTTIMEOUT => 4,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-                CURLOPT_HTTPHEADER     => [
-                    'X-IG-App-ID: 936619743392459',
-                    'X-ASBD-ID: 198387',
-                    'X-IG-WWW-Claim: 0',
-                    'X-Requested-With: XMLHttpRequest',
-                    'Accept: */*',
-                    'Accept-Language: en-US,en;q=0.9',
-                    'Referer: https://www.instagram.com/' . urlencode($handle) . '/',
-                    'Origin: https://www.instagram.com',
-                    'Sec-Fetch-Dest: empty',
-                    'Sec-Fetch-Mode: cors',
-                    'Sec-Fetch-Site: same-origin',
-                ],
-                CURLOPT_COOKIE         => 'ig_did=x; datr=x; ig_nrcb=1',
-            ]);
-            $response = curl_exec($ch);
-            $httpCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            curl_close($ch);
-            if (!$response || $httpCode >= 400) continue;
-            $json = json_decode($response, true);
-            $user = $json['data']['user'] ?? $json['user'] ?? null;
-            if (!empty($user)) {
-                if (!empty($user['full_name'])) $result['title'] = $user['full_name'];
-                if (!empty($user['username'])) $result['channelName'] = '@' . $user['username'];
-                if (!empty($user['biography'])) {
-                    $result['description'] = $user['biography'];
-                    $htmlContent .= ' ' . $user['biography'];
-                }
-                if (!empty($user['profile_pic_url_hd'] ?? $user['profile_pic_url'] ?? null)) {
-                    $result['profilePicture'] = $user['profile_pic_url_hd'] ?? $user['profile_pic_url'];
-                }
-                $fc = $user['edge_followed_by']['count'] ?? $user['follower_count'] ?? null;
-                if ($fc !== null) {
-                    $result['subscribers'] = (int)$fc;
-                    $result['followers']   = (int)$fc;
-                    $followerFound = true;
-                }
-                if (!empty($result['description']) && $followerFound) break;
+    // ── SOURCE 1: Picuki Public Instagram Viewer (Fast, reliable, free) ───
+    $picukiHtml = fetchSocialPage('https://www.picuki.com/profile/' . urlencode($handle));
+    if ($picukiHtml) {
+        $htmlContent .= ' ' . $picukiHtml;
+        if (preg_match('/<h1[^>]*class="[^"]*profile-name-bottom[^"]*"[^>]*>([^<]+)<\/h1>/i', $picukiHtml, $m)) {
+            $result['title'] = html_entity_decode(trim($m[1]), ENT_QUOTES);
+        }
+        if (empty($result['description']) && preg_match('/<div[^>]*class="[^"]*profile-description[^"]*"[^>]*>(.*?)<\/div>/is', $picukiHtml, $m)) {
+            $result['description'] = html_entity_decode(trim(strip_tags($m[1])), ENT_QUOTES);
+        }
+        if (empty($result['profilePicture']) && preg_match('/<div[^>]*class="[^"]*profile-avatar[^"]*"[^>]*>.*?<img[^>]+src="([^"]+)"/is', $picukiHtml, $m)) {
+            $result['profilePicture'] = $m[1];
+        }
+        if (!$followerFound && preg_match('/<span[^>]*class="[^"]*followed_by[^"]*"[^>]*>([^<]+)<\/span>/i', $picukiHtml, $m)) {
+            $fc = parseSocialNumber($m[1]);
+            if ($fc > 0) {
+                $result['subscribers'] = $fc;
+                $result['followers']   = $fc;
+                $followerFound = true;
             }
         }
     }
 
-    // ── SOURCE 2: Instagram page HTML scrape — JSON embedded data ────────
+    // ── SOURCE 2: GreatFon public viewer ───────────────────────────────────
     if (empty($result['description']) || !$followerFound) {
-        $igHtml = fetchSocialPage('https://www.instagram.com/' . urlencode($handle) . '/');
-        if ($igHtml) {
-            $htmlContent .= ' ' . $igHtml;
-
-            // Extract JSON-LD structured data
-            if (preg_match_all('/<script type="application\/ld\+json"[^>]*>(.*?)<\/script>/is', $igHtml, $allLd)) {
-                foreach ($allLd[1] as $ldBlob) {
-                    $ld = json_decode($ldBlob, true);
-                    if (!is_array($ld)) continue;
-                    if (!empty($ld['description']) && empty($result['description'])) {
-                        $result['description'] = html_entity_decode(strip_tags($ld['description']), ENT_QUOTES);
-                        $htmlContent .= ' ' . $result['description'];
-                    }
-                    if (!empty($ld['name']) && $result['title'] === '@' . $handle . ' Instagram') {
-                        $result['title'] = $ld['name'];
-                    }
-                    if (!empty($ld['image']) && empty($result['profilePicture'])) {
-                        $result['profilePicture'] = is_array($ld['image']) ? ($ld['image']['url'] ?? $ld['image'][0] ?? null) : $ld['image'];
-                    }
-                    if (!empty($ld['mainEntityofPage']['interactionStatistic'])) {
-                        foreach ($ld['mainEntityofPage']['interactionStatistic'] as $stat) {
-                            if (!empty($stat['userInteractionCount']) && stripos($stat['interactionType'] ?? '', 'Follow') !== false) {
-                                $result['subscribers'] = (int)$stat['userInteractionCount'];
-                                $result['followers']   = (int)$stat['userInteractionCount'];
-                                $followerFound = true;
-                            }
-                        }
-                    }
-                }
+        $greatfonHtml = fetchSocialPage('https://greatfon.com/v/' . urlencode($handle));
+        if ($greatfonHtml) {
+            $htmlContent .= ' ' . $greatfonHtml;
+            if ($result['title'] === '@' . $handle . ' Instagram' && preg_match('/<h1[^>]*class="[^"]*profile-name[^"]*"[^>]*>([^<]+)<\/h1>/i', $greatfonHtml, $m)) {
+                $result['title'] = html_entity_decode(trim($m[1]), ENT_QUOTES);
             }
-
-            // Embedded shared_data JSON
-            if (empty($result['description']) && preg_match('/window\._sharedData\s*=\s*({.*?});/s', $igHtml, $m)) {
-                $shared = json_decode($m[1], true);
-                $igUser = $shared['entry_data']['ProfilePage'][0]['graphql']['user']
-                    ?? $shared['entry_data']['ProfilePage'][0]['user']
-                    ?? null;
-                if ($igUser) {
-                    if (!empty($igUser['biography']) && empty($result['description'])) {
-                        $result['description'] = $igUser['biography'];
-                    }
-                    if (!empty($igUser['full_name']) && $result['title'] === '@' . $handle . ' Instagram') {
-                        $result['title'] = $igUser['full_name'];
-                    }
-                    $fc = $igUser['edge_followed_by']['count'] ?? $igUser['follower_count'] ?? null;
-                    if ($fc && !$followerFound) {
-                        $result['subscribers'] = (int)$fc;
-                        $result['followers']   = (int)$fc;
-                        $followerFound = true;
-                    }
-                }
+            if (empty($result['description']) && preg_match('/<div[^>]*class="[^"]*profile-bio[^"]*"[^>]*>(.*?)<\/div>/is', $greatfonHtml, $m)) {
+                $result['description'] = html_entity_decode(trim(strip_tags($m[1])), ENT_QUOTES);
             }
-
-            // Broad "biography" key sweep
-            if (empty($result['description'])) {
-                if (preg_match('/"biography"\s*:\s*"((?:[^"\\\\]|\\\\.)*?)"/s', $igHtml, $bioM)) {
-                    $bio = json_decode('"' . $bioM[1] . '"');
-                    if ($bio && is_string($bio) && strlen($bio) > 1) {
-                        $result['description'] = $bio;
-                    }
-                }
-            }
-
-            // Raw follower count key sweep
-            if (!$followerFound) {
-                if (preg_match('/"edge_followed_by"\s*:\s*{\s*"count"\s*:\s*([0-9]+)/i', $igHtml, $fM)) {
-                    $result['subscribers'] = (int)$fM[1];
-                    $result['followers']   = (int)$fM[1];
-                    $followerFound = true;
-                } elseif (preg_match('/"follower_count"\s*:\s*([0-9]+)/i', $igHtml, $fM)) {
-                    $result['subscribers'] = (int)$fM[1];
-                    $result['followers']   = (int)$fM[1];
-                    $followerFound = true;
-                }
-            }
-
-            // og: meta tags
-            if (!$result['title'] && preg_match('/<meta property="og:title" content="([^"]+)"/i', $igHtml, $m)) {
-                $result['title'] = html_entity_decode($m[1], ENT_QUOTES);
-            }
-            if (empty($result['profilePicture']) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $igHtml, $m)) {
+            if (empty($result['profilePicture']) && preg_match('/<img[^>]*class="[^"]*profile-avatar[^"]*"[^>]+src="([^"]+)"/is', $greatfonHtml, $m)) {
                 $result['profilePicture'] = $m[1];
             }
-            if (preg_match('/<meta property="og:description" content="([^"]+)"/i', $igHtml, $m)) {
-                $ogDesc = html_entity_decode($m[1], ENT_QUOTES);
-                if (!$followerFound && preg_match('/([0-9.,]+[KMBkmb]?)\s+Followers/i', $ogDesc, $fm)) {
-                    $fc = parseSocialNumber($fm[1]);
-                    if ($fc > 0) { $result['subscribers'] = $fc; $result['followers'] = $fc; $followerFound = true; }
+            if (!$followerFound && preg_match('/<span[^>]*class="[^"]*followers[^"]*"[^>]*>([^<]+)<\/span>/i', $greatfonHtml, $m)) {
+                $fc = parseSocialNumber($m[1]);
+                if ($fc > 0) {
+                    $result['subscribers'] = $fc;
+                    $result['followers']   = $fc;
+                    $followerFound = true;
                 }
             }
         }
     }
 
-    // ── SOURCE 3: RapidAPI Instagram Scrapers ────────────────────────────
+    // ── SOURCE 3: Imginn Public Instagram Viewer ─────────────────────────
+    if (empty($result['description']) || !$followerFound) {
+        $imginnHtml = fetchSocialPage('https://imginn.com/' . urlencode($handle) . '/');
+        if ($imginnHtml) {
+            $htmlContent .= ' ' . $imginnHtml;
+            if ($result['title'] === '@' . $handle . ' Instagram' && preg_match('/<h1[^>]*class="[^"]*name[^"]*"[^>]*>([^<]+)<\/h1>/i', $imginnHtml, $m)) {
+                $result['title'] = html_entity_decode(trim($m[1]), ENT_QUOTES);
+            }
+            if (empty($result['description']) && preg_match('/<div[^>]*class="[^"]*desc[^"]*"[^>]*>(.*?)<\/div>/is', $imginnHtml, $m)) {
+                $result['description'] = html_entity_decode(trim(strip_tags($m[1])), ENT_QUOTES);
+            }
+            if (empty($result['profilePicture']) && preg_match('/<div[^>]*class="[^"]*avatar[^"]*"[^>]*>.*?<img[^>]+src="([^"]+)"/is', $imginnHtml, $m)) {
+                $result['profilePicture'] = $m[1];
+            }
+            if (!$followerFound && preg_match('/<span[^>]*class="[^"]*count[^"]*"[^>]*>([0-9.,KMBkmb]+)<\/span>\s*followers/i', $imginnHtml, $m)) {
+                $fc = parseSocialNumber($m[1]);
+                if ($fc > 0) {
+                    $result['subscribers'] = $fc;
+                    $result['followers']   = $fc;
+                    $followerFound = true;
+                }
+            }
+        }
+    }
+
+    // ── SOURCE 4: RapidAPI Instagram Scrapers ────────────────────────────
     if ((empty($result['description']) || !$followerFound) && $apiKey) {
         $rapidApis = [
             'https://instagram-scraper-api2.p.rapidapi.com/v1/info?username_or_id_or_url=' . urlencode($handle) => 'instagram-scraper-api2.p.rapidapi.com',
@@ -1229,60 +1126,54 @@ function fetchInstagramProfileData($url, $verificationCode = '') {
             ]);
             $response = curl_exec($ch);
             curl_close($ch);
-            if (!$response) continue;
-            $json = json_decode($response, true);
-            $data = $json['data'] ?? $json;
-            if (!empty($data) && is_array($data)) {
-                if (!empty($data['full_name'])) $result['title'] = $data['full_name'];
-                if (!empty($data['username'])) $result['channelName'] = '@' . $data['username'];
-                if (!empty($data['profile_pic_url_hd'] ?? $data['profile_pic_url'] ?? null)) {
-                    $result['profilePicture'] = $data['profile_pic_url_hd'] ?? $data['profile_pic_url'];
-                }
-                if (!empty($data['biography'])) {
-                    $result['description'] = $data['biography'];
-                }
-                $followerCount = $data['follower_count'] ?? $data['edge_followed_by']['count'] ?? null;
-                if ($followerCount !== null) {
-                    $result['subscribers'] = (int)$followerCount;
-                    $result['followers']   = (int)$followerCount;
-                    $followerFound = true;
-                }
-                if ($followerFound && !empty($result['description'])) {
-                    break;
+
+            if ($response) {
+                $json = json_decode($response, true);
+                $data = $json['data'] ?? $json;
+                if (!empty($data) && is_array($data)) {
+                    if (!empty($data['full_name'])) $result['title'] = $data['full_name'];
+                    if (!empty($data['username'])) $result['channelName'] = '@' . $data['username'];
+                    if (!empty($data['profile_pic_url_hd']) || !empty($data['profile_pic_url'])) {
+                        $result['profilePicture'] = $data['profile_pic_url_hd'] ?? $data['profile_pic_url'];
+                    }
+                    if (!empty($data['biography'])) {
+                        $result['description'] = $data['biography'];
+                    }
+                    $followerCount = $data['follower_count'] ?? $data['edge_followed_by']['count'] ?? null;
+                    if ($followerCount !== null) {
+                        $result['subscribers'] = (int)$followerCount;
+                        $result['followers']   = (int)$followerCount;
+                        $followerFound = true;
+                    }
+                    if ($followerFound && !empty($result['description'])) break;
                 }
             }
         }
     }
 
-    // ── SOURCE 4: Instagram Embed Endpoint Scraper ──────────────────────
+    // ── SOURCE 5: Direct Instagram Scrape (Meta tags fallback) ───────────
     if (empty($result['description']) || !$followerFound) {
-        $embedHtml = fetchSocialPage('https://www.instagram.com/' . urlencode($handle) . '/embed/');
-        if ($embedHtml) {
-            $htmlContent .= ' ' . $embedHtml;
-            if (empty($result['description'])) {
-                if (preg_match('/"biography"\s*:\s*"((?:[^"\\\\]|\\\\.)*?)"/s', $embedHtml, $bioM)) {
-                    $bio = json_decode('"' . $bioM[1] . '"');
-                    if ($bio && is_string($bio) && strlen($bio) > 1) {
-                        $result['description'] = $bio;
+        $igHtml = fetchSocialPage('https://www.instagram.com/' . urlencode($handle) . '/');
+        if ($igHtml) {
+            $htmlContent .= ' ' . $igHtml;
+            if (!$result['title'] && preg_match('/<meta property="og:title" content="([^"]+)"/i', $igHtml, $m)) {
+                $result['title'] = html_entity_decode($m[1], ENT_QUOTES);
+            }
+            if (empty($result['profilePicture']) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $igHtml, $m)) {
+                $result['profilePicture'] = $m[1];
+            }
+            if (preg_match('/<meta property="og:description" content="([^"]+)"/i', $igHtml, $m)) {
+                $ogDesc = html_entity_decode($m[1], ENT_QUOTES);
+                if (!$followerFound && preg_match('/([0-9.,]+[KMBkmb]?)\s+Followers/i', $ogDesc, $fm)) {
+                    $fc = parseSocialNumber($fm[1]);
+                    if ($fc > 0) {
+                        $result['subscribers'] = $fc;
+                        $result['followers']   = $fc;
+                        $followerFound = true;
                     }
                 }
-            }
-        }
-    }
-
-    // ── SOURCE 5: Search Snippet Fallback (DuckDuckGo / Bing) ───────────
-    if (empty($result['description']) || !$followerFound) {
-        $ddgHtml = fetchSocialPage('https://html.duckduckgo.com/html/?q=site:instagram.com/' . urlencode($handle));
-        if ($ddgHtml) {
-            $htmlContent .= ' ' . $ddgHtml;
-            if (!$followerFound && preg_match('/([0-9.,]+[KMBkmb]?)\s+Followers/i', $ddgHtml, $fm)) {
-                $fc = parseSocialNumber($fm[1]);
-                if ($fc > 0) { $result['subscribers'] = $fc; $result['followers'] = $fc; $followerFound = true; }
-            }
-            if (empty($result['description']) && preg_match('/<a class="result__snippet"[^>]*>([\s\S]*?)<\/a>/i', $ddgHtml, $sm)) {
-                $snippet = html_entity_decode(trim(strip_tags($sm[1])), ENT_QUOTES);
-                if ($snippet && !preg_match('/^See Instagram/i', $snippet)) {
-                    $result['description'] = $snippet;
+                if (empty($result['description']) && preg_match('/-\s*See Instagram photos and videos from .*?:\s*"(.*?)"/is', $ogDesc, $bm)) {
+                    $result['description'] = trim($bm[1]);
                 }
             }
         }
@@ -1524,27 +1415,18 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
                 $result['channelName'] = $title;
             }
         }
-
-        // Intro/About box
         if (preg_match('/<div[^>]*id="pages_milestone[^"]*"[^>]*>(.*?)<\/div>/is', $mbHtml, $m)) {
             $aboutText = html_entity_decode(trim(strip_tags($m[1])), ENT_QUOTES);
-            if ($aboutText) $result['description'] = $aboutText;
+            if ($aboutText) {
+                $result['description'] = $aboutText;
+            }
         }
         if (empty($result['description']) && preg_match('/<div[^>]*id="pages_m_about[^"]*"[^>]*>(.*?)<\/div>/is', $mbHtml, $m)) {
             $aboutText = html_entity_decode(trim(strip_tags($m[1])), ENT_QUOTES);
-            if ($aboutText && !preg_match('/^Log in/i', $aboutText)) $result['description'] = $aboutText;
-        }
-
-        // Broad scan of "About" sections
-        if (empty($result['description'])) {
-            if (preg_match('/About\s*<\/[^>]+>\s*<[^>]+>([^<]{10,500})/is', $mbHtml, $m)) {
-                $aboutText = html_entity_decode(trim(strip_tags($m[1])), ENT_QUOTES);
-                if ($aboutText && !preg_match('/^Log in|^Sign up/i', $aboutText)) {
-                    $result['description'] = $aboutText;
-                }
+            if ($aboutText && !preg_match('/^Log in/i', $aboutText)) {
+                $result['description'] = $aboutText;
             }
         }
-
         if (empty($result['profilePicture']) && preg_match('/<img[^>]+src="([^"]+)"[^>]*class="[^"]*profilePic/i', $mbHtml, $m)) {
             $result['profilePicture'] = html_entity_decode($m[1], ENT_QUOTES);
         }
@@ -1558,7 +1440,7 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
         }
     }
 
-    // ── SOURCE 1: Mobile Web Scraper (og: meta + JSON key sweep) ──────────
+    // ── SOURCE 1: Mobile Web Scraper (Clean & Unblocked) ────────────────
     $mHtml = fetchSocialPage('https://m.facebook.com/' . urlencode($fbHandle), true);
     if ($mHtml) {
         $htmlContent .= ' ' . $mHtml;
@@ -1567,45 +1449,18 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
             $result['title']       = $title;
             $result['channelName'] = $title;
         }
-        // og:description on mobile is often the actual page bio
         if (preg_match('/<meta property="og:description" content="([^"]+)"/i', $mHtml, $m)) {
             $desc = html_entity_decode(trim($m[1]), ENT_QUOTES);
-            if (!empty($desc) && !preg_match('/^Log in or sign up|^Log in to Facebook|^Facebook/i', $desc)) {
-                if (empty($result['description'])) $result['description'] = $desc;
+            if (!empty($desc) && !preg_match('/^Log in or sign up/i', $desc)) {
+                $result['description'] = $desc;
             }
         }
-        // name=description meta tag
-        if (empty($result['description']) && preg_match('/<meta name="description" content="([^"]+)"/i', $mHtml, $m)) {
-            $desc = html_entity_decode(trim($m[1]), ENT_QUOTES);
-            if (!empty($desc) && !preg_match('/^Log in|^Facebook/i', $desc)) $result['description'] = $desc;
-        }
-        // JSON-LD structured data
-        if (empty($result['description']) && preg_match_all('/<script type="application\/ld\+json"[^>]*>(.*?)<\/script>/is', $mHtml, $allLd)) {
-            foreach ($allLd[1] as $ldBlob) {
-                $ld = json_decode($ldBlob, true);
-                if (!is_array($ld)) continue;
-                if (!empty($ld['description']) && strlen($ld['description']) > 5) {
-                    $result['description'] = html_entity_decode(strip_tags($ld['description']), ENT_QUOTES);
-                    break;
-                }
-            }
-        }
-        // Broad key sweep in embedded JSON
-        if (empty($result['description'])) {
-            if (preg_match('/"biography"\s*:\s*"((?:[^"\\\\]|\\\\.){5,500})"/s', $mHtml, $bioM)) {
-                $bio = json_decode('"' . $bioM[1] . '"');
-                if ($bio && is_string($bio)) $result['description'] = $bio;
-            } elseif (preg_match('/"intro"\s*:\s*\{[^}]*"text"\s*:\s*"((?:[^"\\\\]|\\\\.){5,500})"/s', $mHtml, $bioM)) {
-                $bio = json_decode('"' . $bioM[1] . '"');
-                if ($bio && is_string($bio)) $result['description'] = $bio;
-            }
-        }
-
         if (empty($result['profilePicture']) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $mHtml, $m)) {
             $result['profilePicture'] = $m[1];
         }
 
-        if (!$followerFound && preg_match('/([0-9.,]+[KMBkmb]?)\s+(?:people follow|followers?|likes?|people like this)/i', $mHtml, $m)) {
+        // Extract follower/like count from text
+        if (preg_match('/([0-9.,]+[KMBkmb]?)\s+(?:people follow|followers?|likes?|people like this)/i', $mHtml, $m)) {
             $fc = parseSocialNumber($m[1]);
             if ($fc > 0) {
                 $result['subscribers'] = $fc;
@@ -1613,15 +1468,9 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
                 $followerFound = true;
             }
         }
-
-        if (!$followerFound && preg_match('/"follower_count"\s*:\s*([0-9]+)/i', $mHtml, $fM)) {
-            $result['subscribers'] = (int)$fM[1];
-            $result['followers']   = (int)$fM[1];
-            $followerFound = true;
-        }
     }
 
-    // ── SOURCE 2: Desktop Facebook Web Scraper (+ JSON sweeps) ───────────
+    // ── SOURCE 2: Desktop Facebook Web Scraper ─────────────────────────
     if (empty($result['description']) || !$followerFound) {
         $dHtml = fetchSocialPage('https://www.facebook.com/' . urlencode($fbHandle));
         if ($dHtml) {
@@ -1633,21 +1482,8 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
             }
             if (empty($result['description']) && preg_match('/<meta (?:name|property)="(?:description|og:description)" content="([^"]+)"/i', $dHtml, $m)) {
                 $desc = html_entity_decode(trim($m[1]), ENT_QUOTES);
-                if (!empty($desc) && !preg_match('/^Log in to Facebook|^Facebook/i', $desc)) {
+                if (!empty($desc) && !preg_match('/^Log in to Facebook/i', $desc)) {
                     $result['description'] = $desc;
-                }
-            }
-            // JSON key sweeps for embedded data
-            if (empty($result['description'])) {
-                if (preg_match('/"biography"\s*:\s*"((?:[^"\\\\]|\\\\.){5,500})"/s', $dHtml, $bioM)) {
-                    $bio = json_decode('"' . $bioM[1] . '"');
-                    if ($bio && is_string($bio)) $result['description'] = $bio;
-                } elseif (preg_match('/"intro"\s*:\s*\{[^}]*"text"\s*:\s*"((?:[^"\\\\]|\\\\.){5,500})"/s', $dHtml, $bioM)) {
-                    $bio = json_decode('"' . $bioM[1] . '"');
-                    if ($bio && is_string($bio)) $result['description'] = $bio;
-                } elseif (preg_match('/"description"\s*:\s*\{[^}]*"text"\s*:\s*"((?:[^"\\\\]|\\\\.){5,500})"/s', $dHtml, $bioM)) {
-                    $bio = json_decode('"' . $bioM[1] . '"');
-                    if ($bio && is_string($bio) && !preg_match('/^Log in|^Facebook/i', $bio)) $result['description'] = $bio;
                 }
             }
             if (empty($result['profilePicture']) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $dHtml, $m)) {
@@ -1660,11 +1496,6 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
                     $result['followers']   = $fc;
                     $followerFound = true;
                 }
-            }
-            if (!$followerFound && preg_match('/"follower_count"\s*:\s*([0-9]+)/i', $dHtml, $fM)) {
-                $result['subscribers'] = (int)$fM[1];
-                $result['followers']   = (int)$fM[1];
-                $followerFound = true;
             }
         }
     }

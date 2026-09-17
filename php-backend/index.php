@@ -11,7 +11,7 @@ set_exception_handler(function($e) {
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
-header('Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS');
+header('Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
 header('Access-Control-Allow-Credentials: true');
 
@@ -25,40 +25,41 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') == 'OPTIONS') {
 require_once __DIR__ . '/config/auto-env.php';
 
 // Serve uploaded files from php-backend/uploads
-$rawUploadUri = $_SERVER['REQUEST_URI'] ?? '/';
-$requestPathForUpload = parse_url($rawUploadUri, PHP_URL_PATH) ?? '/';
+$requestPathForUpload = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
-// Check if request is asking for an upload file
-if (preg_match('#/(?:api/)?uploads/(.+)$#i', $requestPathForUpload, $uploadMatch)) {
-    $subPath = ltrim(urldecode($uploadMatch[1]), '/\\');
-    // Prevent directory traversal
-    $subPath = str_replace(['../', '..\\'], '', $subPath);
-    $targetFile = __DIR__ . '/uploads/' . $subPath;
+// Support both /uploads/... and /api/uploads/...
+if (strpos($requestPathForUpload, '/api/uploads/') === 0) {
+    $requestPathForUpload = substr($requestPathForUpload, 4); // converts /api/uploads/... to /uploads/...
+}
 
-    if (file_exists($targetFile) && is_file($targetFile)) {
-        $ext = strtolower(pathinfo($targetFile, PATHINFO_EXTENSION));
-        $contentTypes = [
-            'jpg'  => 'image/jpeg',
-            'jpeg' => 'image/jpeg',
-            'png'  => 'image/png',
-            'gif'  => 'image/gif',
-            'webp' => 'image/webp',
-            'svg'  => 'image/svg+xml',
-            'mp4'  => 'video/mp4',
-            'webm' => 'video/webm',
-            'mov'  => 'video/quicktime',
-        ];
-        $mimeType = $contentTypes[$ext] ?? (mime_content_type($targetFile) ?: 'application/octet-stream');
+if (strpos($requestPathForUpload, '/uploads/') === 0) {
+    $uploadRoot = realpath(__DIR__ . '/uploads');
+    $requestedFile = realpath(__DIR__ . $requestPathForUpload);
+
+    if (
+        $uploadRoot &&
+        $requestedFile &&
+        strpos($requestedFile, $uploadRoot) === 0 &&
+        is_file($requestedFile)
+    ) {
+        $mimeType = mime_content_type($requestedFile) ?: 'application/octet-stream';
 
         header('Content-Type: ' . $mimeType);
-        header('Content-Length: ' . filesize($targetFile));
-        header('Cache-Control: public, max-age=31536000, immutable');
-        header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Methods: GET, HEAD, OPTIONS');
+        header('Content-Length: ' . filesize($requestedFile));
+        header('Cache-Control: public, max-age=86400');
 
-        readfile($targetFile);
+        readfile($requestedFile);
         exit;
     }
+
+    http_response_code(404);
+    header('Content-Type: application/json');
+    echo json_encode([
+        'success' => false,
+        'message' => 'Uploaded file not found',
+        'path' => $requestPathForUpload
+    ]);
+    exit;
 }
 
 // Load environment variables
@@ -90,8 +91,9 @@ require_once __DIR__ . '/controllers/ChatUploadController.php';
 require_once __DIR__ . '/controllers/AdUploadController.php';
 require_once __DIR__ . '/controllers/AdminController.php';
 require_once __DIR__ . '/controllers/ReferralController.php';
-require_once __DIR__ . '/controllers/KycController.php';
 require_once __DIR__ . '/controllers/AdminReferralController.php';
+require_once __DIR__ . '/controllers/EmailPoolController.php';
+require_once __DIR__ . '/controllers/KycController.php';
 
 // Error reporting — keep display_errors OFF in production to prevent HTML leaking into JSON
 error_reporting(E_ALL);
@@ -228,6 +230,14 @@ try {
     elseif (strpos($path, '/deals') === 0) {
         handleDealsRoutes($path, $method);
     }
+    // Referral user routes
+    elseif (strpos($path, '/referral') === 0) {
+        handleReferralRoutes($path, $method);
+    }
+    // KYC user routes (standalone /kyc)
+    elseif (strpos($path, '/kyc') === 0) {
+        handleKycRoutes($path, $method);
+    }
     // Crypto payments routes
     elseif (strpos($path, '/crypto-payments') === 0) {
         handleCryptoPaymentsRoutes($path, $method);
@@ -236,32 +246,6 @@ try {
     elseif (strpos($path, '/webhooks/nowpayments') === 0) {
         require_once __DIR__ . '/webhooks/nowpayments.php';
         exit(); // Exit after handling webhook to prevent further processing
-    }
-    // Referral user routes
-    elseif (strpos($path, '/referral') === 0) {
-        $referralController = new ReferralController();
-        handleReferralRoutes($referralController, $path, $method);
-    }
-    // KYC user routes (/user/kyc or /kyc)
-    elseif (strpos($path, '/user/kyc') === 0 || strpos($path, '/kyc') === 0) {
-        $kycController = new KycController();
-        handleKycRoutes($kycController, $path, $method);
-    }
-    // Admin KYC review routes
-    elseif (strpos($path, '/admin/kyc') === 0) {
-        $kycController = new KycController();
-        handleAdminKycRoutes($kycController, $path, $method);
-    }
-    // Admin Referral routes
-    elseif (strpos($path, '/admin/referrals') === 0) {
-        $adminReferralController = new AdminReferralController();
-        handleAdminReferralRoutes($adminReferralController, $path, $method);
-    }
-    // Email Pool Manager routes
-    elseif (strpos($path, '/admin/email-pool') === 0) {
-        require_once __DIR__ . '/controllers/EmailPoolController.php';
-        $emailPoolController = new EmailPoolController();
-        handleEmailPoolRoutes($emailPoolController, $path, $method);
     }
     // Admin routes
     elseif (strpos($path, '/admin') === 0) {
@@ -570,12 +554,6 @@ function handleUserRoutes($controller, $path, $method) {
         case $path === '/user/buy-vip' && $method === 'POST':
             $controller->buyVip();
             break;
-        case $path === '/user/vip-crypto-payment' && $method === 'POST':
-            $controller->createVipCryptoPayment();
-            break;
-        case preg_match('/^\/user\/vip-payment-status\/([^\/]+)$/', $path, $matches) && $method === 'GET':
-            $controller->getVipPaymentStatus($matches[1]);
-            break;
         case $path === '/user/buyer-stats' && $method === 'GET':
             $controller->getBuyerStats();
             break;
@@ -587,6 +565,12 @@ case preg_match('/^\/user\/(\d+)$/', $path, $matches) && $method === 'GET':
     break;
 case preg_match('/^\/user\/@(.+)$/', $path, $matches) && $method === 'GET':
     $controller->getUserByUsername(urldecode($matches[1]));
+    break;
+case ($path === '/user/kyc/submit' || $path === '/kyc/submit') && $method === 'POST':
+    (new KycController())->submit();
+    break;
+case ($path === '/user/kyc/status' || $path === '/kyc/status') && $method === 'GET':
+    (new KycController())->getStatus();
     break;
 default:
     Response::error('User route not found', 404);}
@@ -930,7 +914,6 @@ function handleAdminRoutes($controller, $path, $method) {
             break;
         case preg_match('/^\/admin\/deals\/(\d+)\/mark-primary-owner-made$/', $path, $matches) && $method === 'POST':
         case preg_match('/^\/admin\/deals\/(\d+)\/confirm-primary-owner$/', $path, $matches) && $method === 'POST':
-        case preg_match('/^\/admin\/deals\/(\d+)\/admin-bypass-fee$/', $path, $matches) && $method === 'POST':
             handleDealsRoutes($path, $method);
             break;
         case $path === '/admin/support-requests' && $method === 'GET':
@@ -975,51 +958,78 @@ function handleAdminRoutes($controller, $path, $method) {
         case preg_match('/^\/admin\/ads\/(\d+)\/unban$/', $path, $matches) && $method === 'PUT':
             $controller->unbanListing($matches[1]);
             break;
-        default:
-            Response::error('Admin route not found', 404);
-    }
-}
 
-function handleEmailPoolRoutes($controller, $path, $method) {
-    switch (true) {
+        // ── KYC Admin Routes ──
+        case $path === '/admin/kyc/pending' && $method === 'GET':
+            (new KycController())->getPending();
+            break;
+        case $path === '/admin/kyc/review' && $method === 'POST':
+            (new KycController())->review();
+            break;
+
+        // ── Admin Referral Management Routes ──
+        case $path === '/admin/referrals/stats' && $method === 'GET':
+            (new AdminReferralController())->getStats();
+            break;
+        case $path === '/admin/referrals/list' && $method === 'GET':
+            (new AdminReferralController())->getList();
+            break;
+        case $path === '/admin/referrals/adjust-credit' && $method === 'POST':
+            (new AdminReferralController())->adjustCredit();
+            break;
+        case $path === '/admin/referrals/toggle-flag' && $method === 'POST':
+            (new AdminReferralController())->toggleFlag();
+            break;
+        case $path === '/admin/referrals/revoke' && $method === 'POST':
+            (new AdminReferralController())->revoke();
+            break;
+        case $path === '/admin/referrals/settings' && $method === 'GET':
+            (new AdminReferralController())->getSettings();
+            break;
+        case $path === '/admin/referrals/settings' && $method === 'POST':
+            (new AdminReferralController())->updateSettings();
+            break;
+
+        // ── Admin Email Pool Routes ──
         case $path === '/admin/email-pool/stats' && $method === 'GET':
-            $controller->getStats();
+            (new EmailPoolController())->getStats();
             break;
         case $path === '/admin/email-pool/settings' && $method === 'GET':
-            $controller->getSettings();
+            (new EmailPoolController())->getSettings();
             break;
-        case $path === '/admin/email-pool/settings' && $method === 'PUT':
-            $controller->updateSettings();
+        case $path === '/admin/email-pool/settings' && ($method === 'PUT' || $method === 'POST'):
+            (new EmailPoolController())->updateSettings();
             break;
         case $path === '/admin/email-pool/reassign' && $method === 'POST':
-            $controller->reassignDeal();
+            (new EmailPoolController())->reassignDeal();
             break;
-        case $path === '/admin/email-pool/assign' && $method === 'POST':
-            $controller->manualAssign();
+        case $path === '/admin/email-pool/manual-assign' && $method === 'POST':
+            (new EmailPoolController())->manualAssign();
             break;
         case $path === '/admin/email-pool' && $method === 'GET':
-            $controller->getEmails();
+            (new EmailPoolController())->getEmails();
             break;
         case $path === '/admin/email-pool' && $method === 'POST':
-            $controller->addEmail();
+            (new EmailPoolController())->addEmail();
             break;
-        case preg_match('/^\/admin\/email-pool\/(\d+)\/capacity$/', $path, $matches) && $method === 'PUT':
-            $controller->updateCapacity($matches[1]);
+        case preg_match('/^\/admin\/email-pool\/(\d+)\/capacity$/', $path, $matches) && ($method === 'PUT' || $method === 'POST'):
+            (new EmailPoolController())->updateCapacity((int)$matches[1]);
             break;
-        case preg_match('/^\/admin\/email-pool\/(\d+)\/status$/', $path, $matches) && in_array($method, ['POST', 'PUT', 'PATCH']):
-            $controller->toggleStatus($matches[1]);
+        case preg_match('/^\/admin\/email-pool\/(\d+)\/status$/', $path, $matches) && ($method === 'PUT' || $method === 'POST'):
+            (new EmailPoolController())->toggleStatus((int)$matches[1]);
             break;
         case preg_match('/^\/admin\/email-pool\/(\d+)$/', $path, $matches) && $method === 'GET':
-            $controller->getEmailDetails($matches[1]);
+            (new EmailPoolController())->getEmailDetails((int)$matches[1]);
             break;
-        case preg_match('/^\/admin\/email-pool\/(\d+)$/', $path, $matches) && $method === 'PUT':
-            $controller->updateEmail($matches[1]);
+        case preg_match('/^\/admin\/email-pool\/(\d+)$/', $path, $matches) && ($method === 'PUT' || $method === 'POST'):
+            (new EmailPoolController())->updateEmail((int)$matches[1]);
             break;
         case preg_match('/^\/admin\/email-pool\/(\d+)$/', $path, $matches) && $method === 'DELETE':
-            $controller->deleteEmail($matches[1]);
+            (new EmailPoolController())->deleteEmail((int)$matches[1]);
             break;
+
         default:
-            Response::error('Email pool route not found', 404);
+            Response::error('Admin route not found', 404);
     }
 }
 
@@ -1059,7 +1069,9 @@ function handleTestNOWPayments() {
     require_once __DIR__ . '/test_nowpayments_integration.php';
 }
 
-function handleReferralRoutes($controller, $path, $method) {
+function handleReferralRoutes($path, $method) {
+    $controller = new ReferralController();
+
     switch (true) {
         case $path === '/referral/dashboard' && $method === 'GET':
             $controller->getDashboard();
@@ -1081,57 +1093,18 @@ function handleReferralRoutes($controller, $path, $method) {
     }
 }
 
-function handleKycRoutes($controller, $path, $method) {
+function handleKycRoutes($path, $method) {
+    $controller = new KycController();
+
     switch (true) {
-        case ($path === '/user/kyc/submit' || $path === '/kyc/submit') && $method === 'POST':
+        case ($path === '/kyc/submit' || $path === '/user/kyc/submit') && $method === 'POST':
             $controller->submit();
             break;
-        case ($path === '/user/kyc/status' || $path === '/kyc/status') && $method === 'GET':
+        case ($path === '/kyc/status' || $path === '/user/kyc/status') && $method === 'GET':
             $controller->getStatus();
             break;
         default:
             Response::error('KYC route not found', 404);
-    }
-}
-
-function handleAdminKycRoutes($controller, $path, $method) {
-    switch (true) {
-        case $path === '/admin/kyc/pending' && $method === 'GET':
-            $controller->getPending();
-            break;
-        case $path === '/admin/kyc/review' && $method === 'POST':
-            $controller->review();
-            break;
-        default:
-            Response::error('Admin KYC route not found', 404);
-    }
-}
-
-function handleAdminReferralRoutes($controller, $path, $method) {
-    switch (true) {
-        case $path === '/admin/referrals/stats' && $method === 'GET':
-            $controller->getStats();
-            break;
-        case $path === '/admin/referrals/list' && $method === 'GET':
-            $controller->getList();
-            break;
-        case $path === '/admin/referrals/adjust-credit' && $method === 'POST':
-            $controller->adjustCredit();
-            break;
-        case $path === '/admin/referrals/toggle-flag' && $method === 'POST':
-            $controller->toggleFlag();
-            break;
-        case $path === '/admin/referrals/revoke' && $method === 'POST':
-            $controller->revoke();
-            break;
-        case $path === '/admin/referrals/settings' && $method === 'GET':
-            $controller->getSettings();
-            break;
-        case $path === '/admin/referrals/settings' && in_array($method, ['POST', 'PUT']):
-            $controller->updateSettings();
-            break;
-        default:
-            Response::error('Admin Referral route not found', 404);
     }
 }
 ?>

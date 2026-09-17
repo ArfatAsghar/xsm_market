@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Upload, ChevronDown, Search, RefreshCw, X, DollarSign, CheckCircle2, XCircle, Plus, Sparkles, ShieldCheck } from 'lucide-react';
+import { Upload, ChevronDown, Search, RefreshCw, X, DollarSign, CheckCircle2, XCircle, Plus } from 'lucide-react';
 import { createAd } from '../services/ads';
 import { extractProfileData, detectPlatform, formatFollowerCount, normalizeSocialUrl, SUPPORTED_PLATFORMS, PLATFORM_EARNING_METHODS } from '../services/socialMedia';
 import { uploadScreenshots } from '../services/uploadService';
@@ -106,48 +106,12 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     setCustomEarningInput('');
   };
 
-  // Mutually exclusive: 'freshly' | 'adsense' | null
-  const [monetizationOption, setMonetizationOption] = useState<'freshly' | 'adsense' | null>(null);
-  const isFreshlyMonetized = monetizationOption === 'freshly';
-  const hasAdsenseChangeButton = monetizationOption === 'adsense';
-
-  const selectMonetizationOption = (option: 'freshly' | 'adsense') => {
-    // Toggle off if already selected
-    const nextOption = monetizationOption === option ? null : option;
-    setMonetizationOption(nextOption);
-
-    const current = formData.incomeDetails
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean)
-      .filter(m => m.toLowerCase() !== 'freshly monetized' && !m.toLowerCase().includes('adsense change'));
-
-    let updated: string[];
-    if (nextOption === 'freshly') {
-      updated = ['Freshly Monetized', ...current];
-    } else if (nextOption === 'adsense') {
-      updated = ['AdSense Change Button On', ...current];
-    } else {
-      updated = current;
-    }
-    setFormData(prev => ({ ...prev, incomeDetails: updated.join(', ') }));
-  };
-
-  const toggleFreshlyMonetized = () => selectMonetizationOption('freshly');
-  const toggleAdsenseChangeButton = () => selectMonetizationOption('adsense');
-
   const handleRemoveEarningMethod = (methodToRemove: string) => {
     const current = formData.incomeDetails
       .split(',')
       .map(s => s.trim())
       .filter(Boolean);
     const updated = current.filter(m => m !== methodToRemove);
-    if (
-      methodToRemove.toLowerCase() === 'freshly monetized' ||
-      methodToRemove.toLowerCase().includes('adsense change')
-    ) {
-      setMonetizationOption(null);
-    }
     setFormData(prev => ({ ...prev, incomeDetails: updated.join(', ') }));
   };
 
@@ -188,32 +152,12 @@ const SellChannel: React.FC<SellChannelProps> = () => {
   const contentTypeDropdownRef = useRef<HTMLDivElement>(null);
   const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
-  const checkBioContainsCode = (text: string, code: string): boolean => {
-    if (!text || !code) return false;
-    const cleanText = text.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const cleanCode = code.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    return Boolean(cleanCode && cleanText.includes(cleanCode));
-  };
-
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
-    const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
-
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'checkbox' ? checked : value
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
     }));
-
-    // Auto-verify if the user enters or pastes their bio / description containing the verification code
-    if (name === 'description' && typeof value === 'string' && verificationCode) {
-      if (checkBioContainsCode(value, verificationCode)) {
-        setIsCodeVerified(true);
-        toast({
-          title: "Account Ownership Verified! ✅",
-          description: `Verification code ${verificationCode} verified in description.`,
-        });
-      }
-    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -427,13 +371,6 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         setVerificationCode(ad.verificationCode);
       }
       setIsCodeVerified(true);
-
-      // Pre-fill Freshly Monetized & AdSense Change Button states (mutually exclusive)
-      const incStr = (ad.incomeDetails || '').toLowerCase();
-      const tagsList = Array.isArray(ad.tags) ? ad.tags.map((t: any) => String(t).toLowerCase()) : [];
-      const hasFreshly = incStr.includes('freshly monetized') || tagsList.some((t: string) => t.includes('freshly'));
-      const hasAdsense = incStr.includes('adsense change') || tagsList.some((t: string) => t.includes('adsense change'));
-      setMonetizationOption(hasFreshly ? 'freshly' : hasAdsense ? 'adsense' : null);
       
       // Load existing screenshots - all images from screenshots field
       const allImages = [];
@@ -754,12 +691,6 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         }
       }
 
-      const activeTags: string[] = [];
-      if (formData.isMonetized) {
-        if (isFreshlyMonetized) activeTags.push('Freshly Monetized');
-        if (hasAdsenseChangeButton) activeTags.push('AdSense Change Button On');
-      }
-
       // Prepare ad data
       const adData = {
         title: formData.title || `${platform.charAt(0).toUpperCase() + platform.slice(1)} Channel`,
@@ -777,7 +708,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         thumbnail: profileImageData,
         primary_image: profileImageData,
         screenshots: screenshotData,
-        tags: activeTags,
+        tags: [],
         verificationCode
       };
 
@@ -900,7 +831,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
             </div>
           ) : (
             <>
-              <h1 className="text-3xl font-bold mb-8 text-foreground">
+              <h1 className="text-3xl font-bold mb-8">
                 {isEditMode ? 'EDIT LISTING' : 'CREATE NEW LISTING'}
               </h1>
 
@@ -921,7 +852,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                 )}
                 <div className="flex-1 min-w-0">
                   {formData.title && (
-                    <p className="text-foreground font-semibold text-base truncate">{formData.title}</p>
+                    <p className="text-white font-semibold text-base truncate">{formData.title}</p>
                   )}
                   {formData.subscribers !== '' && (
                     <p className="text-xsm-light-gray text-sm mt-0.5 font-medium">
@@ -1033,7 +964,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                           <p className="text-xsm-light-gray text-xs leading-relaxed mb-3">
                             To verify ownership, add this unique 10-character code into your <strong className="text-xsm-yellow">{activeConfig.bioInstruction}</strong> before extracting.
                           </p>
-                          <div className="flex flex-wrap items-center gap-2.5">
+                          <div className="flex items-center gap-3">
                             <div className="bg-xsm-black border border-amber-500/50 rounded-lg px-4 py-2 font-mono text-amber-400 font-bold tracking-widest text-lg select-all shadow-inner">
                               {verificationCode}
                             </div>
@@ -1048,33 +979,6 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                               className="px-3.5 py-2 bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer"
                             >
                               {isCopied ? 'Copied! ✅' : '📋 Copy Code'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const bioToCheck = (formData.description || '') + ' ' + (extractedData?.description || '');
-                                if (checkBioContainsCode(bioToCheck, verificationCode)) {
-                                  setIsCodeVerified(true);
-                                  toast({
-                                    title: "Account Ownership Verified! ✅",
-                                    description: `Code ${verificationCode} verified successfully.`,
-                                  });
-                                } else {
-                                  // Re-trigger extraction
-                                  if (formData.channelUrl.trim()) {
-                                    handleExtractProfile();
-                                  } else {
-                                    toast({
-                                      variant: "destructive",
-                                      title: "Code Not Detected Yet",
-                                      description: `Please add code ${verificationCode} to your bio or paste your bio into the Description field below.`,
-                                    });
-                                  }
-                                }
-                              }}
-                              className="px-3.5 py-2 bg-green-500/20 border border-green-500/40 text-green-300 hover:bg-green-500/30 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
-                            >
-                              🔍 Verify Code
                             </button>
                           </div>
                         </div>
@@ -1111,7 +1015,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
                   {/* URL / Link Input with Auto-Detection & Auto-Extract */}
                   <div>
-                    <label className="block text-foreground font-medium mb-2">
+                    <label className="block text-white font-medium mb-2">
                       {activeConfig.label}
                       <span className="text-sm text-xsm-yellow ml-2">(Auto-detects platform, bio & followers)</span>
                     </label>
@@ -1175,14 +1079,14 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
             {/* Category Dropdown */}
             <div className="relative" ref={categoryDropdownRef}>
-              <label className="block text-foreground font-medium mb-1.5 text-sm">
+              <label className="block text-white font-medium mb-1.5 text-sm">
                 Topic / Category
               </label>
               <div 
                 onClick={() => setShowCategoryDropdown(!showCategoryDropdown)}
                 className="xsm-input w-full flex items-center justify-between cursor-pointer"
               >
-                <span className="text-foreground font-medium">
+                <span className="text-white font-medium">
                   {formData.category || "-- Select topic --"}
                 </span>
                 <ChevronDown className="w-5 h-5 text-xsm-yellow" />
@@ -1190,7 +1094,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
               
               {/* Dropdown menu */}
               {showCategoryDropdown && (
-                <div className="absolute z-10 mt-1 w-full bg-xsm-dark-gray rounded-md shadow-lg border border-xsm-medium-gray overflow-hidden">
+                <div className="absolute z-10 mt-1 w-full bg-xsm-black rounded-md shadow-lg border border-xsm-medium-gray overflow-hidden">
                   <div className="max-h-60 overflow-y-auto">
                     {contentCategories.map((cat) => (
                       <div
@@ -1200,7 +1104,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                           setShowCategoryDropdown(false);
                         }}
                         className={`px-4 py-3 cursor-pointer hover:bg-xsm-medium-gray/30 ${
-                          formData.category === cat ? 'bg-xsm-yellow text-black font-semibold' : 'text-foreground font-medium'
+                          formData.category === cat ? 'bg-xsm-yellow text-black font-semibold' : 'text-white font-medium'
                         }`}
                       >
                         {cat}
@@ -1213,7 +1117,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
             {/* Listing Price Input (Follower Count input removed — auto-displayed above) */}
             <div>
-              <label className="block text-foreground font-medium mb-1.5 text-sm">
+              <label className="block text-white font-medium mb-1.5 text-sm">
                 Listing Price ($ USD)
                 <span className="text-xsm-yellow text-xs ml-2">(Minimum $5)</span>
               </label>
@@ -1285,10 +1189,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
                   <button
                     type="button"
-                    onClick={() => {
-                      setFormData(prev => ({ ...prev, isMonetized: false }));
-                      setMonetizationOption(null);
-                    }}
+                    onClick={() => setFormData(prev => ({ ...prev, isMonetized: false }))}
                     className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex items-start gap-3.5 cursor-pointer ${
                       !formData.isMonetized
                         ? 'border-xsm-yellow bg-gradient-to-br from-amber-950/30 via-xsm-yellow/10 to-xsm-dark-gray text-white ring-2 ring-xsm-yellow/80 shadow-lg shadow-yellow-500/10'
@@ -1317,7 +1218,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                 </div>
               </div>
 
-              {/* Monetization Details & Ways of Earning — Rendered ONLY when Monetized */}
+              {/* Ways of Earning — Rendered ONLY when Monetized */}
               {formData.isMonetized && (() => {
                 const detectedPlatKey = detectPlatform(formData.channelUrl) || formData.platform || 'youtube';
                 const currentEarningList = formData.incomeDetails
@@ -1325,204 +1226,98 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                   .map(s => s.trim())
                   .filter(Boolean);
                 const presetMethods = PLATFORM_EARNING_METHODS[detectedPlatKey] || PLATFORM_EARNING_METHODS.default;
-                const customSelectedMethods = currentEarningList.filter(
-                  m => !presetMethods.includes(m) && m.toLowerCase() !== 'freshly monetized' && !m.toLowerCase().includes('adsense change')
-                );
+                const customSelectedMethods = currentEarningList.filter(m => !presetMethods.includes(m));
 
                 return (
-                  <div className="mb-6 space-y-4">
-                    {/* 2 Monetization Specifications: Freshly Monetized & AdSense Change Button On */}
-                    <div className="p-4 rounded-xl border transition-all" style={{ background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-border)' }}>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <DollarSign className="w-4 h-4 text-emerald-400" />
-                          <label className="block font-bold text-sm" style={{ color: 'var(--xsm-text)' }}>
-                            Monetization Options
-                          </label>
-                        </div>
-                        <span className="text-xs text-xsm-yellow font-semibold">Select applicable details</span>
-                      </div>
+                  <div className="mb-6 p-4 rounded-xl border border-green-500/30 bg-green-950/10 transition-all">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-white font-bold text-sm">
+                        Ways of Earning ({detectedPlatKey.charAt(0).toUpperCase() + detectedPlatKey.slice(1)} Monetization)
+                      </label>
+                      <span className="text-xs text-green-400 font-semibold">Select all that apply</span>
+                    </div>
+                    <p className="text-xs text-gray-400 mb-3">
+                      Select monetization and revenue methods used for this channel/account:
+                    </p>
 
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {/* Option 1: Freshly Monetized */}
-                        <button
-                          type="button"
-                          onClick={toggleFreshlyMonetized}
-                          className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden flex items-start gap-3 cursor-pointer group ${
-                            isFreshlyMonetized
-                              ? 'border-emerald-500 bg-gradient-to-br from-emerald-950/60 via-emerald-900/30 to-xsm-dark-gray text-white ring-2 ring-emerald-500/80 shadow-lg shadow-emerald-500/20'
-                              : 'hover:border-emerald-500/50'
-                          }`}
-                          style={!isFreshlyMonetized ? { background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' } : undefined}
-                        >
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
-                            isFreshlyMonetized
-                              ? 'bg-emerald-500/25 text-emerald-400 border border-emerald-500/50 shadow-inner'
-                              : 'border group-hover:text-emerald-400'
-                          }`}
-                          style={!isFreshlyMonetized ? { background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-border)', color: 'var(--xsm-light-gray)' } : undefined}
+                    {/* Preset platform-specific chips */}
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {presetMethods.map((method) => {
+                        const isSelected = currentEarningList.includes(method);
+                        return (
+                          <button
+                            key={method}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                handleRemoveEarningMethod(method);
+                              } else {
+                                const updated = [...currentEarningList, method];
+                                setFormData(prev => ({ ...prev, incomeDetails: updated.join(', ') }));
+                              }
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
+                              isSelected
+                                ? 'bg-xsm-yellow text-black border-xsm-yellow shadow-md scale-105'
+                                : 'bg-xsm-black/80 text-gray-300 border-xsm-medium-gray/40 hover:border-xsm-yellow/50 hover:text-white'
+                            }`}
                           >
-                            <Sparkles className="w-5 h-5" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="font-bold text-sm flex items-center gap-1.5" style={{ color: isFreshlyMonetized ? '#ffffff' : 'var(--xsm-text)' }}>
-                                Freshly Monetized
-                              </span>
-                              <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border transition-all flex items-center gap-1 ${
-                                isFreshlyMonetized
-                                  ? 'bg-emerald-500 text-black border-emerald-400 shadow-sm font-bold'
-                                  : 'border'
-                              }`}
-                              style={!isFreshlyMonetized ? { background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-border)', color: 'var(--xsm-light-gray)' } : undefined}
-                              >
-                                {isFreshlyMonetized ? '✓ Active' : 'Off'}
-                              </span>
-                            </div>
-                            <p className="text-xs leading-snug" style={{ color: 'var(--xsm-light-gray)' }}>
-                              Recently approved for monetization with clean history and 0 policy strikes
-                            </p>
-                          </div>
-                        </button>
-
-                        {/* Option 2: AdSense Change Button On */}
-                        <button
-                          type="button"
-                          onClick={toggleAdsenseChangeButton}
-                          className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden flex items-start gap-3 cursor-pointer group ${
-                            hasAdsenseChangeButton
-                              ? 'border-cyan-500 bg-gradient-to-br from-cyan-950/60 via-cyan-900/30 to-xsm-dark-gray text-white ring-2 ring-cyan-500/80 shadow-lg shadow-cyan-500/20'
-                              : 'hover:border-cyan-500/50'
-                          }`}
-                          style={!hasAdsenseChangeButton ? { background: 'var(--xsm-bg)', borderColor: 'var(--xsm-border)' } : undefined}
-                        >
-                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
-                            hasAdsenseChangeButton
-                              ? 'bg-cyan-500/25 text-cyan-400 border border-cyan-500/50 shadow-inner'
-                              : 'border group-hover:text-cyan-400'
-                          }`}
-                          style={!hasAdsenseChangeButton ? { background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-border)', color: 'var(--xsm-light-gray)' } : undefined}
-                          >
-                            <RefreshCw className={`w-5 h-5 ${hasAdsenseChangeButton ? 'animate-[spin_4s_linear_infinite]' : ''}`} />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between gap-2 mb-1">
-                              <span className="font-bold text-sm flex items-center gap-1.5" style={{ color: hasAdsenseChangeButton ? '#ffffff' : 'var(--xsm-text)' }}>
-                                AdSense Change Button On
-                              </span>
-                              <span className={`text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border transition-all flex items-center gap-1 ${
-                                hasAdsenseChangeButton
-                                  ? 'bg-cyan-500 text-black border-cyan-400 shadow-sm font-bold'
-                                  : 'border'
-                              }`}
-                              style={!hasAdsenseChangeButton ? { background: 'var(--xsm-dark-gray)', borderColor: 'var(--xsm-border)', color: 'var(--xsm-light-gray)' } : undefined}
-                              >
-                                {hasAdsenseChangeButton ? '✓ On / Ready' : 'Off'}
-                              </span>
-                            </div>
-                            <p className="text-xs leading-snug" style={{ color: 'var(--xsm-light-gray)' }}>
-                              YouTube Studio 'Change' button is active. Buyer can link their AdSense immediately
-                            </p>
-                          </div>
-                        </button>
-                      </div>
+                            {isSelected ? '✓ ' : '+ '}{method}
+                          </button>
+                        );
+                      })}
                     </div>
 
-                    {/* Ways of Earning Panel */}
-                    <div className="p-4 rounded-xl border transition-all" style={{ background: 'var(--xsm-dark-gray)', borderColor: 'rgba(34,197,94,0.3)' }}>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="block font-bold text-sm" style={{ color: 'var(--xsm-text)' }}>
-                          Ways of Earning ({detectedPlatKey.charAt(0).toUpperCase() + detectedPlatKey.slice(1)} Monetization)
-                        </label>
-                        <span className="text-xs text-emerald-500 font-semibold">Select all that apply</span>
-                      </div>
-                      <p className="text-xs mb-3" style={{ color: 'var(--xsm-light-gray)' }}>
-                        Select monetization and revenue methods used for this channel/account:
-                      </p>
-
-                      {/* Preset platform-specific chips */}
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {presetMethods.map((method) => {
-                          const isSelected = currentEarningList.includes(method);
-                          return (
+                    {/* Custom Selected Chips */}
+                    {customSelectedMethods.length > 0 && (
+                      <div className="mb-3 flex flex-wrap gap-2 items-center">
+                        <span className="text-[11px] text-gray-400 font-semibold">Custom Methods:</span>
+                        {customSelectedMethods.map(method => (
+                          <span
+                            key={method}
+                            className="bg-green-900/40 text-green-300 border border-green-500/40 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"
+                          >
+                            <span>✓ {method}</span>
                             <button
-                              key={method}
                               type="button"
-                              onClick={() => {
-                                if (isSelected) {
-                                  handleRemoveEarningMethod(method);
-                                } else {
-                                  const updated = [...currentEarningList, method];
-                                  setFormData(prev => ({ ...prev, incomeDetails: updated.join(', ') }));
-                                }
-                              }}
-                              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
-                                isSelected
-                                  ? 'bg-xsm-yellow text-black border-xsm-yellow shadow-md scale-105'
-                                  : 'hover:border-xsm-yellow/50'
-                              }`}
-                              style={!isSelected ? { background: 'var(--xsm-bg)', color: 'var(--xsm-text)', borderColor: 'var(--xsm-border)' } : undefined}
+                              onClick={() => handleRemoveEarningMethod(method)}
+                              className="text-gray-400 hover:text-red-400 transition-colors cursor-pointer"
                             >
-                              {isSelected ? '✓ ' : '+ '}{method}
+                              <X className="w-3.5 h-3.5" />
                             </button>
-                          );
-                        })}
+                          </span>
+                        ))}
                       </div>
+                    )}
 
-                      {/* Custom Selected Chips */}
-                      {customSelectedMethods.length > 0 && (
-                        <div className="mb-3 flex flex-wrap gap-2 items-center">
-                          <span className="text-[11px] font-semibold" style={{ color: 'var(--xsm-light-gray)' }}>Custom Methods:</span>
-                          {customSelectedMethods.map(method => (
-                            <span
-                              key={method}
-                              className="px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5 border"
-                              style={{ background: 'rgba(34, 197, 94, 0.15)', borderColor: 'rgba(34, 197, 94, 0.4)', color: 'var(--xsm-text)' }}
-                            >
-                              <span>✓ {method}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveEarningMethod(method)}
-                                className="hover:text-red-400 transition-colors cursor-pointer"
-                                style={{ color: 'var(--xsm-light-gray)' }}
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </span>
-                          ))}
-                        </div>
-                      )}
-
-                      {/* Dedicated Custom Earning Input with + Add Button */}
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={customEarningInput}
-                          onChange={(e) => setCustomEarningInput(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleAddCustomEarningMethod();
-                            }
-                          }}
-                          className="xsm-input flex-1 text-xs"
-                          placeholder="Type custom earning method and click Add (e.g. Brand Sponsorship, Affiliate, Merchandise)..."
-                        />
-                        <button
-                          type="button"
-                          onClick={handleAddCustomEarningMethod}
-                          disabled={!customEarningInput.trim()}
-                          className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all ${
-                            customEarningInput.trim()
-                              ? 'bg-xsm-yellow text-black hover:bg-yellow-400 cursor-pointer shadow-md'
-                              : 'border cursor-not-allowed opacity-60'
-                          }`}
-                          style={!customEarningInput.trim() ? { background: 'var(--xsm-bg)', color: 'var(--xsm-light-gray)', borderColor: 'var(--xsm-border)' } : undefined}
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          Add
-                        </button>
-                      </div>
+                    {/* Dedicated Custom Earning Input with + Add Button */}
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={customEarningInput}
+                        onChange={(e) => setCustomEarningInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddCustomEarningMethod();
+                          }
+                        }}
+                        className="xsm-input flex-1 text-xs"
+                        placeholder="Type custom earning method and click Add (e.g. Brand Sponsorship, Affiliate, Merchandise)..."
+                      />
+                      <button
+                        type="button"
+                        onClick={handleAddCustomEarningMethod}
+                        disabled={!customEarningInput.trim()}
+                        className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all ${
+                          customEarningInput.trim()
+                            ? 'bg-xsm-yellow text-black hover:bg-yellow-400 cursor-pointer shadow-md'
+                            : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Add
+                      </button>
                     </div>
                   </div>
                 );

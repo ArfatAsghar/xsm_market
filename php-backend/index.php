@@ -114,15 +114,15 @@ function getNormalizedPath() {
     foreach ($candidates as $cand) {
         if (!empty($cand)) {
             $parsed = parse_url($cand, PHP_URL_PATH);
-            // Skip if it's pointing to php-backend/index.php itself
-            if ($parsed && $parsed !== '/php-backend/index.php' && $parsed !== '/index.php') {
+            // Skip if it's pointing to index.php itself
+            if ($parsed && $parsed !== '/php-backend/index.php' && $parsed !== '/index.php' && $parsed !== '/api/index.php') {
                 $rawUri = $parsed;
                 break;
             }
         }
     }
 
-    if ($rawUri === '/' || $rawUri === '/php-backend/index.php' || $rawUri === '/index.php') {
+    if ($rawUri === '/' || $rawUri === '/php-backend/index.php' || $rawUri === '/index.php' || $rawUri === '/api/index.php') {
         $rawUri = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?? '/';
     }
 

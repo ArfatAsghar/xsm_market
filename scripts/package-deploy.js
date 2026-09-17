@@ -137,13 +137,20 @@ async function main() {
       throw new Error('.env.production was not found in php-backend folder!');
     }
 
-    // 4.5 Copy .htaccess to the root of deploy-temp and delete from api/ folder
-    const rootHtaccess = path.join(BACKEND_DIR, '.htaccess');
+    // 4.5 Ensure root .htaccess is from public/.htaccess (React SPA + API routing)
+    const publicHtaccess = path.join(ROOT_DIR, 'public', '.htaccess');
     const deployHtaccess = path.join(DEPLOY_DIR, '.htaccess');
-    if (await fs.pathExists(rootHtaccess)) {
-      console.log('🚀 Copying .htaccess to deploy root...');
-      await fs.copy(rootHtaccess, deployHtaccess);
-      await fs.remove(path.join(deployApiDir, '.htaccess'));
+    if (await fs.pathExists(publicHtaccess)) {
+      console.log('🚀 Ensuring root .htaccess with React SPA & /api routing...');
+      await fs.copy(publicHtaccess, deployHtaccess);
+    }
+
+    // 4.6 Ensure api/.htaccess exists to protect sensitive files and enable URL rewrite inside api/
+    const apiHtaccess = path.join(deployApiDir, '.htaccess');
+    const backendHtaccess = path.join(BACKEND_DIR, '.htaccess');
+    if (await fs.pathExists(backendHtaccess)) {
+      console.log('🚀 Copying api/.htaccess to protect api/ and enable rewrites...');
+      await fs.copy(backendHtaccess, apiHtaccess);
     }
 
     // 4.6 Include helper unzip.php in deploy root for Hostinger web extraction fallback

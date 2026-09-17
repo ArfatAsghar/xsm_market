@@ -1,5 +1,12 @@
 <IfModule mod_rewrite.c>
-  RewriteEngine Off
+  RewriteEngine On
+
+  # Serve real files directly
+  RewriteCond %{REQUEST_FILENAME} -f
+  RewriteRule ^ - [L]
+
+  # Route all other requests to index.php
+  RewriteRule ^ index.php [QSA,L]
 </IfModule>
 
 # Deny direct access to sensitive configuration files

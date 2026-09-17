@@ -8,13 +8,19 @@
   RewriteRule ^ - [L]
 
   # 2. Direct serve uploads if file exists (either via /api/uploads/ or /uploads/)
+  RewriteCond %{DOCUMENT_ROOT}/api/uploads/$1 -f
+  RewriteRule ^(?:api/)?uploads/(.*)$ api/uploads/$1 [L]
   RewriteCond %{DOCUMENT_ROOT}/php-backend/uploads/$1 -f
   RewriteRule ^(?:api/)?uploads/(.*)$ php-backend/uploads/$1 [L]
 
-  # 3. Route all /api and /api/* requests directly to php-backend/index.php
-  RewriteRule ^api(/.*)?$ php-backend/index.php [QSA,L]
+  # 3. Route all /api and /api/* requests directly to api/index.php (Hostinger) or php-backend/index.php
+  RewriteCond %{DOCUMENT_ROOT}/api/index.php -f
+  RewriteRule ^api(?:/.*)?$ api/index.php [QSA,L]
+  RewriteRule ^api(?:/.*)?$ php-backend/index.php [QSA,L]
 
-  # 4. Route /uploads/ that don't match a static file to php-backend/index.php
+  # 4. Route /uploads/ that don't match a static file to index.php
+  RewriteCond %{DOCUMENT_ROOT}/api/index.php -f
+  RewriteRule ^uploads/(.*)$ api/index.php [QSA,L]
   RewriteRule ^uploads/(.*)$ php-backend/index.php [QSA,L]
 
   # 5. Serve existing directories directly (except api)

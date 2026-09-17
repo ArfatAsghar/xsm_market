@@ -287,14 +287,14 @@ const AdminKycManagement: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header Banner */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-neutral-900 via-neutral-900 to-amber-950/30 border border-neutral-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="p-6 rounded-2xl bg-gradient-to-r from-neutral-800 via-neutral-800 to-amber-900/40 border border-neutral-700 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 text-yellow-400 text-xs font-bold mb-2">
             <ShieldCheck className="w-3.5 h-3.5" />
             <span>Identity & Anti-Fraud Center</span>
           </div>
           <h2 className="text-2xl font-black text-white tracking-tight">KYC Identity Verification Requests</h2>
-          <p className="text-xs text-gray-400 mt-1">
+          <p className="text-xs text-gray-300 mt-1">
             Review applicant documents (CNIC, Driving License, Passport), front & back scans, and live selfie photos.
             Enforces strict CNIC uniqueness to prevent multi-accounting.
           </p>
@@ -303,7 +303,7 @@ const AdminKycManagement: React.FC = () => {
         <button
           onClick={fetchSubmissions}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-gray-200 text-xs font-bold border border-neutral-700 transition-all cursor-pointer self-start md:self-auto"
+          className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-neutral-700 hover:bg-neutral-600 text-gray-100 text-xs font-bold border border-neutral-600 transition-all cursor-pointer self-start md:self-auto"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>

@@ -747,9 +747,8 @@ const Profile: React.FC<ProfileProps> = () => {
                   </p>
                   <button
                     onClick={() => {
-                      setActiveSettingsTab('verification');
-                      const settingsEl = document.getElementById('profile-settings-section');
-                      if (settingsEl) settingsEl.scrollIntoView({ behavior: 'smooth' });
+                      const kycEl = document.getElementById('kyc-verification-section');
+                      if (kycEl) kycEl.scrollIntoView({ behavior: 'smooth' });
                     }}
                     className="w-full bg-neutral-800 hover:bg-neutral-700 text-xsm-yellow border border-xsm-yellow/40 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer"
                   >
@@ -905,6 +904,16 @@ const Profile: React.FC<ProfileProps> = () => {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* KYC Identity Verification */}
+            <div id="kyc-verification-section" className="xsm-card">
+              <div className="flex items-center gap-2 mb-4">
+                <Shield className="w-5 h-5 text-xsm-yellow" />
+                <h3 className="text-lg font-bold text-xsm-yellow">ID Verification (KYC)</h3>
+                <span className="ml-auto text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-600 dark:text-amber-400 font-bold">Free 72h Pin Reward</span>
+              </div>
+              <VerificationSection />
             </div>
 
             {/* My Ads */}

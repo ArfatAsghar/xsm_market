@@ -4,7 +4,7 @@ import {
   FaStore, FaInbox, FaTag, FaBell, FaUser, FaSignOutAlt,
   FaFileAlt, FaCrown, FaTachometerAlt, FaBars, FaTimes,
   FaChevronDown, FaEnvelope, FaCheck, FaBan, FaCheckCircle,
-  FaSun, FaMoon, FaGift, FaShieldAlt
+  FaSun, FaMoon, FaGift
 } from 'react-icons/fa';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
@@ -435,16 +435,6 @@ const Navbar: React.FC = () => {
                       <span className="text-sm">Refer a Friend</span>
                     </DropdownMenuItem>
 
-                    <DropdownMenuItem
-                      onClick={() => navigateTo('/verify')}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 focus:bg-emerald-500/10 focus:text-emerald-300 transition-colors font-medium"
-                    >
-                      <FaShieldAlt className="text-emerald-400 text-sm flex-shrink-0" />
-                      <div className="flex items-center justify-between w-full">
-                        <span className="text-sm">ID Verification</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-bold uppercase">Free Pin</span>
-                      </div>
-                    </DropdownMenuItem>
 
                     {isUserAdmin && (
                       <>
@@ -657,9 +647,7 @@ const Navbar: React.FC = () => {
                     <button onClick={() => navigateTo('/referral')} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-medium text-amber-400 hover:bg-amber-500/10 transition-colors">
                       <FaGift className="text-sm" /><span>Refer a Friend</span>
                     </button>
-                    <button onClick={() => navigateTo('/verify')} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-medium text-emerald-400 hover:bg-emerald-500/10 transition-colors">
-                      <FaShieldAlt className="text-sm" /><span>ID Verification (KYC)</span>
-                    </button>
+
                     {isUserAdmin && (
                       <button onClick={() => navigateTo('/admin-dashboard')} className="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-colors">
                         <FaTachometerAlt className="text-sm" /><span>Admin Dashboard</span>

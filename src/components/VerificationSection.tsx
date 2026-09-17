@@ -232,28 +232,28 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
   };
 
   return (
-    <Card className="bg-neutral-900 border-neutral-800 text-white shadow-xl overflow-hidden">
-      <CardHeader className="border-b border-neutral-800 pb-4">
+    <Card className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-neutral-900 dark:text-white shadow-xl overflow-hidden">
+      <CardHeader className="border-b border-neutral-200 dark:border-neutral-800 pb-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-500">
+            <div className="w-10 h-10 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <h2 className="text-lg font-bold text-neutral-900 dark:text-white flex items-center gap-2">
                 <span>Identity Verification (KYC)</span>
                 {status === 'verified' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-xs font-bold">
                     <CheckCircle2 className="w-3 h-3" /> Verified
                   </span>
                 )}
                 {status === 'pending' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-yellow-400 border border-amber-500/30 text-xs font-bold">
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-700 dark:text-yellow-400 border border-amber-500/30 text-xs font-bold">
                     <Clock className="w-3 h-3" /> Review Pending
                   </span>
                 )}
               </h2>
-              <p className="text-xs text-neutral-400">
+              <p className="text-xs text-neutral-600 dark:text-neutral-400">
                 Government document verification unlocks high-trust badges, reduced escrow fees, and your Free 72-Hour Pin reward.
               </p>
             </div>
@@ -262,7 +262,7 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
           <button
             type="button"
             onClick={fetchKycStatus}
-            className="self-start sm:self-auto px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-gray-300 text-xs font-medium border border-neutral-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="self-start sm:self-auto px-2.5 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-gray-300 text-xs font-medium border border-neutral-300 dark:border-neutral-700 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <RefreshCw className={`w-3 h-3 ${loadingStatus ? 'animate-spin' : ''}`} />
             <span>Check Status</span>
@@ -275,75 +275,75 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
 
         {/* 1. Verified Account */}
         {status === 'verified' && (
-          <div className="p-6 rounded-2xl bg-emerald-950/20 border border-emerald-500/40 space-y-3 text-center sm:text-left">
+          <div className="p-6 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-300 dark:border-emerald-500/40 space-y-3 text-center sm:text-left">
             <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 flex-shrink-0">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 flex-shrink-0">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <div className="space-y-1">
-                <h3 className="text-base font-black text-emerald-400">Account Identity Fully Verified! ✅</h3>
-                <p className="text-xs text-neutral-300 leading-relaxed">
+                <h3 className="text-base font-black text-emerald-800 dark:text-emerald-400">Account Identity Fully Verified! ✅</h3>
+                <p className="text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed">
                   Your identity documents have been inspected and confirmed by XSM Market verification staff.
                   Your profile now displays a verified badge and full escrow privileges.
                 </p>
                 {verifiedIdNumber && (
-                  <div className="inline-block mt-2 px-3 py-1 rounded-lg bg-black/40 border border-emerald-500/30 text-xs font-mono text-emerald-300">
+                  <div className="inline-block mt-2 px-3 py-1 rounded-lg bg-emerald-100 dark:bg-black/40 border border-emerald-400 dark:border-emerald-500/30 text-xs font-mono text-emerald-800 dark:text-emerald-300">
                     Verified ID: <strong>{verifiedIdNumber}</strong>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-black/40 border border-emerald-500/20 flex items-center justify-between text-xs text-neutral-400">
-              <span className="flex items-center gap-1.5 text-emerald-300 font-semibold">
+            <div className="p-3.5 rounded-xl bg-emerald-100/60 dark:bg-black/40 border border-emerald-300/60 dark:border-emerald-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+              <span className="flex items-center gap-1.5 text-emerald-800 dark:text-emerald-300 font-semibold">
                 <Lock className="w-3.5 h-3.5" /> Re-upload locked for verified accounts
               </span>
-              <span className="text-[11px] text-gray-500">Document permanently tied to account</span>
+              <span className="text-[11px] text-neutral-500 dark:text-gray-500">Document permanently tied to account</span>
             </div>
           </div>
         )}
 
         {/* 2. Pending Review */}
         {status === 'pending' && (
-          <div className="p-6 rounded-2xl bg-amber-950/20 border border-amber-500/40 space-y-4">
+          <div className="p-6 rounded-2xl bg-amber-50/90 dark:bg-amber-950/20 border border-amber-300 dark:border-amber-500/40 space-y-4">
             <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-yellow-400 flex-shrink-0">
+              <div className="w-14 h-14 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-600 dark:text-yellow-400 flex-shrink-0">
                 <Clock className="w-8 h-8 animate-pulse" />
               </div>
               <div className="space-y-1 text-center sm:text-left">
-                <h3 className="text-base font-black text-yellow-400">KYC Verification Under Staff Review ⏳</h3>
-                <p className="text-xs text-neutral-300 leading-relaxed">
+                <h3 className="text-base font-black text-amber-800 dark:text-yellow-400">KYC Verification Under Staff Review ⏳</h3>
+                <p className="text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed">
                   We have safely received your document scans (Front, Back, and Live Selfie). Our verification team reviews submissions within <strong>2 to 24 hours</strong>.
                 </p>
-                <p className="text-[11px] text-amber-300 font-medium">
+                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-semibold">
                   🎉 Once approved, you and your inviter will automatically receive your <strong>Free 72-Hour Pin Reward</strong>!
                 </p>
               </div>
             </div>
 
-            <div className="p-4 rounded-xl bg-black/50 border border-amber-500/20 flex items-center justify-between text-xs text-neutral-400">
-              <span className="flex items-center gap-1.5 text-yellow-400 font-semibold">
+            <div className="p-3.5 rounded-xl bg-amber-100/60 dark:bg-black/50 border border-amber-300/60 dark:border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs text-neutral-600 dark:text-neutral-400">
+              <span className="flex items-center gap-1.5 text-amber-800 dark:text-yellow-400 font-bold">
                 <Lock className="w-3.5 h-3.5" /> Form Locked
               </span>
-              <span className="text-[11px] text-gray-400">Documents cannot be re-uploaded while pending review.</span>
+              <span className="text-[11px] text-neutral-500 dark:text-gray-400">Documents cannot be re-uploaded while pending review.</span>
             </div>
           </div>
         )}
 
         {/* 3. Rejected Notice */}
         {status === 'rejected' && (
-          <div className="p-5 rounded-2xl bg-red-950/30 border border-red-500/40 space-y-2">
-            <div className="flex items-center gap-2 text-red-400 font-bold text-sm">
+          <div className="p-5 rounded-2xl bg-red-50 dark:bg-red-950/30 border border-red-300 dark:border-red-500/40 space-y-2">
+            <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-bold text-sm">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>Identity Verification Notice</span>
             </div>
-            <p className="text-xs text-neutral-300 leading-relaxed">
+            <p className="text-xs text-neutral-700 dark:text-neutral-300 leading-relaxed">
               Your previous submission could not be approved:
-              <span className="block mt-1 p-2 rounded-lg bg-black/50 border border-red-500/30 text-red-300 font-medium">
+              <span className="block mt-1 p-2 rounded-lg bg-white dark:bg-black/50 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-300 font-medium">
                 {rejectionReason || "Documents provided were unreadable or selfie face did not match the document."}
               </span>
             </p>
-            <p className="text-[11px] text-gray-400">
+            <p className="text-[11px] text-neutral-500 dark:text-gray-400">
               Please review the feedback above and submit fresh, well-lit photos below.
             </p>
           </div>
@@ -352,10 +352,10 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
         {/* ── VERIFICATION FORM (Only visible when unverified or rejected) ── */}
         {(status === 'unverified' || status === 'rejected') && (
           <form onSubmit={handleSubmit} className="space-y-6">
-            <Alert className="bg-blue-950/30 border-blue-500/30 text-blue-200">
-              <FileText className="h-4 w-4 text-blue-400" />
-              <AlertTitle className="text-xs font-bold text-blue-300 uppercase tracking-wider">Required Verification Files</AlertTitle>
-              <AlertDescription className="text-xs text-neutral-300 mt-1">
+            <Alert className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-500/30 text-blue-950 dark:text-blue-200">
+              <FileText className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+              <AlertTitle className="text-xs font-bold text-blue-800 dark:text-blue-300 uppercase tracking-wider">Required Verification Files</AlertTitle>
+              <AlertDescription className="text-xs text-neutral-700 dark:text-neutral-300 mt-1">
                 Please upload clear, uncropped color photos of your <strong>Front side</strong>, <strong>Back side</strong>, and a <strong>Live Selfie photo</strong>.
                 Each document may only be registered to one XSM Market account.
               </AlertDescription>
@@ -364,14 +364,14 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
             {/* Document Type & ID Number */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-300 mb-1.5 uppercase tracking-wider">
-                  Select Document Type <span className="text-red-400">*</span>
+                <label className="block text-xs font-bold text-neutral-700 dark:text-gray-300 mb-1.5 uppercase tracking-wider">
+                  Select Document Type <span className="text-red-500">*</span>
                 </label>
                 <Select value={documentType} onValueChange={(val) => setDocumentType(val)}>
-                  <SelectTrigger className="w-full bg-neutral-950 text-white border-neutral-700 h-10 text-xs">
+                  <SelectTrigger className="w-full bg-white dark:bg-neutral-950 text-neutral-900 dark:text-white border-neutral-300 dark:border-neutral-700 h-10 text-xs">
                     <SelectValue placeholder="Select document type" />
                   </SelectTrigger>
-                  <SelectContent className="bg-neutral-900 border-neutral-700 text-white">
+                  <SelectContent className="bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 text-neutral-900 dark:text-white">
                     <SelectItem value="cnic">CNIC (National Identity Card)</SelectItem>
                     <SelectItem value="driving_license">Driving License</SelectItem>
                     <SelectItem value="passport">Passport</SelectItem>
@@ -380,8 +380,8 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-300 mb-1.5 uppercase tracking-wider">
-                  {getIdLabel()} <span className="text-red-400">*</span>
+                <label className="block text-xs font-bold text-neutral-700 dark:text-gray-300 mb-1.5 uppercase tracking-wider">
+                  {getIdLabel()} <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -389,7 +389,7 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
                   value={idNumber}
                   onChange={(e) => setIdNumber(e.target.value)}
                   placeholder={getIdPlaceholder()}
-                  className="w-full px-3 py-2 h-10 rounded-lg bg-neutral-950 border border-neutral-700 text-xs font-mono font-bold text-white placeholder-gray-500 focus:outline-none focus:border-xsm-yellow"
+                  className="w-full px-3 py-2 h-10 rounded-lg bg-white dark:bg-neutral-950 border border-neutral-300 dark:border-neutral-700 text-xs font-mono font-bold text-neutral-900 dark:text-white placeholder-neutral-400 dark:placeholder-gray-500 focus:outline-none focus:border-amber-500"
                 />
               </div>
             </div>
@@ -397,16 +397,16 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
             {/* 3 Dedicated Upload Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* 1. FRONT SIDE */}
-              <div className="p-4 rounded-2xl bg-neutral-950/80 border border-neutral-800 space-y-3 flex flex-col justify-between">
+              <div className="p-4 rounded-2xl bg-neutral-50/70 dark:bg-neutral-950/80 border border-neutral-200 dark:border-neutral-800 space-y-3 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-xsm-yellow" />
+                    <span className="text-xs font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-amber-600 dark:text-xsm-yellow" />
                       <span>Front Side</span>
                     </span>
-                    <span className="text-[10px] text-red-400 font-bold">*Required</span>
+                    <span className="text-[10px] text-red-500 font-bold">*Required</span>
                   </div>
-                  <p className="text-[11px] text-gray-400 leading-tight">Clear photo of front showing face, name & ID number.</p>
+                  <p className="text-[11px] text-neutral-500 dark:text-gray-400 leading-tight">Clear photo of front showing face, name & ID number.</p>
                 </div>
 
                 <input
@@ -418,7 +418,7 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
                 />
 
                 {frontPreview ? (
-                  <div className="relative w-full h-36 rounded-xl overflow-hidden border border-neutral-700 group bg-black">
+                  <div className="relative w-full h-36 rounded-xl overflow-hidden border border-neutral-300 dark:border-neutral-700 group bg-neutral-100 dark:bg-black">
                     <img src={frontPreview} alt="Front Preview" className="w-full h-full object-cover" />
                     <button
                       type="button"
@@ -427,35 +427,35 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
                     >
                       <X className="w-4 h-4" />
                     </button>
-                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 text-[10px] text-emerald-400 font-bold">
+                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] text-emerald-400 font-bold">
                       ✓ Front Loaded
                     </span>
                   </div>
                 ) : (
                   <div
                     onClick={() => frontInputRef.current?.click()}
-                    className="w-full h-36 border-2 border-dashed border-neutral-700 hover:border-xsm-yellow rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-neutral-900/50 text-center"
+                    className="w-full h-36 border-2 border-dashed border-neutral-300 dark:border-neutral-700 hover:border-amber-500 dark:hover:border-xsm-yellow rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-neutral-100/70 dark:hover:bg-neutral-900/50 text-center"
                   >
-                    <Upload className="w-6 h-6 text-gray-400 mb-2" />
-                    <span className="text-xs font-bold text-gray-300">Upload Front Side</span>
-                    <span className="text-[10px] text-gray-500 mt-1">JPG, PNG, WEBP (Max 10MB)</span>
+                    <Upload className="w-6 h-6 text-neutral-400 dark:text-gray-400 mb-2" />
+                    <span className="text-xs font-bold text-neutral-700 dark:text-gray-300">Upload Front Side</span>
+                    <span className="text-[10px] text-neutral-500 dark:text-gray-500 mt-1">JPG, PNG, WEBP (Max 10MB)</span>
                   </div>
                 )}
               </div>
 
               {/* 2. BACK SIDE */}
-              <div className="p-4 rounded-2xl bg-neutral-950/80 border border-neutral-800 space-y-3 flex flex-col justify-between">
+              <div className="p-4 rounded-2xl bg-neutral-50/70 dark:bg-neutral-950/80 border border-neutral-200 dark:border-neutral-800 space-y-3 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                      <FileText className="w-3.5 h-3.5 text-xsm-yellow" />
+                    <span className="text-xs font-bold text-neutral-900 dark:text-white flex items-center gap-1.5">
+                      <FileText className="w-3.5 h-3.5 text-amber-600 dark:text-xsm-yellow" />
                       <span>Back Side</span>
                     </span>
-                    <span className="text-[10px] text-gray-400">
+                    <span className="text-[10px] text-neutral-500 dark:text-gray-400">
                       {documentType === 'passport' ? 'Optional' : '*Required'}
                     </span>
                   </div>
-                  <p className="text-[11px] text-gray-400 leading-tight">Back side showing address and official barcode/seal.</p>
+                  <p className="text-[11px] text-neutral-500 dark:text-gray-400 leading-tight">Back side showing address and official barcode/seal.</p>
                 </div>
 
                 <input
@@ -467,7 +467,7 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
                 />
 
                 {backPreview ? (
-                  <div className="relative w-full h-36 rounded-xl overflow-hidden border border-neutral-700 group bg-black">
+                  <div className="relative w-full h-36 rounded-xl overflow-hidden border border-neutral-300 dark:border-neutral-700 group bg-neutral-100 dark:bg-black">
                     <img src={backPreview} alt="Back Preview" className="w-full h-full object-cover" />
                     <button
                       type="button"
@@ -476,18 +476,18 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
                     >
                       <X className="w-4 h-4" />
                     </button>
-                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 text-[10px] text-emerald-400 font-bold">
+                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] text-emerald-400 font-bold">
                       ✓ Back Loaded
                     </span>
                   </div>
                 ) : (
                   <div
                     onClick={() => backInputRef.current?.click()}
-                    className="w-full h-36 border-2 border-dashed border-neutral-700 hover:border-xsm-yellow rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-neutral-900/50 text-center"
+                    className="w-full h-36 border-2 border-dashed border-neutral-300 dark:border-neutral-700 hover:border-amber-500 dark:hover:border-xsm-yellow rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-neutral-100/70 dark:hover:bg-neutral-900/50 text-center"
                   >
-                    <Upload className="w-6 h-6 text-gray-400 mb-2" />
-                    <span className="text-xs font-bold text-gray-300">Upload Back Side</span>
-                    <span className="text-[10px] text-gray-500 mt-1">
+                    <Upload className="w-6 h-6 text-neutral-400 dark:text-gray-400 mb-2" />
+                    <span className="text-xs font-bold text-neutral-700 dark:text-gray-300">Upload Back Side</span>
+                    <span className="text-[10px] text-neutral-500 dark:text-gray-500 mt-1">
                       {documentType === 'passport' ? 'Optional 2nd Page' : 'Required for CNIC/License'}
                     </span>
                   </div>
@@ -495,16 +495,16 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
               </div>
 
               {/* 3. LIVE SELFIE */}
-              <div className="p-4 rounded-2xl bg-neutral-950/80 border border-amber-500/30 space-y-3 flex flex-col justify-between">
+              <div className="p-4 rounded-2xl bg-amber-50/40 dark:bg-neutral-950/80 border border-amber-300/80 dark:border-amber-500/30 space-y-3 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                    <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
                       <Camera className="w-3.5 h-3.5" />
                       <span>Live Selfie</span>
                     </span>
-                    <span className="text-[10px] text-red-400 font-bold">*Required</span>
+                    <span className="text-[10px] text-red-500 font-bold">*Required</span>
                   </div>
-                  <p className="text-[11px] text-gray-400 leading-tight">Live selfie of your face (or holding ID) in good lighting.</p>
+                  <p className="text-[11px] text-neutral-500 dark:text-gray-400 leading-tight">Live selfie of your face (or holding ID) in good lighting.</p>
                 </div>
 
                 <input
@@ -517,7 +517,7 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
                 />
 
                 {selfiePreview ? (
-                  <div className="relative w-full h-36 rounded-xl overflow-hidden border border-amber-500/50 group bg-black">
+                  <div className="relative w-full h-36 rounded-xl overflow-hidden border border-amber-400 dark:border-amber-500/50 group bg-neutral-100 dark:bg-black">
                     <img src={selfiePreview} alt="Selfie Preview" className="w-full h-full object-cover" />
                     <button
                       type="button"
@@ -526,18 +526,18 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
                     >
                       <X className="w-4 h-4" />
                     </button>
-                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/60 text-[10px] text-amber-400 font-bold">
+                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] text-amber-400 font-bold">
                       ✓ Selfie Captured
                     </span>
                   </div>
                 ) : (
                   <div
                     onClick={() => selfieInputRef.current?.click()}
-                    className="w-full h-36 border-2 border-dashed border-amber-500/40 hover:border-amber-400 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-amber-500/5 text-center"
+                    className="w-full h-36 border-2 border-dashed border-amber-300 dark:border-amber-500/40 hover:border-amber-500 dark:hover:border-amber-400 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-amber-50/80 dark:hover:bg-amber-500/5 text-center"
                   >
-                    <Camera className="w-6 h-6 text-amber-400 mb-2" />
-                    <span className="text-xs font-bold text-amber-300">Take or Upload Selfie</span>
-                    <span className="text-[10px] text-gray-500 mt-1">Hold ID card or face camera</span>
+                    <Camera className="w-6 h-6 text-amber-600 dark:text-amber-400 mb-2" />
+                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300">Take or Upload Selfie</span>
+                    <span className="text-[10px] text-neutral-500 dark:text-gray-500 mt-1">Hold ID card or face camera</span>
                   </div>
                 )}
               </div>
@@ -545,15 +545,15 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
 
             {/* Submission Button */}
             <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <span className="text-xs text-gray-400 flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-gray-500" />
+              <span className="text-xs text-neutral-500 dark:text-gray-400 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-neutral-400 dark:text-gray-500" />
                 <span>Encrypted & secure storage. Only reviewed by authorized compliance staff.</span>
               </span>
 
               <Button
                 type="submit"
                 disabled={submitting}
-                className="w-full sm:w-auto px-8 py-2.5 bg-xsm-yellow hover:bg-yellow-400 text-black font-extrabold text-xs rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50"
+                className="w-full sm:w-auto px-8 py-2.5 bg-amber-500 hover:bg-amber-600 dark:bg-xsm-yellow dark:hover:bg-yellow-400 text-white dark:text-black font-extrabold text-xs rounded-xl shadow-lg transition-all cursor-pointer disabled:opacity-50"
               >
                 {submitting ? (
                   <span className="flex items-center gap-2">

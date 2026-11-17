@@ -35,7 +35,7 @@ interface DealCreationModalProps {
   channelTitle: string;
   sellerId: string;
   platform?: SupportedPlatform;
-  onNavigateToChat?: () => void;
+  onNavigateToChat?: (chatId?: string | number) => void;
 }
 
 const platformMeta: Record<SupportedPlatform, { label: string; color: string; emoji: string }> = {
@@ -82,6 +82,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
     amount: number;
     serviceFee: number;
     buyerEmail: string;
+    chatId?: number | string;
   } | null>(null);
 
   const resetModal = () => {
@@ -96,10 +97,15 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
   };
 
   const redirectToChat = () => {
+    const targetChatId = successData?.chatId;
     setSuccessData(null);
     resetModal();
     onClose();
-    if (onNavigateToChat) {
+    if (targetChatId && onNavigateToChat) {
+      onNavigateToChat(targetChatId);
+    } else if (targetChatId) {
+      navigate(`/chat?chatId=${targetChatId}`);
+    } else if (onNavigateToChat) {
       onNavigateToChat();
     } else {
       navigate('/chat');
@@ -272,6 +278,7 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
       
       if (response.ok) {
         const officialTxnId = result.transaction_id || (result.deal_id ? String(result.deal_id).padStart(6, '0') : '000001');
+        const targetChatId = result.chat_id || result.chatId;
         
         // Show custom success popup modal
         setSuccessData({
@@ -279,7 +286,8 @@ const DealCreationModal: React.FC<DealCreationModalProps> = ({
           channelTitle,
           amount: numericPrice,
           serviceFee: escrowFee,
-          buyerEmail: buyerEmail.trim()
+          buyerEmail: buyerEmail.trim(),
+          chatId: targetChatId
         });
 
       } else {

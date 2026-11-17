@@ -16,11 +16,13 @@ import { API_URL, getAuthToken } from '@/services/auth';
 export interface VerificationSectionProps {
   initialStatus?: 'unverified' | 'pending' | 'verified' | 'rejected';
   onStatusChange?: (newStatus: 'unverified' | 'pending' | 'verified' | 'rejected') => void;
+  onClose?: () => void;
 }
 
 const VerificationSection: React.FC<VerificationSectionProps> = ({
   initialStatus = 'unverified',
-  onStatusChange
+  onStatusChange,
+  onClose
 }) => {
   const { toast } = useToast();
   const [status, setStatus] = useState<'unverified' | 'pending' | 'verified' | 'rejected'>(initialStatus);
@@ -41,11 +43,14 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
   const [selfiePreview, setSelfiePreview] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
-  // Refs for hidden file inputs
+  // Refs for hidden file inputs & live camera
   const frontInputRef = useRef<HTMLInputElement>(null);
   const backInputRef = useRef<HTMLInputElement>(null);
-  const selfieInputRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
 
   // Fetch live KYC status on load
   const fetchKycStatus = async () => {
@@ -79,10 +84,84 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
 
   useEffect(() => {
     fetchKycStatus();
+    return () => {
+      // Clean up camera stream if component unmounts
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+      }
+    };
   }, []);
 
-  // Handle file preview generators
-  const handleFileSelect = (file: File | null, type: 'front' | 'back' | 'selfie') => {
+  // When camera turns on, hook the stream to the video element
+  useEffect(() => {
+    if (isCameraActive && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch(e => console.error("Camera play error:", e));
+    }
+  }, [isCameraActive]);
+
+  // Live Camera Handlers
+  const startCamera = async () => {
+    setCameraError(null);
+    setIsCameraActive(true);
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("Live camera is not supported on this browser/device.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        },
+        audio: false
+      });
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(e => console.error("Video play error:", e));
+      }
+    } catch (err: any) {
+      console.error("Camera access failed:", err);
+      setCameraError(err.message || "Camera access was denied or is unavailable. Please grant camera permission.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setIsCameraActive(false);
+    setCameraError(null);
+  };
+
+  const capturePhoto = () => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    // Flip horizontally to match the mirrored selfie viewfinder
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+    canvas.toBlob((blob) => {
+      if (blob) {
+        const file = new File([blob], `live_selfie_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        setSelfieFile(file);
+        setSelfiePreview(canvas.toDataURL('image/jpeg', 0.88));
+        stopCamera();
+      }
+    }, 'image/jpeg', 0.88);
+  };
+
+  // Handle file preview generators (only front and back documents can be uploaded)
+  const handleFileSelect = (file: File | null, type: 'front' | 'back') => {
     if (!file) return;
 
     // Check size limit (10MB)
@@ -103,9 +182,6 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
       } else if (type === 'back') {
         setBackFile(file);
         setBackPreview(reader.result as string);
-      } else if (type === 'selfie') {
-        setSelfieFile(file);
-        setSelfiePreview(reader.result as string);
       }
     };
     reader.readAsDataURL(file);
@@ -259,14 +335,27 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={fetchKycStatus}
-            className="self-start sm:self-auto px-2.5 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-gray-300 text-xs font-medium border border-neutral-300 dark:border-neutral-700 flex items-center gap-1.5 transition-colors cursor-pointer"
-          >
-            <RefreshCw className={`w-3 h-3 ${loadingStatus ? 'animate-spin' : ''}`} />
-            <span>Check Status</span>
-          </button>
+          <div className="flex items-center gap-2 self-start sm:self-auto">
+            <button
+              type="button"
+              onClick={fetchKycStatus}
+              className="px-2.5 py-1.5 rounded-lg bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-700 dark:text-gray-300 text-xs font-medium border border-neutral-300 dark:border-neutral-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+            >
+              <RefreshCw className={`w-3 h-3 ${loadingStatus ? 'animate-spin' : ''}`} />
+              <span>Check Status</span>
+            </button>
+
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-1.5 rounded-lg text-neutral-500 hover:text-neutral-900 dark:text-gray-400 dark:hover:text-white hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            )}
+          </div>
         </div>
       </CardHeader>
 
@@ -494,50 +583,103 @@ const VerificationSection: React.FC<VerificationSectionProps> = ({
                 )}
               </div>
 
-              {/* 3. LIVE SELFIE */}
+              {/* 3. LIVE SELFIE (Must be captured via live camera, file upload disabled) */}
               <div className="p-4 rounded-2xl bg-amber-50/40 dark:bg-neutral-950/80 border border-amber-300/80 dark:border-amber-500/30 space-y-3 flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
                       <Camera className="w-3.5 h-3.5" />
-                      <span>Live Selfie</span>
+                      <span>Live Camera Selfie</span>
                     </span>
                     <span className="text-[10px] text-red-500 font-bold">*Required</span>
                   </div>
-                  <p className="text-[11px] text-neutral-500 dark:text-gray-400 leading-tight">Live selfie of your face (or holding ID) in good lighting.</p>
+                  <p className="text-[11px] text-neutral-500 dark:text-gray-400 leading-tight">
+                    Must take a live photo of your face using your camera (file upload not allowed).
+                  </p>
                 </div>
 
-                <input
-                  type="file"
-                  ref={selfieInputRef}
-                  accept="image/jpeg,image/png,image/webp"
-                  capture="user"
-                  onChange={(e) => handleFileSelect(e.target.files?.[0] || null, 'selfie')}
-                  className="hidden"
-                />
-
+                {/* Captured Selfie Preview */}
                 {selfiePreview ? (
                   <div className="relative w-full h-36 rounded-xl overflow-hidden border border-amber-400 dark:border-amber-500/50 group bg-neutral-100 dark:bg-black">
-                    <img src={selfiePreview} alt="Selfie Preview" className="w-full h-full object-cover" />
+                    <img src={selfiePreview} alt="Live Selfie Preview" className="w-full h-full object-cover" />
                     <button
                       type="button"
                       onClick={() => { setSelfieFile(null); setSelfiePreview(null); }}
                       className="absolute top-2 right-2 p-1 rounded-full bg-black/70 text-red-400 hover:text-white cursor-pointer"
+                      title="Delete & retake live photo"
                     >
                       <X className="w-4 h-4" />
                     </button>
-                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] text-amber-400 font-bold">
-                      ✓ Selfie Captured
+                    <span className="absolute bottom-2 left-2 px-2 py-0.5 rounded bg-black/70 text-[10px] text-emerald-400 font-bold">
+                      ✓ Live Selfie Captured
                     </span>
+                    <button
+                      type="button"
+                      onClick={startCamera}
+                      className="absolute bottom-2 right-2 px-2 py-0.5 rounded bg-amber-500/90 text-black text-[10px] font-bold hover:bg-amber-400 cursor-pointer"
+                    >
+                      Retake
+                    </button>
+                  </div>
+                ) : isCameraActive ? (
+                  /* Live Camera Viewfinder */
+                  <div className="relative w-full h-44 rounded-xl overflow-hidden border-2 border-amber-500 bg-black flex flex-col items-center justify-center">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                      style={{ transform: 'scaleX(-1)' }}
+                    />
+                    {/* Face Guide Oval */}
+                    <div className="absolute inset-2 border-2 border-dashed border-amber-400/60 rounded-full pointer-events-none flex items-center justify-center">
+                      <span className="text-[10px] bg-black/60 text-amber-300 px-2 py-0.5 rounded">Center Face</span>
+                    </div>
+
+                    {cameraError ? (
+                      <div className="absolute inset-0 bg-black/85 p-3 flex flex-col items-center justify-center text-center">
+                        <AlertTriangle className="w-6 h-6 text-red-400 mb-1" />
+                        <p className="text-[11px] text-red-300 mb-2">{cameraError}</p>
+                        <button
+                          type="button"
+                          onClick={stopCamera}
+                          className="px-2.5 py-1 rounded bg-neutral-800 text-white text-[11px] font-bold hover:bg-neutral-700 cursor-pointer"
+                        >
+                          Close
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="absolute bottom-2 inset-x-2 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={stopCamera}
+                          className="px-2.5 py-1 rounded-lg bg-black/70 text-gray-300 text-[11px] font-medium hover:text-white cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="button"
+                          onClick={capturePhoto}
+                          className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold flex items-center gap-1 shadow-lg cursor-pointer"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>Snap Photo</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
+                  /* Default: Open Live Camera Button */
                   <div
-                    onClick={() => selfieInputRef.current?.click()}
-                    className="w-full h-36 border-2 border-dashed border-amber-300 dark:border-amber-500/40 hover:border-amber-500 dark:hover:border-amber-400 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-amber-50/80 dark:hover:bg-amber-500/5 text-center"
+                    onClick={startCamera}
+                    className="w-full h-36 border-2 border-dashed border-amber-300 dark:border-amber-500/40 hover:border-amber-500 dark:hover:border-amber-400 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition-all hover:bg-amber-50/80 dark:hover:bg-amber-500/5 text-center group"
                   >
-                    <Camera className="w-6 h-6 text-amber-600 dark:text-amber-400 mb-2" />
-                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300">Take or Upload Selfie</span>
-                    <span className="text-[10px] text-neutral-500 dark:text-gray-500 mt-1">Hold ID card or face camera</span>
+                    <div className="w-10 h-10 rounded-full bg-amber-500/10 dark:bg-amber-500/20 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                      <Camera className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <span className="text-xs font-bold text-amber-700 dark:text-amber-300">Open Live Camera</span>
+                    <span className="text-[10px] text-neutral-500 dark:text-gray-500 mt-0.5">Live photo required (no uploads)</span>
                   </div>
                 )}
               </div>

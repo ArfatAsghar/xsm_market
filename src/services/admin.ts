@@ -282,7 +282,12 @@ Great news! Our agent has successfully been made the Primary Owner of the channe
 };
 
 // Update ad status (admin only)
-export const updateAdStatus = async (adId: number, status: string, rejectionReason?: string) => {
+export const updateAdStatus = async (
+  adId: number, 
+  status: string, 
+  rejectionReason?: string,
+  enrichmentData?: { title?: string; subscribers?: number; thumbnail?: string; primary_image?: string; description?: string; verified?: number }
+) => {
   const token = localStorage.getItem('token');
   if (!token) {
     throw new Error('Authentication required');
@@ -294,7 +299,7 @@ export const updateAdStatus = async (adId: number, status: string, rejectionReas
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ status, rejectionReason })
+    body: JSON.stringify({ status, rejectionReason, ...(enrichmentData || {}) })
   });
 
   if (!response.ok) {
@@ -606,4 +611,81 @@ export const toggleVipUser = async (userId: number | string) => {
   }
 
   return await response.json();
+};
+
+// Fetch platform API extractor settings (admin)
+export const getExtractorSettings = async () => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(`${ADMIN_API_URL}/admin/extractor-settings`, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to fetch extractor settings: ${response.statusText}`);
+  }
+
+  return await response.json();
+};
+
+// Toggle platform API extractor status (admin)
+export const updateExtractorSettings = async (platform: string, is_enabled: boolean) => {
+  const token = localStorage.getItem('token');
+  if (!token) {
+    throw new Error('Authentication required');
+  }
+
+  const response = await fetch(`${ADMIN_API_URL}/admin/extractor-settings/toggle`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({ platform, is_enabled })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.message || `Failed to update extractor settings: ${response.statusText}`);
+  }
+
+  return await response.json();
+};
+
+// Public extractor settings check (for SellChannel page)
+export const getPublicExtractorSettings = async () => {
+  try {
+    const response = await fetch(`${ADMIN_API_URL}/extractor-settings`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (response.ok) {
+      return await response.json();
+    }
+  } catch (err) {
+    console.warn('Could not fetch public extractor settings:', err);
+  }
+
+  return {
+    success: true,
+    settings: {
+      youtube: true,
+      tiktok: true,
+      instagram: true,
+      facebook: true,
+      twitter: true,
+      telegram: true
+    }
+  };
 };

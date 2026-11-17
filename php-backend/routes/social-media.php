@@ -14,6 +14,24 @@ switch (true) {
         Response::error('Social media route not found', 404);
 }
 
+function isPlatformExtractorEnabled($platform) {
+    try {
+        $pdo = Database::getConnection();
+        $r = $pdo->query("SHOW TABLES LIKE 'extractor_settings'")->fetch();
+        if (!$r) return true;
+
+        $stmt = $pdo->prepare("SELECT is_enabled FROM extractor_settings WHERE platform = ? LIMIT 1");
+        $stmt->execute([strtolower(trim($platform))]);
+        $val = $stmt->fetchColumn();
+        if ($val === false || $val === null) {
+            return true;
+        }
+        return (bool)$val;
+    } catch (Throwable $e) {
+        return true;
+    }
+}
+
 function normalizeInputUrl($inputUrl) {
     $url = trim($inputUrl ?? '');
     if (!$url) return '';
@@ -101,6 +119,44 @@ function handleSocialMediaExtract() {
             return;
         }
 
+        // Check if extractor is disabled by admin for this platform
+        if (!isPlatformExtractorEnabled($platform)) {
+            error_log("Platform extractor for '{$platform}' is disabled by admin.");
+            http_response_code(503);
+            header('Content-Type: application/json');
+            echo json_encode([
+                'success' => false,
+                'message' => ucfirst($platform) . ' extractor is paused by administration. Cloud Sync fallback active.',
+                'extractorDisabled' => true,
+                'platform' => $platform
+            ]);
+            exit;
+        }
+
+        // ── 24-HOUR CACHE LOOKUP ─────────────────────────────────────────
+        $urlHash = md5(strtolower(trim($url)));
+        $cached = getSocialMediaCache($urlHash);
+        if ($cached) {
+            // Re-evaluate verificationCode on the fly against cached profile text
+            $cached['verificationCode'] = $verificationCode;
+            if (!empty($verificationCode)) {
+                $searchSources = [
+                    $cached['description'] ?? '',
+                    $cached['channelName'] ?? '',
+                    $cached['title'] ?? ''
+                ];
+                $cached['codeVerified'] = checkVerificationCodeMatch($verificationCode, ...$searchSources);
+                $cached['verified'] = $cached['codeVerified'];
+            } else {
+                $cached['codeVerified'] = false;
+                $cached['verified'] = false;
+            }
+            error_log("Social media extraction CACHE HIT for: " . $url);
+            Response::success(['data' => $cached, 'cached' => true]);
+            return;
+        }
+        // ── END CACHE LOOKUP ──────────────────────────────────────────────
+
         $channelName = extractChannelNameFromUrl($platform, $pathValue, $url);
         $profileData = [
             'platform' => $platform,
@@ -145,6 +201,15 @@ function handleSocialMediaExtract() {
                 $profileData[$key] = $value;
             }
         }
+
+        // ── SAVE TO 24-HOUR CACHE (Only if valid profile info found) ──────
+        $hasData = !empty($profileData['channelName']) || !empty($profileData['title']) || 
+                   !empty($profileData['profilePicture']) || $profileData['subscribers'] > 0 || 
+                   !empty($profileData['description']);
+        if ($hasData) {
+            setSocialMediaCache($urlHash, $platform, $url, $profileData);
+        }
+        // ── END SAVE TO CACHE ──────────────────────────────────────────────
 
         Response::success(['data' => $profileData]);
     } catch (Exception $e) {
@@ -602,10 +667,209 @@ function handleSocialBladeIntegration() {
     }
 }
 
+// ── 24-HOUR EXTRACTION CACHE HELPERS ───────────────────────────────────────
+function getSocialMediaCache($urlHash) {
+    try {
+        $pdo = Database::getConnection();
+        $stmt = $pdo->prepare("SELECT cached_data FROM social_media_cache WHERE url_hash = ? AND expires_at > NOW() LIMIT 1");
+        $stmt->execute([$urlHash]);
+        $row = $stmt->fetch();
+        if ($row && !empty($row['cached_data'])) {
+            $data = json_decode($row['cached_data'], true);
+            if (is_array($data)) {
+                return $data;
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('Social cache read warning: ' . $e->getMessage());
+    }
+    return null;
+}
+
+function setSocialMediaCache($urlHash, $platform, $channelUrl, $profileData) {
+    try {
+        $pdo = Database::getConnection();
+        // Delete old entry for this urlHash if present
+        $del = $pdo->prepare("DELETE FROM social_media_cache WHERE url_hash = ?");
+        $del->execute([$urlHash]);
+
+        // Insert new cache record valid for 24 hours
+        $stmt = $pdo->prepare("
+            INSERT INTO social_media_cache (url_hash, platform, channel_url, cached_data, created_at, expires_at)
+            VALUES (?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR))
+        ");
+        $stmt->execute([
+            $urlHash,
+            $platform,
+            $channelUrl,
+            json_encode($profileData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
+        ]);
+
+        // Probabilistic cleanup of expired cache rows (~5% probability)
+        if (mt_rand(1, 20) === 1) {
+            $pdo->query("DELETE FROM social_media_cache WHERE expires_at < NOW()");
+        }
+    } catch (Throwable $e) {
+        error_log('Social cache write warning: ' . $e->getMessage());
+    }
+}
+
+// ── RAPIDAPI MULTI-KEY POOL & ROTATION ────────────────────────────────────
+function getRapidApiKeyPool() {
+    $keys = [];
+
+    // 1. Check comma-separated RAPIDAPI_KEYS
+    $csvKeys = getenv('RAPIDAPI_KEYS');
+    if ($csvKeys) {
+        foreach (explode(',', $csvKeys) as $k) {
+            $trimmed = trim($k);
+            if (strlen($trimmed) > 20 && !in_array($trimmed, $keys)) {
+                $keys[] = $trimmed;
+            }
+        }
+    }
+
+    // 2. Check multiple numbered env variables (RAPIDAPI_KEY, RAPIDAPI_KEY_1 ... RAPIDAPI_KEY_10)
+    $envSlots = [
+        'RAPIDAPI_KEY',
+        'RAPIDAPI_KEY_1',
+        'RAPIDAPI_KEY_2',
+        'RAPIDAPI_KEY_3',
+        'RAPIDAPI_KEY_4',
+        'RAPIDAPI_KEY_5',
+        'RAPIDAPI_KEY_6',
+        'RAPIDAPI_KEY_7',
+        'RAPIDAPI_KEY_8',
+        'RAPIDAPI_KEY_9',
+        'RAPIDAPI_KEY_10'
+    ];
+    foreach ($envSlots as $slot) {
+        $val = getenv($slot);
+        if ($val && is_string($val)) {
+            $trimmed = trim($val);
+            if (strlen($trimmed) > 20 && !in_array($trimmed, $keys)) {
+                $keys[] = $trimmed;
+            }
+        }
+    }
+
+    // 3. Fallback default key if none configured
+    $defaultKey = '0951108164mshd9a0970e7be24efp175df6jsn1104858fd362';
+    if (empty($keys)) {
+        $keys[] = $defaultKey;
+    }
+
+    return $keys;
+}
+
 function getRapidApiKey() {
-    $envKey = getenv('RAPIDAPI_KEY');
-    if ($envKey) return $envKey;
-    return '0951108164mshd9a0970e7be24efp175df6jsn1104858fd362';
+    $pool = getRapidApiKeyPool();
+    return !empty($pool) ? $pool[0] : '';
+}
+
+function callRapidApi($url, $host, $apiKey = null, $timeoutSec = 8) {
+    $pool = getRapidApiKeyPool();
+    if ($apiKey && is_string($apiKey) && strlen(trim($apiKey)) > 20) {
+        $preferred = trim($apiKey);
+        $pool = array_values(array_unique(array_merge([$preferred], $pool)));
+    }
+
+    if (empty($pool)) return null;
+
+    foreach ($pool as $currentKey) {
+        $ch = curl_init();
+        curl_setopt_array($ch, [
+            CURLOPT_URL            => $url,
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT        => $timeoutSec,
+            CURLOPT_CONNECTTIMEOUT => 4,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_HTTPHEADER     => [
+                'X-RapidAPI-Key: ' . $currentKey,
+                'X-RapidAPI-Host: ' . $host,
+                'Accept: application/json',
+            ]
+        ]);
+        $resp = curl_exec($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        // Check for rate limit (429) or monthly quota exhaustion (403 with quota/exceeded/limit message)
+        $isQuotaOrRateLimit = ($code === 429);
+        if ($code === 403 && $resp && (
+            stripos($resp, 'exceeded') !== false ||
+            stripos($resp, 'quota') !== false ||
+            stripos($resp, 'blocked') !== false ||
+            stripos($resp, 'not subscribed') !== false ||
+            stripos($resp, 'limit') !== false
+        )) {
+            $isQuotaOrRateLimit = true;
+        }
+
+        if ($isQuotaOrRateLimit) {
+            $keyMask = substr($currentKey, 0, 8) . '...' . substr($currentKey, -4);
+            error_log("RapidAPI key [{$keyMask}] quota/rate limit hit (HTTP {$code}) on {$host}. Auto-rotating to next key in pool...");
+            continue; // Seamlessly failover to next key in pool
+        }
+
+        if ($resp && $code >= 200 && $code < 300) {
+            $decoded = json_decode($resp, true);
+            if ($decoded !== null) {
+                return $decoded;
+            }
+        }
+
+        // 404 indicates resource not found on platform; avoid retrying identical request across keys
+        if ($code === 404) {
+            return null;
+        }
+    }
+
+    return null;
+}
+
+function cacheSocialProfilePicture($imageUrl, $platform, $handle) {
+    if (!$imageUrl || !filter_var($imageUrl, FILTER_VALIDATE_URL)) {
+        return $imageUrl;
+    }
+    // Already locally hosted
+    if (strpos($imageUrl, '/uploads/') === 0 || strpos($imageUrl, '/api/uploads/') === 0) {
+        return $imageUrl;
+    }
+    // Download image with curl omitting Referer so CDN does not block
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL            => $imageUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        CURLOPT_HTTPHEADER     => [
+            'Accept: image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+            'Referer: '
+        ]
+    ]);
+    $imgData = curl_exec($ch);
+    $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $contentType = curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
+    curl_close($ch);
+
+    if ($code === 200 && $imgData && strlen($imgData) > 500) {
+        $ext = 'jpg';
+        if (strpos($contentType, 'png') !== false) $ext = 'png';
+        elseif (strpos($contentType, 'webp') !== false) $ext = 'webp';
+
+        $safeHandle = preg_replace('/[^a-zA-Z0-9_-]/', '', $handle) ?: 'profile';
+        $filename = 'social_' . $platform . '_' . $safeHandle . '_' . substr(md5($imageUrl), 0, 10) . '.' . $ext;
+
+        if (class_exists('UploadHelper')) {
+            if (UploadHelper::saveBinaryData($imgData, 'avatars', $filename)) {
+                return '/uploads/avatars/' . $filename;
+            }
+        }
+    }
+    return $imageUrl;
 }
 
 function parseSocialNumber($str) {
@@ -703,10 +967,39 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
     $apiSignature = '';
     $followerFound = false;
 
-    // ── SOURCE 1: TikTok Mobile/Share API Endpoints ──────────────────
+    // ── SOURCE 1: TikTok oEmbed API (free, no auth, works for public accounts) ──
+    $oembedUrl = 'https://www.tiktok.com/oembed?url=' . urlencode('https://www.tiktok.com/@' . $handle);
+    $oembedCh = curl_init();
+    curl_setopt_array($oembedCh, [
+        CURLOPT_URL            => $oembedUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_CONNECTTIMEOUT => 4,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+    ]);
+    $oembedResp = curl_exec($oembedCh);
+    curl_close($oembedCh);
+    if ($oembedResp) {
+        $oe = json_decode($oembedResp, true);
+        if (!empty($oe['author_name'])) {
+            $result['title'] = $oe['author_name'];
+        }
+        if (!empty($oe['author_url'])) {
+            if (preg_match('/@([^\/?#]+)/', $oe['author_url'], $om)) {
+                $result['channelName'] = '@' . $om[1];
+            }
+        }
+        if (!empty($oe['thumbnail_url'])) {
+            $result['profilePicture'] = $oe['thumbnail_url'];
+        }
+    }
+
+    // ── SOURCE 1b: TikTok Internal API endpoints ──────────────────────────
     $ttApis = [
-        'https://www.tiktok.com/node/share/user/@' . urlencode($handle),
-        'https://www.tiktok.com/api/user/detail/?uniqueId=' . urlencode($handle)
+        'https://www.tiktok.com/api/user/detail/?uniqueId=' . urlencode($handle) . '&aid=1988&app_language=en&app_name=tiktok_web',
+        'https://api16-normal-c-useast1a.tiktokv.com/aweme/v1/user/profile/other/?unique_id=' . urlencode($handle) . '&aid=1233',
     ];
     foreach ($ttApis as $apiUrl) {
         $ch = curl_init();
@@ -716,17 +1009,18 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
             CURLOPT_TIMEOUT        => 6,
             CURLOPT_CONNECTTIMEOUT => 3,
             CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_USERAGENT      => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148',
+            CURLOPT_USERAGENT      => 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1',
             CURLOPT_HTTPHEADER     => [
                 'Accept: application/json, text/plain, */*',
                 'Referer: https://www.tiktok.com/@' . urlencode($handle),
+                'Origin: https://www.tiktok.com',
             ]
         ]);
         $resp = curl_exec($ch);
         curl_close($ch);
         if ($resp) {
             $json = json_decode($resp, true);
-            $uInfo = $json['userInfo']['user'] ?? $json['user'] ?? $json['data']['user'] ?? [];
+            $uInfo = $json['userInfo']['user'] ?? $json['user'] ?? $json['data']['user'] ?? $json['aweme_list'][0]['author'] ?? [];
             $sInfo = $json['userInfo']['stats'] ?? $json['stats'] ?? $json['data']['stats'] ?? [];
             if (!empty($uInfo)) {
                 if (!empty($uInfo['nickname'])) $result['title'] = $uInfo['nickname'];
@@ -751,51 +1045,55 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
         }
     }
 
-    // ── SOURCE 2: RapidAPI Scrapers ──────────────────────────────
+    // ── SOURCE 2: RapidAPI TikTok Scrapers (multiple endpoints for resilience) ──
     if ((empty($result['description']) || !$followerFound) && $apiKey) {
-        $rapidApis = [
-            'https://tiktok-all-in-one-api.p.rapidapi.com/user/info?username=' . urlencode($handle) => 'tiktok-all-in-one-api.p.rapidapi.com',
-            'https://tiktok-scraper7.p.rapidapi.com/user/info?unique_id=' . urlencode($handle) => 'tiktok-scraper7.p.rapidapi.com',
+        // Each entry: [url, host, json_path_to_user, json_path_to_stats]
+        $rapidEndpoints = [
+            [
+                'url'  => 'https://tiktok-scraper7.p.rapidapi.com/user/info?unique_id=' . urlencode($handle),
+                'host' => 'tiktok-scraper7.p.rapidapi.com',
+            ],
+            [
+                'url'  => 'https://tiktok-api23.p.rapidapi.com/api/user/info?uniqueId=' . urlencode($handle),
+                'host' => 'tiktok-api23.p.rapidapi.com',
+            ],
+            [
+                'url'  => 'https://tiktok-data1.p.rapidapi.com/user_info/?username=' . urlencode($handle),
+                'host' => 'tiktok-data1.p.rapidapi.com',
+            ],
         ];
-        foreach ($rapidApis as $rapidUrl => $rapidHost) {
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_URL            => $rapidUrl,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 6,
-                CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_HTTPHEADER     => [
-                    'X-RapidAPI-Key: ' . $apiKey,
-                    'X-RapidAPI-Host: ' . $rapidHost
-                ]
-            ]);
-            $response = curl_exec($ch);
-            curl_close($ch);
+        foreach ($rapidEndpoints as $ep) {
+            $json = callRapidApi($ep['url'], $ep['host'], $apiKey, 8);
+            if (!$json) continue;
+            // Normalise response across different API response shapes
+            $userInfo = $json['user'] ?? $json['data']['user'] ?? $json['userInfo']['user'] ?? $json['data'] ?? [];
+            $stats    = $json['stats'] ?? $json['data']['stats'] ?? $json['userInfo']['stats'] ?? [];
 
-            if ($response) {
-                $json = json_decode($response, true);
-                $userInfo = $json['user'] ?? $json['data']['user'] ?? $json['userInfo']['user'] ?? $json['data'] ?? [];
-                $stats    = $json['stats'] ?? $json['data']['stats'] ?? $json['userInfo']['stats'] ?? [];
-
-                if (!empty($userInfo)) {
-                    if (!empty($userInfo['nickname'])) $result['title'] = $userInfo['nickname'];
-                    if (!empty($userInfo['uniqueId'])) $result['channelName'] = '@' . $userInfo['uniqueId'];
-                    if (!empty($userInfo['avatarLarger']) || !empty($userInfo['avatarMedium'])) {
-                        $result['profilePicture'] = $userInfo['avatarLarger'] ?? $userInfo['avatarMedium'];
-                    }
-                    if (!empty($userInfo['signature'])) {
-                        $result['description'] = $userInfo['signature'];
-                        $apiSignature = $userInfo['signature'];
-                    }
-                    $followerCount = $stats['followerCount'] ?? $userInfo['followerCount'] ?? null;
-                    if ($followerCount !== null) {
-                        $result['subscribers'] = (int)$followerCount;
-                        $result['followers']   = (int)$followerCount;
-                        $followerFound = true;
-                    }
-                    if ($followerFound && !empty($result['description'])) break;
+            if (!empty($userInfo) && is_array($userInfo)) {
+                if (!empty($userInfo['nickname'])) $result['title'] = $userInfo['nickname'];
+                if (!empty($userInfo['uniqueId'])) $result['channelName'] = '@' . $userInfo['uniqueId'];
+                if (!empty($userInfo['avatarLarger']) || !empty($userInfo['avatarMedium'])) {
+                    $result['profilePicture'] = $userInfo['avatarLarger'] ?? $userInfo['avatarMedium'];
                 }
+                if (!empty($userInfo['privateAccount']) || !empty($userInfo['secret'])) {
+                    $result['isPrivate'] = true;
+                }
+                $sig = $userInfo['signature'] ?? $userInfo['desc'] ?? $userInfo['bio'] ?? '';
+                if (!empty($sig)) {
+                    $result['description'] = $sig;
+                    $apiSignature = $sig;
+                }
+                $bioLink = $userInfo['bioLink']['link'] ?? $userInfo['bio_url'] ?? '';
+                if (!empty($bioLink)) {
+                    $apiSignature .= ' ' . $bioLink;
+                }
+                $followerCount = $stats['followerCount'] ?? $userInfo['followerCount'] ?? null;
+                if ($followerCount !== null) {
+                    $result['subscribers'] = (int)$followerCount;
+                    $result['followers']   = (int)$followerCount;
+                    $followerFound = true;
+                }
+                if ($followerFound && !empty($result['description'])) break;
             }
         }
     }
@@ -814,8 +1112,14 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
                     if (!empty($u['nickname'])) $result['title'] = $u['nickname'];
                     if (!empty($u['uniqueId'])) $result['channelName'] = '@' . $u['uniqueId'];
                     if (!empty($u['avatarLarger']) && empty($result['profilePicture'])) $result['profilePicture'] = $u['avatarLarger'];
+                    if (!empty($u['privateAccount']) || !empty($u['secret'])) {
+                        $result['isPrivate'] = true;
+                    }
                     if (!empty($u['signature']) && empty($result['description'])) {
                         $result['description'] = $u['signature'];
+                    }
+                    if (!empty($u['bioLink']['link'])) {
+                        $apiSignature .= ' ' . $u['bioLink']['link'];
                     }
                     if (isset($s['followerCount']) && !$followerFound) {
                         $result['subscribers'] = (int)$s['followerCount'];
@@ -881,6 +1185,10 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
         $rawHtml
     );
 
+    if (!empty($result['profilePicture'])) {
+        $result['profilePicture'] = cacheSocialProfilePicture($result['profilePicture'], 'tiktok', $handle);
+    }
+
     return $result;
 }
 
@@ -901,13 +1209,22 @@ function fetchInstagramWebProfileApi($handle) {
     $endpoints = [
         [
             'url'  => 'https://www.instagram.com/api/v1/users/web_profile_info/?username=' . urlencode($handle),
-            'ua'   => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'ua'   => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
             'refs' => 'https://www.instagram.com/' . urlencode($handle) . '/',
+            'app_id' => '936619743392459',
         ],
         [
             'url'  => 'https://i.instagram.com/api/v1/users/web_profile_info/?username=' . urlencode($handle),
-            'ua'   => 'Instagram 76.0.0.15.395 Android (24/7.0; 640dpi; 1440x2560; samsung; SM-G930F; herolte; samsungexynos8890; en_US; 138226743)',
+            'ua'   => 'Instagram 274.0.0.27.91 Android (33/13; 420dpi; 1080x2340; samsung; SM-A536B; a53x; exynos1280; en_US; 437040539)',
             'refs' => 'https://www.instagram.com/',
+            'app_id' => '567067343352427',
+        ],
+        [
+            // Alternative IG web endpoint (works when the above are rate-limited)
+            'url'  => 'https://www.instagram.com/' . urlencode($handle) . '/?__a=1&__d=dis',
+            'ua'   => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+            'refs' => 'https://www.instagram.com/',
+            'app_id' => '936619743392459',
         ],
     ];
 
@@ -922,9 +1239,10 @@ function fetchInstagramWebProfileApi($handle) {
             CURLOPT_SSL_VERIFYPEER => false,
             CURLOPT_HTTPHEADER     => [
                 'User-Agent: ' . $cfg['ua'],
-                'X-IG-App-ID: 936619743392459',
+                'X-IG-App-ID: ' . ($cfg['app_id'] ?? '936619743392459'),
                 'X-Requested-With: XMLHttpRequest',
-                'Accept: */*',
+                'Accept: application/json, */*',
+                'Accept-Language: en-US,en;q=0.9',
                 'Referer: ' . $cfg['refs'],
             ],
         ]);
@@ -937,7 +1255,8 @@ function fetchInstagramWebProfileApi($handle) {
         }
 
         $json = json_decode($response, true);
-        $user = $json['data']['user'] ?? $json['user'] ?? null;
+        // Handle multiple response shapes from different IG endpoints
+        $user = $json['data']['user'] ?? $json['graphql']['user'] ?? $json['user'] ?? null;
         if (empty($user) || !is_array($user)) {
             continue;
         }
@@ -966,6 +1285,28 @@ function fetchInstagramWebProfileApi($handle) {
 
         if (!empty($out['description']) || $out['followers'] > 0) {
             return $out;
+        }
+    }
+
+    // ── IG oEmbed fallback (no auth needed, gives author_name) ────────────
+    $oeCh = curl_init();
+    curl_setopt_array($oeCh, [
+        CURLOPT_URL            => 'https://graph.facebook.com/v18.0/instagram_oembed?url=' . urlencode('https://www.instagram.com/' . $handle . '/') . '&access_token=&omitscript=true',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0',
+        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+    ]);
+    $oeResp = curl_exec($oeCh);
+    curl_close($oeCh);
+    if ($oeResp) {
+        $oe = json_decode($oeResp, true);
+        if (!empty($oe['author_name']) && empty($out['title'])) {
+            $out['title'] = $oe['author_name'];
+        }
+        if (!empty($oe['thumbnail_url']) && empty($out['profilePicture'])) {
+            $out['profilePicture'] = $oe['thumbnail_url'];
         }
     }
 
@@ -1106,47 +1447,57 @@ function fetchInstagramProfileData($url, $verificationCode = '') {
         }
     }
 
-    // ── SOURCE 4: RapidAPI Instagram Scrapers ────────────────────────────
-    if ((empty($result['description']) || !$followerFound) && $apiKey) {
-        $rapidApis = [
-            'https://instagram-scraper-api2.p.rapidapi.com/v1/info?username_or_id_or_url=' . urlencode($handle) => 'instagram-scraper-api2.p.rapidapi.com',
-            'https://instagram-data12.p.rapidapi.com/user/details?username=' . urlencode($handle) => 'instagram-data12.p.rapidapi.com',
+    // ── SOURCE 4: RapidAPI Instagram Scrapers (updated endpoints) ────────────
+    if ((empty($result['description']) || !$followerFound || empty($result['profilePicture'])) && $apiKey) {
+        $rapidEndpoints = [
+            [
+                'url'  => 'https://instagram-best-experience.p.rapidapi.com/profile?username=' . urlencode($handle),
+                'host' => 'instagram-best-experience.p.rapidapi.com',
+            ],
+            [
+                'url'  => 'https://instagram-scraper2.p.rapidapi.com/user_info?user_name=' . urlencode($handle),
+                'host' => 'instagram-scraper2.p.rapidapi.com',
+            ],
+            [
+                'url'  => 'https://instagram-scraper-api2.p.rapidapi.com/v1/info?username_or_id_or_url=' . urlencode($handle),
+                'host' => 'instagram-scraper-api2.p.rapidapi.com',
+            ],
+            [
+                'url'  => 'https://instagram-looter2.p.rapidapi.com/profile?username=' . urlencode($handle),
+                'host' => 'instagram-looter2.p.rapidapi.com',
+            ],
+            [
+                'url'  => 'https://social-media-data.p.rapidapi.com/social/instagram/profile?username=' . urlencode($handle),
+                'host' => 'social-media-data.p.rapidapi.com',
+            ],
         ];
-        foreach ($rapidApis as $rapidUrl => $rapidHost) {
-            $ch = curl_init();
-            curl_setopt_array($ch, [
-                CURLOPT_URL            => $rapidUrl,
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_TIMEOUT        => 6,
-                CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_HTTPHEADER     => [
-                    'X-RapidAPI-Key: ' . $apiKey,
-                    'X-RapidAPI-Host: ' . $rapidHost
-                ]
-            ]);
-            $response = curl_exec($ch);
-            curl_close($ch);
-
-            if ($response) {
-                $json = json_decode($response, true);
-                $data = $json['data'] ?? $json;
-                if (!empty($data) && is_array($data)) {
-                    if (!empty($data['full_name'])) $result['title'] = $data['full_name'];
-                    if (!empty($data['username'])) $result['channelName'] = '@' . $data['username'];
-                    if (!empty($data['profile_pic_url_hd']) || !empty($data['profile_pic_url'])) {
-                        $result['profilePicture'] = $data['profile_pic_url_hd'] ?? $data['profile_pic_url'];
-                    }
-                    if (!empty($data['biography'])) {
-                        $result['description'] = $data['biography'];
-                    }
-                    $followerCount = $data['follower_count'] ?? $data['edge_followed_by']['count'] ?? null;
-                    if ($followerCount !== null) {
-                        $result['subscribers'] = (int)$followerCount;
-                        $result['followers']   = (int)$followerCount;
-                        $followerFound = true;
-                    }
-                    if ($followerFound && !empty($result['description'])) break;
+        foreach ($rapidEndpoints as $ep) {
+            $json = callRapidApi($ep['url'], $ep['host'], $apiKey, 8);
+            if (!$json) continue;
+            $data = $json['data'] ?? $json['result'] ?? $json ?? [];
+            if (!empty($data) && is_array($data)) {
+                if (!empty($data['full_name'])) $result['title'] = $data['full_name'];
+                if (!empty($data['username'])) $result['channelName'] = '@' . $data['username'];
+                $pic = $data['hd_profile_pic_url_info']['url']
+                    ?? $data['hd_profile_pic_versions'][0]['url']
+                    ?? $data['profile_pic_url_hd']
+                    ?? $data['profile_pic_url']
+                    ?? $data['profile_picture']
+                    ?? null;
+                if (!empty($pic)) {
+                    $result['profilePicture'] = $pic;
                 }
+                $bio = $data['biography'] ?? $data['bio'] ?? null;
+                if (!empty($bio)) {
+                    $result['description'] = $bio;
+                }
+                $followerCount = $data['follower_count'] ?? $data['followers_count'] ?? $data['edge_followed_by']['count'] ?? $data['followers'] ?? null;
+                if ($followerCount !== null) {
+                    $result['subscribers'] = (int)$followerCount;
+                    $result['followers']   = (int)$followerCount;
+                    $followerFound = true;
+                }
+                if ($followerFound && !empty($result['description']) && !empty($result['profilePicture'])) break;
             }
         }
     }
@@ -1185,6 +1536,10 @@ function fetchInstagramProfileData($url, $verificationCode = '') {
         $result['title'],
         $htmlContent
     );
+
+    if (!empty($result['profilePicture'])) {
+        $result['profilePicture'] = cacheSocialProfilePicture($result['profilePicture'], 'instagram', $handle);
+    }
 
     return $result;
 }
@@ -1404,7 +1759,28 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
     $htmlContent = '';
     $followerFound = false;
 
-    // ── SOURCE 0: mbasic.facebook.com (lightweight HTML, fewer blocks) ───
+    // ── SOURCE 0: Facebook oEmbed (free, no auth, gives page name) ────────
+    $fbOembedUrl = 'https://www.facebook.com/plugins/post/oembed.json/?url=' . urlencode('https://www.facebook.com/' . $fbHandle) . '&omitscript=true';
+    $fbOeCh = curl_init();
+    curl_setopt_array($fbOeCh, [
+        CURLOPT_URL            => $fbOembedUrl,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 6,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+    ]);
+    $fbOeResp = curl_exec($fbOeCh);
+    curl_close($fbOeCh);
+    if ($fbOeResp) {
+        $fbOe = json_decode($fbOeResp, true);
+        if (!empty($fbOe['author_name'])) {
+            $result['title']       = $fbOe['author_name'];
+            $result['channelName'] = $fbOe['author_name'];
+        }
+    }
+
+    // ── SOURCE 0b: mbasic.facebook.com (lightweight HTML, fewer blocks) ──
     $mbHtml = fetchSocialPage('https://mbasic.facebook.com/' . urlencode($fbHandle), true);
     if ($mbHtml) {
         $htmlContent .= ' ' . $mbHtml;
@@ -1415,19 +1791,20 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
                 $result['channelName'] = $title;
             }
         }
-        if (preg_match('/<div[^>]*id="pages_milestone[^"]*"[^>]*>(.*?)<\/div>/is', $mbHtml, $m)) {
-            $aboutText = html_entity_decode(trim(strip_tags($m[1])), ENT_QUOTES);
-            if ($aboutText) {
-                $result['description'] = $aboutText;
-            }
-        }
-        if (empty($result['description']) && preg_match('/<div[^>]*id="pages_m_about[^"]*"[^>]*>(.*?)<\/div>/is', $mbHtml, $m)) {
-            $aboutText = html_entity_decode(trim(strip_tags($m[1])), ENT_QUOTES);
-            if ($aboutText && !preg_match('/^Log in/i', $aboutText)) {
-                $result['description'] = $aboutText;
+        // About / description patterns
+        foreach (['/id="pages_milestone[^"]*"/', '/id="pages_m_about[^"]*"/', '/class="[^"]*page-info[^"]*"/'] as $pat) {
+            if (empty($result['description']) && preg_match('/<div[^>]*' . $pat . '[^>]*>(.*?)<\/div>/is', $mbHtml, $m)) {
+                $aboutText = html_entity_decode(trim(strip_tags($m[1])), ENT_QUOTES);
+                if ($aboutText && !preg_match('/^Log in/i', $aboutText)) {
+                    $result['description'] = $aboutText;
+                }
             }
         }
         if (empty($result['profilePicture']) && preg_match('/<img[^>]+src="([^"]+)"[^>]*class="[^"]*profilePic/i', $mbHtml, $m)) {
+            $result['profilePicture'] = html_entity_decode($m[1], ENT_QUOTES);
+        }
+        // Also try og:image from mbasic
+        if (empty($result['profilePicture']) && preg_match('/<meta property="og:image" content="([^"]+)"/i', $mbHtml, $m)) {
             $result['profilePicture'] = html_entity_decode($m[1], ENT_QUOTES);
         }
         if (preg_match('/([0-9.,]+[KMBkmb]?)\s+(?:people follow this|followers|people like this|likes)/i', $mbHtml, $m)) {
@@ -1500,42 +1877,47 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
         }
     }
 
-    // ── SOURCE 3: RapidAPI Facebook Scraper ───────────────────────────
+    // ── SOURCE 3: RapidAPI Facebook Scrapers (multiple fallback endpoints) ──
     if ((empty($result['description']) || !$followerFound) && $apiKey) {
-        $rapidUrl = 'https://facebook-pages-scraper.p.rapidapi.com/page_info?page_name=' . urlencode($fbHandle);
-        $ch = curl_init();
-        curl_setopt_array($ch, [
-            CURLOPT_URL            => $rapidUrl,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_TIMEOUT        => 6,
-            CURLOPT_HTTPHEADER     => [
-                'X-RapidAPI-Key: ' . $apiKey,
-                'X-RapidAPI-Host: facebook-pages-scraper.p.rapidapi.com'
-            ]
-        ]);
-        $response = curl_exec($ch);
-        curl_close($ch);
-
-        if ($response) {
-            $json = json_decode($response, true);
-            $data = $json['data'] ?? $json ?? [];
-            if (!empty($data) && (isset($data['name']) || isset($data['fan_count']))) {
+        $fbPageLink = 'https://www.facebook.com/' . $fbHandle;
+        $fbRapidEndpoints = [
+            [
+                'url'  => 'https://facebook-pages-scraper2.p.rapidapi.com/get_facebook_page_details?link=' . urlencode($fbPageLink),
+                'host' => 'facebook-pages-scraper2.p.rapidapi.com',
+            ],
+            [
+                'url'  => 'https://facebook-pages-scraper.p.rapidapi.com/page_info?page_name=' . urlencode($fbHandle),
+                'host' => 'facebook-pages-scraper.p.rapidapi.com',
+            ],
+            [
+                'url'  => 'https://social-media-data.p.rapidapi.com/social/facebook/page?username=' . urlencode($fbHandle),
+                'host' => 'social-media-data.p.rapidapi.com',
+            ],
+        ];
+        foreach ($fbRapidEndpoints as $ep) {
+            $json = callRapidApi($ep['url'], $ep['host'], $apiKey, 8);
+            if (!$json) continue;
+            $data = $json['data'] ?? $json['result'] ?? $json ?? [];
+            if (!empty($data) && is_array($data) && (isset($data['name']) || isset($data['fan_count']) || isset($data['followers_count']) || isset($data['likes']) || isset($data['followers']))) {
                 if (!empty($data['name'])) {
                     $result['title']       = $data['name'];
                     $result['channelName'] = $data['name'];
                 }
-                if (!empty($data['description']) || !empty($data['about'])) {
-                    $result['description'] = $data['description'] ?? $data['about'];
+                $desc = $data['description'] ?? $data['about'] ?? $data['bio'] ?? '';
+                if (!empty($desc)) {
+                    $result['description'] = is_array($desc) ? ($desc['text'] ?? '') : $desc;
                 }
-                if (!empty($data['picture']['data']['url']) || !empty($data['cover']['source'])) {
-                    $result['profilePicture'] = $data['picture']['data']['url'] ?? $data['cover']['source'];
+                $pic = $data['picture']['data']['url'] ?? $data['profile_picture'] ?? $data['cover']['source'] ?? $data['profile_photo'] ?? $data['avatar'] ?? '';
+                if (!empty($pic)) {
+                    $result['profilePicture'] = $pic;
                 }
-                $fans = $data['fan_count'] ?? $data['followers_count'] ?? $data['likes'] ?? null;
+                $fans = $data['followers_count'] ?? $data['fan_count'] ?? $data['followers'] ?? $data['likes_count'] ?? $data['likes'] ?? null;
                 if ($fans !== null) {
                     $result['subscribers'] = (int)$fans;
                     $result['followers']   = (int)$fans;
                     $followerFound = true;
                 }
+                if ($followerFound && !empty($result['description'])) break;
             }
         }
     }
@@ -1546,6 +1928,10 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
         $result['title'],
         $htmlContent
     );
+
+    if (!empty($result['profilePicture'])) {
+        $result['profilePicture'] = cacheSocialProfilePicture($result['profilePicture'], 'facebook', $fbHandle);
+    }
 
     return $result;
 }

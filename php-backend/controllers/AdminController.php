@@ -765,6 +765,24 @@ class AdminController {
                 $updateData['rejectedAt'] = null;
                 $updateData['rejectedBy'] = null;
                 $updateData['rejectionReason'] = null;
+                $updateData['verified'] = 1;
+
+                // Optional admin enrichment fields when approving pending listing
+                if (isset($input['title']) && trim($input['title']) !== '') {
+                    $updateData['title'] = trim($input['title']);
+                }
+                if (isset($input['subscribers'])) {
+                    $updateData['subscribers'] = intval($input['subscribers']);
+                }
+                if (!empty($input['thumbnail'])) {
+                    $updateData['thumbnail'] = trim($input['thumbnail']);
+                }
+                if (!empty($input['primary_image'])) {
+                    $updateData['primary_image'] = trim($input['primary_image']);
+                }
+                if (isset($input['description']) && trim($input['description']) !== '') {
+                    $updateData['description'] = trim($input['description']);
+                }
             } elseif ($status === 'rejected') {
                 $updateData['rejectedAt'] = date('Y-m-d H:i:s');
                 $updateData['rejectedBy'] = $admin['id'];
@@ -1108,6 +1126,109 @@ class AdminController {
 
         } catch (Exception $e) {
             error_log('getFinancialStats error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * Ensure extractor_settings table exists and is seeded with all 6 platforms
+     */
+    private function ensureExtractorSettingsTable($pdo) {
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS extractor_settings (
+                platform VARCHAR(50) PRIMARY KEY,
+                is_enabled TINYINT(1) NOT NULL DEFAULT 1,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                updated_by INT NULL
+            )");
+
+            $platforms = ['youtube', 'tiktok', 'instagram', 'facebook', 'twitter', 'telegram'];
+            $stmt = $pdo->prepare("INSERT IGNORE INTO extractor_settings (platform, is_enabled) VALUES (?, 1)");
+            foreach ($platforms as $p) {
+                $stmt->execute([$p]);
+            }
+        } catch (Throwable $e) {
+            error_log('ensureExtractorSettingsTable error: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * GET /admin/extractor-settings - Fetch platform extractor toggle status
+     */
+    public function getExtractorSettings() {
+        try {
+            $user = AuthMiddleware::requireViewer();
+            $pdo = Database::getConnection();
+            $this->ensureExtractorSettingsTable($pdo);
+
+            $rows = $pdo->query("SELECT platform, is_enabled, updated_at FROM extractor_settings")->fetchAll(PDO::FETCH_ASSOC);
+            $settings = [];
+            foreach ($rows as $row) {
+                $settings[$row['platform']] = (bool)$row['is_enabled'];
+            }
+
+            // Ensure all 6 platforms are represented
+            $platforms = ['youtube', 'tiktok', 'instagram', 'facebook', 'twitter', 'telegram'];
+            foreach ($platforms as $p) {
+                if (!isset($settings[$p])) {
+                    $settings[$p] = true;
+                }
+            }
+
+            Response::json([
+                'success' => true,
+                'settings' => $settings,
+                'platforms' => $rows
+            ]);
+        } catch (Exception $e) {
+            error_log('getExtractorSettings error: ' . $e->getMessage());
+            Response::error('Server error: ' . $e->getMessage(), 500);
+        }
+    }
+
+    /**
+     * POST /admin/extractor-settings/toggle - Update platform extractor status
+     */
+    public function updateExtractorSettings() {
+        try {
+            $user = AuthMiddleware::requireAdmin();
+            $pdo = Database::getConnection();
+            $this->ensureExtractorSettingsTable($pdo);
+
+            $input = json_decode(file_get_contents('php://input'), true);
+
+            if (isset($input['platform'])) {
+                $platform = strtolower(trim($input['platform']));
+                $enabled = !empty($input['is_enabled']) ? 1 : 0;
+
+                $stmt = $pdo->prepare("INSERT INTO extractor_settings (platform, is_enabled, updated_by) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE is_enabled = VALUES(is_enabled), updated_by = VALUES(updated_by)");
+                $stmt->execute([$platform, $enabled, $user['id'] ?? null]);
+            } elseif (isset($input['settings']) && is_array($input['settings'])) {
+                $stmt = $pdo->prepare("INSERT INTO extractor_settings (platform, is_enabled, updated_by) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE is_enabled = VALUES(is_enabled), updated_by = VALUES(updated_by)");
+                foreach ($input['settings'] as $platform => $isEnabled) {
+                    $platform = strtolower(trim($platform));
+                    $enabled = !empty($isEnabled) ? 1 : 0;
+                    $stmt->execute([$platform, $enabled, $user['id'] ?? null]);
+                }
+            } else {
+                Response::error('Missing platform or settings parameter', 400);
+                return;
+            }
+
+            // Fetch updated
+            $rows = $pdo->query("SELECT platform, is_enabled, updated_at FROM extractor_settings")->fetchAll(PDO::FETCH_ASSOC);
+            $settings = [];
+            foreach ($rows as $row) {
+                $settings[$row['platform']] = (bool)$row['is_enabled'];
+            }
+
+            Response::json([
+                'success' => true,
+                'message' => 'Extractor settings updated successfully',
+                'settings' => $settings
+            ]);
+        } catch (Exception $e) {
+            error_log('updateExtractorSettings error: ' . $e->getMessage());
             Response::error('Server error: ' . $e->getMessage(), 500);
         }
     }

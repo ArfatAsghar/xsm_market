@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../middleware/auth.php';
 require_once __DIR__ . '/../services/ReferralService.php';
 require_once __DIR__ . '/../utils/Response.php';
+require_once __DIR__ . '/../utils/UploadHelper.php';
 
 class KycController {
 
@@ -25,15 +26,9 @@ class KycController {
             return false;
         }
 
-        $uploadDir = __DIR__ . '/../uploads/kyc/';
-        if (!file_exists($uploadDir)) {
-            mkdir($uploadDir, 0755, true);
-        }
-
         $fileName = 'kyc_' . $userId . '_' . $suffix . '_' . time() . '_' . bin2hex(random_bytes(3)) . '.' . $fileExt;
-        $destination = $uploadDir . $fileName;
 
-        if (!move_uploaded_file($file['tmp_name'], $destination)) {
+        if (!UploadHelper::saveUploadedFile($file['tmp_name'], 'kyc', $fileName)) {
             return null;
         }
 

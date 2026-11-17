@@ -30,6 +30,7 @@ interface Ad {
     username: string;
     profilePicture: string;
     isVip?: boolean;
+    isKycVerified?: boolean;
   };
   createdAt: string;
   lastPulledAt?: string;
@@ -113,7 +114,8 @@ const AdList: React.FC<AdListProps> = ({
               username: ad.seller?.username || ad.User?.username || 'Anonymous',
               profilePicture: ad.seller?.profilePicture || ad.User?.profilePicture || '',
               isVip: Boolean(ad.seller?.isVip || ad.isVip || ad.seller_isVip),
-              vipUntil: ad.seller?.vipUntil || null
+              vipUntil: ad.seller?.vipUntil || null,
+              isKycVerified: Boolean(ad.seller?.isKycVerified || (ad as any).seller_isKycVerified || (ad as any).isKycVerified || ad.seller?.kyc_status === 'approved' || ad.seller?.kyc_status === 'verified')
             }
           }));
           
@@ -446,11 +448,6 @@ const AdList: React.FC<AdListProps> = ({
                     </span>
                   )}
                   <div className="flex space-x-1">
-                    {ad.verified && (
-                      <span className="bg-blue-500 text-white px-1.5 py-0.5 rounded-none text-[9px] font-bold">
-                        ✓ VERIFIED
-                      </span>
-                    )}
                     {ad.premium && (
                       <span className="xsm-badge-premium !rounded-none !text-[9px] !px-1.5 !py-0.5">PREMIUM</span>
                     )}
@@ -544,6 +541,15 @@ const AdList: React.FC<AdListProps> = ({
                 {/* Seller Username → Seller Profile */}
                 <span className="text-foreground/70 text-[11px] hover:text-xsm-yellow hover:underline transition-colors truncate flex items-center gap-1">
                   {ad.seller.username}
+                  {ad.seller.isKycVerified && (
+                    <span
+                      title="KYC Verified"
+                      className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-blue-500 text-white flex-shrink-0"
+                      style={{ fontSize: '8px', fontWeight: 900 }}
+                    >
+                      ✓
+                    </span>
+                  )}
                   {Boolean(ad.seller?.isVip || (ad as any).seller_isVip || (ad as any).sellerIsVip || (ad as any).isVip) && <Crown className="w-2.5 h-2.5 text-yellow-400 flex-shrink-0" />}
                 </span>
               </div>
@@ -572,7 +578,7 @@ const AdList: React.FC<AdListProps> = ({
           channelTitle={selectedAd.title}
           sellerId={selectedAd.seller.id.toString()}
           platform={selectedAd.platform as any}
-          onNavigateToChat={() => onNavigateToChat && onNavigateToChat('')}
+          onNavigateToChat={(targetId) => onNavigateToChat && onNavigateToChat(targetId ? String(targetId) : '')}
         />
       )}
     </div>

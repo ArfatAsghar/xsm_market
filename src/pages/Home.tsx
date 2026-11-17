@@ -571,7 +571,7 @@ const Home: React.FC<HomeProps> = () => {
             {/* Ad List - Using real database data with filters */}
             <AdList 
               onShowMore={handleShowMore} 
-              onNavigateToChat={() => navigate('/chat')}
+              onNavigateToChat={(targetId) => targetId ? navigate(`/chat?chatId=${targetId}`) : navigate('/chat')}
               // Pass all the filter states to AdList
               searchQuery={searchQuery}
               selectedPlatform={selectedPlatform}

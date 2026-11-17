@@ -167,7 +167,7 @@ const BuyerDeals: React.FC = () => {
   }, []);
 
   const canPayTransactionFee = (deal: Deal) => {
-    return deal.seller_agreed && !deal.transaction_fee_paid;
+    return Boolean(deal.seller_agreed) && !deal.transaction_fee_paid;
   };
 
   const handlePayTransactionFee = (deal: Deal) => {
@@ -391,7 +391,7 @@ const BuyerDeals: React.FC = () => {
                 )}
 
                 {/* Transaction Fee Payment Status */}
-                {deal.transaction_fee_paid && (
+                {Boolean(deal.transaction_fee_paid) ? (
                   <div className="bg-green-900 border border-green-700 rounded-lg p-4 mb-4">
                     <div className="flex items-center space-x-2 text-green-300">
                       <CheckCircle size={16} />
@@ -402,10 +402,10 @@ const BuyerDeals: React.FC = () => {
                       via {deal.transaction_fee_payment_method}
                     </p>
                   </div>
-                )}
+                ) : null}
 
                 {/* Agent Access Status */}
-                {deal.agent_email_sent && !deal.seller_gave_rights && (
+                {Boolean(deal.agent_email_sent && !deal.seller_gave_rights) ? (
                   <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-4">
                     <div className="flex items-center space-x-2 text-blue-300">
                       <Clock size={16} />
@@ -415,9 +415,9 @@ const BuyerDeals: React.FC = () => {
                       Our agent's email has been provided to the seller. They need to give account access so we can verify and facilitate the secure transfer.
                     </p>
                   </div>
-                )}
+                ) : null}
 
-                {deal.seller_gave_rights && !deal.seller_made_primary_owner && (
+                {Boolean(deal.seller_gave_rights && !deal.seller_made_primary_owner) ? (
                   <div className="bg-green-900 border border-green-700 rounded-lg p-4 mb-4">
                     <div className="flex items-center space-x-2 text-green-300">
                       <CheckCircle size={16} />
@@ -427,10 +427,10 @@ const BuyerDeals: React.FC = () => {
                       The seller has given our agent access to the account. Our team is now verifying the account details and preparing for secure transfer.
                     </p>
                   </div>
-                )}
+                ) : null}
 
                 {/* Agent Primary Ownership Confirmed */}
-                {deal.seller_made_primary_owner && !deal.buyer_paid_seller && (
+                {Boolean(deal.seller_made_primary_owner && !deal.buyer_paid_seller) ? (
                   <div className="bg-purple-900 border border-purple-700 rounded-lg p-4 mb-4">
                     <div className="flex items-center space-x-2 text-purple-300">
                       <CheckCircle size={16} />
@@ -440,10 +440,10 @@ const BuyerDeals: React.FC = () => {
                       Excellent! Our agent now has full control of the channel and has secured it. You can now safely pay the seller using your selected payment method.
                     </p>
                   </div>
-                )}
+                ) : null}
 
                 {/* Payment Completed */}
-                {deal.buyer_paid_seller && (
+                {Boolean(deal.buyer_paid_seller) ? (
                   <div className="bg-emerald-900 border border-emerald-700 rounded-lg p-4 mb-4">
                     <div className="flex items-center space-x-2 text-emerald-300">
                       <CheckCircle size={16} />
@@ -458,30 +458,30 @@ const BuyerDeals: React.FC = () => {
                       </p>
                     )}
                   </div>
-                )}
+                ) : null}
 
                 {/* Next Steps */}
-                {deal.seller_agreed && !deal.transaction_fee_paid && (
+                {Boolean(deal.seller_agreed && !deal.transaction_fee_paid) ? (
                   <div className="bg-xsm-yellow bg-opacity-10 border border-xsm-yellow rounded-lg p-4 mb-4">
                     <h4 className="text-xsm-yellow font-medium mb-2">Next Step Required</h4>
                     <p className="text-yellow-200 text-sm">
                       The seller has agreed to your payment methods. Now you or the seller need to pay the transaction fee to proceed.
                     </p>
                   </div>
-                )}
+                ) : null}
 
-                {!deal.seller_agreed && (
+                {!deal.seller_agreed ? (
                   <div className="bg-blue-900 border border-blue-700 rounded-lg p-4 mb-4">
                     <h4 className="text-blue-300 font-medium mb-2">Waiting for Seller</h4>
                     <p className="text-blue-200 text-sm">
                       The seller is reviewing your payment methods. They will either accept them or contact you to discuss alternatives.
                     </p>
                   </div>
-                )}
+                ) : null}
 
                 {/* Action Buttons */}
                 <div className="flex space-x-3">
-                  {canPayTransactionFee(deal) && (
+                  {canPayTransactionFee(deal) ? (
                     <button
                       onClick={() => handlePayTransactionFee(deal)}
                       className="bg-xsm-yellow text-black px-4 py-2 rounded-lg hover:bg-yellow-500 transition-colors font-medium flex items-center space-x-2"
@@ -489,19 +489,10 @@ const BuyerDeals: React.FC = () => {
                       <DollarSign size={16} />
                       <span>Pay Transaction Fee</span>
                     </button>
-                  )}
+                  ) : null}
                   
                   {/* Show "Pay Seller" button when agent has ownership */}
-                  {(() => {
-                    console.log('Deal debug:', {
-                      id: deal.id,
-                      seller_made_primary_owner: deal.seller_made_primary_owner,
-                      buyer_paid_seller: deal.buyer_paid_seller,
-                      seller_gave_rights: deal.seller_gave_rights,
-                      agent_email_sent: deal.agent_email_sent
-                    });
-                    return deal.seller_made_primary_owner && !deal.buyer_paid_seller;
-                  })() && (
+                  {Boolean(deal.seller_made_primary_owner && !deal.buyer_paid_seller) ? (
                     <button
                       onClick={() => handlePaySeller(deal)}
                       className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center space-x-2"
@@ -509,7 +500,7 @@ const BuyerDeals: React.FC = () => {
                       <DollarSign size={16} />
                       <span>Pay Seller</span>
                     </button>
-                  )}
+                  ) : null}
                   
                   <button
                     className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-500 transition-colors"
@@ -556,9 +547,10 @@ const BuyerDeals: React.FC = () => {
       )}
 
       {/* Custom Theme-Adaptive Alert Modal */}
-      {alertConfig && (
+      {alertConfig ? (
         <DealAlertModal
           {...alertConfig}
+          isOpen={true}
           onClose={() => {
             if (alertConfig.onClose) {
               alertConfig.onClose();
@@ -566,7 +558,7 @@ const BuyerDeals: React.FC = () => {
             setAlertConfig(null);
           }}
         />
-      )}
+      ) : null}
     </div>
   );
 };

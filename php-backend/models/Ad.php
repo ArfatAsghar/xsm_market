@@ -110,7 +110,8 @@ class Ad {
                    u.email as seller_email,
                    u.profilePicture as seller_profilePicture,
                    u.lastSeenAt as seller_lastSeenAt,
-                   u.vipUntil as seller_vipUntil
+                   u.vipUntil as seller_vipUntil,
+                   u.kyc_status as seller_kyc_status
             FROM " . self::$table . " a
             INNER JOIN users u ON a.userId = u.id
             WHERE a.id = :id
@@ -127,6 +128,8 @@ class Ad {
             $sellerVipUntil = $ad['seller_vipUntil'];
             $sellerIsVip = !empty($sellerVipUntil) && strtotime($sellerVipUntil) > time();
             $sellerAvgResponseTime = UserController::calculateAverageResponseTime($ad['seller_id']);
+            $sellerKycStatus = $ad['seller_kyc_status'] ?? 'unverified';
+            $sellerIsKycVerified = in_array(strtolower($sellerKycStatus), ['approved', 'verified']);
 
             // Format seller data
             $ad['seller'] = [
@@ -137,14 +140,16 @@ class Ad {
                 'lastSeenAt' => $ad['seller_lastSeenAt'],
                 'isVip' => $sellerIsVip,
                 'vipUntil' => $sellerVipUntil,
-                'averageResponseTime' => $sellerAvgResponseTime
+                'averageResponseTime' => $sellerAvgResponseTime,
+                'isKycVerified' => $sellerIsKycVerified
             ];
             $ad['seller_isVip'] = $sellerIsVip;
             $ad['isVip'] = $sellerIsVip;
             
             // Clean up
             unset($ad['seller_id'], $ad['seller_username'], $ad['seller_email'], 
-                  $ad['seller_profilePicture'], $ad['seller_lastSeenAt'], $ad['seller_vipUntil']);
+                  $ad['seller_profilePicture'], $ad['seller_lastSeenAt'], $ad['seller_vipUntil'],
+                  $ad['seller_kyc_status']);
         }
         
         return $ad;
@@ -162,7 +167,8 @@ class Ad {
                        u.id as seller_id, 
                        u.username as seller_username, 
                        u.profilePicture as seller_profilePicture,
-                       u.vipUntil as seller_vipUntil
+                       u.vipUntil as seller_vipUntil,
+                       u.kyc_status as seller_kyc_status
                 FROM " . self::$table . " a
                 LEFT JOIN users u ON a.userId = u.id
                 WHERE 1=1
@@ -252,9 +258,11 @@ class Ad {
         foreach ($ads as &$ad) {
             self::formatJsonFields($ad);
             
-            // Compute seller isVip
+            // Compute seller isVip and KYC
             $sellerVipUntil = $ad['seller_vipUntil'] ?? null;
             $sellerIsVip = !empty($sellerVipUntil) && strtotime($sellerVipUntil) > time();
+            $sellerKycStatus = $ad['seller_kyc_status'] ?? 'unverified';
+            $sellerIsKycVerified = in_array(strtolower($sellerKycStatus), ['approved', 'verified']);
 
             // Format seller info
             $ad['seller'] = [
@@ -262,7 +270,8 @@ class Ad {
                 'username' => $ad['seller_username'] ?? 'Seller',
                 'profilePicture' => $ad['seller_profilePicture'] ?? '',
                 'isVip' => $sellerIsVip,
-                'vipUntil' => $sellerVipUntil
+                'vipUntil' => $sellerVipUntil,
+                'isKycVerified' => $sellerIsKycVerified
             ];
             $ad['seller_isVip'] = $sellerIsVip;
             $ad['isVip'] = $sellerIsVip;
@@ -281,7 +290,7 @@ class Ad {
             $ad['rating'] = !empty($ad['rating']) ? (float)$ad['rating'] : 0;
             
             // Clean up temporary seller_ prefix fields
-            unset($ad['seller_id'], $ad['seller_username'], $ad['seller_profilePicture'], $ad['seller_vipUntil']);
+            unset($ad['seller_id'], $ad['seller_username'], $ad['seller_profilePicture'], $ad['seller_vipUntil'], $ad['seller_kyc_status']);
         }
         
         return $ads;

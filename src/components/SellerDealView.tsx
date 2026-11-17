@@ -69,6 +69,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
   const isAdmin = Boolean((user as any)?.isAdmin || (user as any)?.role === 'admin' || (user as any)?.role === 'manager');
   const [isAgreeing, setIsAgreeing] = useState(false);
   const [isConfirmingRights, setIsConfirmingRights] = useState(false);
+  const [isConfirmingPrimaryOwner, setIsConfirmingPrimaryOwner] = useState(false);
   const [isConfirmingPayment, setIsConfirmingPayment] = useState(false);
   const [showFeePayment, setShowFeePayment] = useState(false);
   const [dealStatus, setDealStatus] = useState<any>(null);
@@ -124,6 +125,17 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
 
   if (!isOpen || !deal) return null;
 
+  const isSellerAgreed = Boolean(dealStatus?.seller_agreed ?? deal.seller_agreed);
+  const isFeePaid = Boolean(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid);
+  const isRightsGiven = Boolean(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights);
+  const isPrimaryOwner = Boolean(dealStatus?.seller_made_primary_owner ?? deal.seller_made_primary_owner);
+  const isBuyerPaid = Boolean(dealStatus?.buyer_paid_seller ?? deal.buyer_paid_seller);
+  const isSellerConfirmed = Boolean(dealStatus?.seller_confirmed_payment ?? deal.seller_confirmed_payment);
+  const isTimerCompleted = Boolean(dealStatus?.timer_completed);
+  const isYouTube = (dealStatus?.platform_type ?? deal.platform_type ?? '').toLowerCase() === 'youtube';
+  const timerRemaining = Number(dealStatus?.timer_remaining_seconds ?? 0);
+  const canPromotePrimaryOwner = !isYouTube || isTimerCompleted || timerRemaining <= 0;
+
   const handleConfirmRights = async () => {
     const id = getDealIdentifier();
     try {
@@ -142,7 +154,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
       
       if (response.ok && result.success !== false) {
         let noticeMessage = `You have confirmed that you've given account access to our agent.`;
-        if (result.platform_type === 'youtube') {
+        if (result.platform_type === 'youtube' || isYouTube) {
           noticeMessage += `\n\n⏰ YouTube Channel Timer Started\nDue to YouTube's requirements, you must wait 7 days before promoting our agent to Primary Owner. Timer expires: ${result.timer_expires_formatted || 'In 7 days'}.\n\nYou will be notified when the timer completes.`;
         } else {
           noticeMessage += `\n\n✅ Ready for Primary Owner Promotion\nYou can immediately promote our agent to Primary Owner when ready.`;
@@ -150,6 +162,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
         noticeMessage += `\n\nOur agent will now verify the account access.`;
 
         setAlertConfig({
+          isOpen: true,
           title: 'Rights Confirmation Successful!',
           message: noticeMessage,
           type: 'success',
@@ -163,7 +176,6 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
             setAlertConfig(null);
             onDealUpdate();
             fetchDealStatus();
-            onClose();
           }
         });
       } else {
@@ -173,6 +185,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
     } catch (error: any) {
       console.error('Error confirming rights:', error);
       setAlertConfig({
+        isOpen: true,
         title: 'Rights Confirmation',
         message: error.message || 'Failed to confirm rights. Please try again.',
         type: 'error',
@@ -181,6 +194,59 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
       });
     } finally {
       setIsConfirmingRights(false);
+    }
+  };
+
+  const handleConfirmPrimaryOwner = async () => {
+    const id = getDealIdentifier();
+    try {
+      setIsConfirmingPrimaryOwner(true);
+      const token = localStorage.getItem('token');
+      const endpoint = isAdmin 
+        ? `${API_URL}/admin/deals/${id}/mark-primary-owner-made`
+        : `${API_URL}/deals/${id}/confirm-primary-owner`;
+      
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const result = await response.json().catch(() => ({}));
+      if (response.ok && result.success !== false) {
+        setAlertConfig({
+          isOpen: true,
+          title: 'Primary Ownership Confirmed!',
+          message: `You have successfully confirmed promoting the agent to Primary Owner.\n\n🎉 Next Step: Buyer Payment\n\nThe buyer has been notified to complete the payment directly to you using your agreed payment method.`,
+          type: 'success',
+          details: [
+            { label: 'Transaction ID', value: deal.transaction_id },
+            { label: 'Channel', value: deal.channel_title },
+            { label: 'Status', value: 'Primary Owner Confirmed' }
+          ],
+          actionText: 'Great!',
+          onAction: () => {
+            setAlertConfig(null);
+            onDealUpdate();
+            fetchDealStatus();
+          }
+        });
+      } else {
+        throw new Error(result.message || 'Failed to confirm primary owner promotion');
+      }
+    } catch (error: any) {
+      console.error('Error confirming primary owner:', error);
+      setAlertConfig({
+        isOpen: true,
+        title: 'Primary Owner Confirmation',
+        message: error.message || 'Failed to confirm primary owner promotion. Please try again.',
+        type: 'error',
+        actionText: 'Close',
+        onAction: () => setAlertConfig(null)
+      });
+    } finally {
+      setIsConfirmingPrimaryOwner(false);
     }
   };
 
@@ -202,6 +268,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
       
       if (response.ok && result.success !== false) {
         setAlertConfig({
+          isOpen: true,
           title: 'Payment Receipt Confirmed!',
           message: `You have successfully confirmed that you received payment from the buyer.\n\n🎉 Deal Status: Payment Complete!\n\nBoth you and the buyer have now confirmed the payment. Our agent will complete the final account transfer and provide the buyer with final account credentials.`,
           type: 'success',
@@ -225,6 +292,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
     } catch (error: any) {
       console.error('Error confirming payment receipt:', error);
       setAlertConfig({
+        isOpen: true,
         title: 'Payment Confirmation',
         message: error.message || 'Failed to confirm payment receipt. Please try again.',
         type: 'error',
@@ -260,6 +328,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
       
       if (response.ok && result.success !== false) {
         setAlertConfig({
+          isOpen: true,
           title: 'Deal Agreement Successful!',
           message: `You have successfully agreed to the terms for transaction ${deal.transaction_id}.\n\nThe buyer will now be notified that you have accepted their payment methods. The transaction will proceed to the next step.`,
           type: 'success',
@@ -273,7 +342,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
           onAction: () => {
             setAlertConfig(null);
             onDealUpdate();
-            onClose();
+            fetchDealStatus();
           }
         });
       } else {
@@ -283,6 +352,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
     } catch (error: any) {
       console.error('Error agreeing to deal:', error);
       setAlertConfig({
+        isOpen: true,
         title: 'Deal Agreement Notice',
         message: error.message || 'Failed to agree to deal. Please try again.',
         type: 'error',
@@ -303,6 +373,8 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
       minute: '2-digit'
     });
   };
+
+  const currentDealStatus = dealStatus?.deal_status ?? deal.deal_status;
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -380,8 +452,8 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                 <Clock className="w-5 h-5" style={{ color: 'var(--xsm-primary)' }} />
                 <span className="font-semibold text-sm" style={{ color: 'var(--xsm-text)' }}>Deal Status</span>
               </div>
-              <span className={`font-bold text-sm ${getStatusColor(deal.deal_status)}`}>
-                {getStatusText(deal.deal_status)}
+              <span className={`font-bold text-sm ${getStatusColor(currentDealStatus)}`}>
+                {getStatusText(currentDealStatus)}
               </span>
             </div>
           </div>
@@ -488,6 +560,7 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
               Transaction Steps
             </h3>
             <div className="space-y-3 text-xs">
+              {/* Step 1 */}
               <div className="flex items-center space-x-3">
                 <div className="w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center shrink-0 shadow-sm">
                   <CheckCircle size={14} className="text-white" />
@@ -495,84 +568,103 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                 <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Buyer started deal and selected payment methods</span>
               </div>
               
-              <div className={`flex items-center space-x-3 ${deal.seller_agreed ? 'opacity-100' : 'opacity-85'}`}>
+              {/* Step 2 */}
+              <div className={`flex items-center space-x-3 ${isSellerAgreed ? 'opacity-100' : 'opacity-85'}`}>
                 <div 
                   className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
-                    deal.seller_agreed ? 'bg-emerald-500 text-white' : ''
+                    isSellerAgreed ? 'bg-emerald-500 text-white' : ''
                   }`}
-                  style={!deal.seller_agreed ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                  style={!isSellerAgreed ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
                 >
-                  {deal.seller_agreed ? <CheckCircle size={14} className="text-white" /> : <span>2</span>}
+                  {isSellerAgreed ? <CheckCircle size={14} className="text-white" /> : <span>2</span>}
                 </div>
                 <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Seller agrees to payment methods</span>
               </div>
               
-              <div className={`flex items-center space-x-3 ${(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? 'opacity-100' : 'opacity-60'}`}>
+              {/* Step 3 */}
+              <div className={`flex items-center space-x-3 ${isFeePaid ? 'opacity-100' : isSellerAgreed ? 'opacity-90' : 'opacity-60'}`}>
                 <div 
                   className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
-                    (dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? 'bg-emerald-500 text-white' : ''
+                    isFeePaid ? 'bg-emerald-500 text-white' : ''
                   }`}
-                  style={!(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                  style={!isFeePaid ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
                 >
-                  {(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) ? <CheckCircle size={14} className="text-white" /> : <span>3</span>}
+                  {isFeePaid ? <CheckCircle size={14} className="text-white" /> : <span>3</span>}
                 </div>
                 <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Transaction fee paid</span>
               </div>
               
-              <div className={`flex items-center space-x-3 ${(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? 'opacity-100' : 'opacity-60'}`}>
+              {/* Step 4 */}
+              <div className={`flex items-center space-x-3 ${isRightsGiven ? 'opacity-100' : isFeePaid ? 'opacity-90' : 'opacity-60'}`}>
                 <div 
                   className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
-                    (dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? 'bg-emerald-500 text-white' : ''
+                    isRightsGiven ? 'bg-emerald-500 text-white' : ''
                   }`}
-                  style={!(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                  style={!isRightsGiven ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
                 >
-                  {(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) ? <CheckCircle size={14} className="text-white" /> : <span>4</span>}
+                  {isRightsGiven ? <CheckCircle size={14} className="text-white" /> : <span>4</span>}
                 </div>
                 <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Give agent manager access</span>
               </div>
               
-              {dealStatus?.platform_type === 'youtube' && (
-                <div className={`flex items-center space-x-3 ${dealStatus?.timer_completed ? 'opacity-100' : 'opacity-60'}`}>
+              {/* Step 5 (YouTube only timer) */}
+              {isYouTube ? (
+                <div className={`flex items-center space-x-3 ${(isTimerCompleted || (isRightsGiven && timerRemaining <= 0)) ? 'opacity-100' : isRightsGiven ? 'opacity-90' : 'opacity-60'}`}>
                   <div 
                     className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
-                      dealStatus?.timer_completed ? 'bg-emerald-500 text-white' : ''
+                      (isTimerCompleted || (isRightsGiven && timerRemaining <= 0)) ? 'bg-emerald-500 text-white' : ''
                     }`}
-                    style={!dealStatus?.timer_completed ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                    style={!(isTimerCompleted || (isRightsGiven && timerRemaining <= 0)) ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
                   >
-                    {dealStatus?.timer_completed ? <CheckCircle size={14} className="text-white" /> : <span>5</span>}
+                    {(isTimerCompleted || (isRightsGiven && timerRemaining <= 0)) ? <CheckCircle size={14} className="text-white" /> : <span>5</span>}
                   </div>
                   <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>YouTube 7-day primary owner timer</span>
-                  {dealStatus?.seller_gave_rights && !dealStatus?.timer_completed && dealStatus?.timer_remaining_seconds > 0 && (
-                    <span className="text-amber-500 text-xs font-semibold">
-                      ({formatTimeRemaining(dealStatus.timer_remaining_seconds)} remaining)
+                  {isRightsGiven && !isTimerCompleted && timerRemaining > 0 ? (
+                    <span className="text-amber-500 text-xs font-semibold ml-2">
+                      ({formatTimeRemaining(timerRemaining)} remaining)
                     </span>
-                  )}
+                  ) : null}
                 </div>
-              )}
+              ) : null}
               
-              <div className={`flex items-center space-x-3 ${dealStatus?.seller_made_primary_owner ? 'opacity-100' : 'opacity-60'}`}>
+              {/* Step 5/6: Primary Owner */}
+              <div className={`flex items-center space-x-3 ${isPrimaryOwner ? 'opacity-100' : (isRightsGiven && canPromotePrimaryOwner) ? 'opacity-90' : 'opacity-60'}`}>
                 <div 
                   className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
-                    dealStatus?.seller_made_primary_owner ? 'bg-emerald-500 text-white' : ''
+                    isPrimaryOwner ? 'bg-emerald-500 text-white' : ''
                   }`}
-                  style={!dealStatus?.seller_made_primary_owner ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                  style={!isPrimaryOwner ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
                 >
-                  {dealStatus?.seller_made_primary_owner ? <CheckCircle size={14} className="text-white" /> : 
-                   <span>{dealStatus?.platform_type === 'youtube' ? '6' : '5'}</span>}
+                  {isPrimaryOwner ? <CheckCircle size={14} className="text-white" /> : 
+                   <span>{isYouTube ? '6' : '5'}</span>}
                 </div>
                 <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Promote agent to primary owner</span>
               </div>
               
-              <div className="flex items-center space-x-3 opacity-60">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm" style={{ background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' }}>
-                  <span>{dealStatus?.platform_type === 'youtube' ? '7' : '6'}</span>
+              {/* Step 6/7: Buyer pays seller */}
+              <div className={`flex items-center space-x-3 ${isBuyerPaid ? 'opacity-100' : isPrimaryOwner ? 'opacity-90' : 'opacity-60'}`}>
+                <div 
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                    isBuyerPaid ? 'bg-emerald-500 text-white' : ''
+                  }`}
+                  style={!isBuyerPaid ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                >
+                  {isBuyerPaid ? <CheckCircle size={14} className="text-white" /> : 
+                   <span>{isYouTube ? '7' : '6'}</span>}
                 </div>
                 <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Buyer pays you via selected method</span>
               </div>
               
-              <div className="flex items-center space-x-3 opacity-60">
-                <div className="w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm" style={{ background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' }}>
-                  <span>{dealStatus?.platform_type === 'youtube' ? '8' : '7'}</span>
+              {/* Step 7/8: Transfer / Deal complete */}
+              <div className={`flex items-center space-x-3 ${isSellerConfirmed ? 'opacity-100' : isBuyerPaid ? 'opacity-90' : 'opacity-60'}`}>
+                <div 
+                  className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 shadow-sm ${
+                    isSellerConfirmed ? 'bg-emerald-500 text-white' : ''
+                  }`}
+                  style={!isSellerConfirmed ? { background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)' } : undefined}
+                >
+                  {isSellerConfirmed ? <CheckCircle size={14} className="text-white" /> : 
+                   <span>{isYouTube ? '8' : '7'}</span>}
                 </div>
                 <span className="font-medium" style={{ color: 'var(--xsm-text)' }}>Channel transferred to buyer</span>
               </div>
@@ -589,7 +681,8 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
               Back
             </button>
             
-            {!deal.seller_agreed && (
+            {/* 1. Seller Agrees to Terms Button */}
+            {!isSellerAgreed ? (
               <button
                 onClick={handleAgreeToTerms}
                 disabled={isAgreeing}
@@ -607,12 +700,10 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                   </>
                 )}
               </button>
-            )}
+            ) : null}
             
-            {(() => {
-              const showPayButton = deal.seller_agreed && !(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid);
-              return showPayButton;
-            })() && (
+            {/* 2. Pay Transaction Fee Button */}
+            {isSellerAgreed && !isFeePaid ? (
               <button
                 onClick={() => setShowFeePayment(true)}
                 className="flex-1 font-bold py-3 px-6 rounded-xl hover:brightness-105 transition-all flex items-center justify-center space-x-2 text-sm shadow-md"
@@ -621,12 +712,10 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                 <DollarSign size={18} />
                 <span>Pay Transaction Fee</span>
               </button>
-            )}
+            ) : null}
             
-            {(() => {
-              const showRightsButton = deal.seller_agreed && (dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && !(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights);
-              return showRightsButton;
-            })() && (
+            {/* 3. Confirm Rights Given Button */}
+            {isSellerAgreed && isFeePaid && !isRightsGiven ? (
               <button
                 onClick={handleConfirmRights}
                 disabled={isConfirmingRights}
@@ -644,30 +733,49 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                   </>
                 )}
               </button>
-            )}
+            ) : null}
             
-            {deal.seller_agreed && (dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && (dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) && !dealStatus?.seller_made_primary_owner && (
-              <div 
-                className="flex-1 py-3 px-6 rounded-xl flex items-center justify-center space-x-2 opacity-75 cursor-not-allowed border text-xs font-semibold"
-                style={{ background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)', borderColor: 'var(--xsm-border)' }}
-              >
-                <Timer size={16} />
-                {dealStatus?.platform_type === 'youtube' && dealStatus?.timer_remaining_seconds > 0 ? (
-                  <span>Wait {Math.ceil((dealStatus.timer_remaining_seconds || 0) / (24 * 60 * 60))} More Days</span>
-                ) : (
-                  <span>Waiting for Admin to Promote Agent</span>
-                )}
-              </div>
-            )}
+            {/* 4. YouTube Timer Waiting Badge OR Promote Primary Owner Button */}
+            {isSellerAgreed && isFeePaid && isRightsGiven && !isPrimaryOwner ? (
+              !canPromotePrimaryOwner ? (
+                <div 
+                  className="flex-1 py-3 px-6 rounded-xl flex items-center justify-center space-x-2 opacity-75 cursor-not-allowed border text-xs font-semibold"
+                  style={{ background: 'var(--xsm-medium-gray)', color: 'var(--xsm-text)', borderColor: 'var(--xsm-border)' }}
+                >
+                  <Timer size={16} />
+                  <span>Wait {Math.ceil(timerRemaining / (24 * 60 * 60))} More Days to Promote</span>
+                </div>
+              ) : (
+                <button
+                  onClick={handleConfirmPrimaryOwner}
+                  disabled={isConfirmingPrimaryOwner}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-6 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 text-sm shadow-lg shadow-purple-900/30"
+                >
+                  {isConfirmingPrimaryOwner ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                      <span>Confirming...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Shield size={18} />
+                      <span>I Have Made Agent Primary Owner</span>
+                    </>
+                  )}
+                </button>
+              )
+            ) : null}
 
-            {dealStatus?.seller_made_primary_owner && !dealStatus?.buyer_paid_seller && (
+            {/* 5. Waiting for Buyer Payment Badge */}
+            {isPrimaryOwner && !isBuyerPaid ? (
               <div className="flex-1 bg-amber-500/20 border border-amber-500/40 text-amber-400 py-3 px-6 rounded-xl flex items-center justify-center space-x-2 text-xs font-bold">
                 <Clock size={16} />
                 <span>Waiting for Buyer Payment</span>
               </div>
-            )}
+            ) : null}
 
-            {dealStatus?.seller_made_primary_owner && dealStatus?.buyer_paid_seller && !dealStatus?.seller_confirmed_payment && (
+            {/* 6. Seller Confirms Payment Received Button */}
+            {isPrimaryOwner && isBuyerPaid && !isSellerConfirmed ? (
               <button
                 onClick={handleConfirmPaymentReceived}
                 disabled={isConfirmingPayment}
@@ -685,18 +793,19 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                   </>
                 )}
               </button>
-            )}
+            ) : null}
 
-            {dealStatus?.seller_made_primary_owner && dealStatus?.buyer_paid_seller && dealStatus?.seller_confirmed_payment && (
+            {/* 7. Deal Complete Banner */}
+            {isPrimaryOwner && isBuyerPaid && isSellerConfirmed ? (
               <div className="flex-1 bg-blue-500/20 border border-blue-500/40 text-blue-400 py-3 px-6 rounded-xl flex items-center justify-center space-x-2 text-xs font-bold">
                 <CheckCircle size={16} />
                 <span>Deal Complete - Both Payments Confirmed</span>
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Payment Method Negotiation Note */}
-          {!deal.seller_agreed && (
+          {!isSellerAgreed ? (
             <div 
               className="rounded-xl p-4 border"
               style={{
@@ -711,10 +820,10 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                 If none of the buyer's selected payment methods work for you, you can contact them through the chat system to discuss alternative payment methods. Once you both agree on a method, come back here and click "I Agree to Terms".
               </p>
             </div>
-          )}
+          ) : null}
 
           {/* Next Steps for Transaction Fee */}
-          {deal.seller_agreed && !(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && (
+          {isSellerAgreed && !isFeePaid ? (
             <div 
               className="rounded-xl p-4 border"
               style={{
@@ -742,10 +851,10 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                 💡 Once either party pays the fee, the "I Have Given The Rights" button will appear automatically.
               </p>
             </div>
-          )}
+          ) : null}
 
           {/* Transaction Fee Paid Status */}
-          {(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && (
+          {isFeePaid ? (
             <div 
               className="rounded-xl p-4 border"
               style={{
@@ -759,13 +868,13 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
               </h4>
               <p className="text-xs" style={{ color: 'var(--xsm-text)' }}>
                 The transaction fee has been paid by {(dealStatus?.transaction_fee_paid_by ?? deal.transaction_fee_paid_by) === 'seller' ? 'you' : 'the buyer'} 
-                via {(dealStatus?.transaction_fee_payment_method ?? deal.transaction_fee_payment_method)}. The deal will now proceed to the next stage.
+                via {dealStatus?.transaction_fee_payment_method ?? deal.transaction_fee_payment_method ?? 'selected method'}. The deal will now proceed to the next stage.
               </p>
             </div>
-          )}
+          ) : null}
 
           {/* Agent Email and Rights Instructions */}
-          {(dealStatus?.transaction_fee_paid ?? deal.transaction_fee_paid) && (dealStatus?.agent_email_sent ?? deal.agent_email_sent) && !(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) && (
+          {isFeePaid && !isRightsGiven ? (
             <div 
               className="rounded-xl p-4 border"
               style={{
@@ -798,10 +907,10 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                 </p>
               </div>
             </div>
-          )}
+          ) : null}
 
           {/* Rights Confirmation Status */}
-          {(dealStatus?.seller_gave_rights ?? deal.seller_gave_rights) && (
+          {isRightsGiven && !isPrimaryOwner ? (
             <div 
               className="rounded-xl p-4 border"
               style={{
@@ -814,13 +923,13 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                 Rights Confirmed
               </h4>
               <p className="text-xs" style={{ color: 'var(--xsm-text)' }}>
-                You have confirmed giving account access to our agent. The agent is now verifying the account and will proceed with the secure transfer process. You will be updated once verification is complete.
+                You have confirmed giving account access to our agent. {isYouTube && !canPromotePrimaryOwner ? 'After the 7-day YouTube waiting period, you will promote the agent to Primary Owner.' : 'Please promote the agent to Primary Owner using the button above.'}
               </p>
             </div>
-          )}
+          ) : null}
 
           {/* YouTube Timer Display */}
-          {dealStatus?.platform_type === 'youtube' && dealStatus?.seller_gave_rights && !dealStatus?.timer_completed && dealStatus?.timer_remaining_seconds > 0 && (
+          {isYouTube && isRightsGiven && !isTimerCompleted && timerRemaining > 0 ? (
             <div 
               className="rounded-xl p-4 border"
               style={{
@@ -840,22 +949,24 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
                   <div className="flex items-center justify-between text-xs">
                     <span style={{ color: 'var(--xsm-light-gray)' }}>Time Remaining:</span>
                     <span className="font-bold" style={{ color: 'var(--xsm-text)' }}>
-                      {formatTimeRemaining(dealStatus.timer_remaining_seconds)}
+                      {formatTimeRemaining(timerRemaining)}
                     </span>
                   </div>
-                  <div className="flex items-center justify-between text-xs mt-1.5">
-                    <span style={{ color: 'var(--xsm-light-gray)' }}>Timer Expires:</span>
-                    <span className="font-mono text-[11px]" style={{ color: 'var(--xsm-text)' }}>
-                      {dealStatus.timer_expires_formatted}
-                    </span>
-                  </div>
+                  {dealStatus?.timer_expires_formatted && (
+                    <div className="flex items-center justify-between text-xs mt-1.5">
+                      <span style={{ color: 'var(--xsm-light-gray)' }}>Timer Expires:</span>
+                      <span className="font-mono text-[11px]" style={{ color: 'var(--xsm-text)' }}>
+                        {dealStatus.timer_expires_formatted}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <p className="text-[11px]" style={{ color: 'var(--xsm-light-gray)' }}>
                   ⏰ You will be able to promote the agent to Primary Owner after this timer expires. We'll update the interface automatically when it's ready.
                 </p>
               </div>
             </div>
-          )}
+          ) : null}
         </div>
       </div>
       
@@ -873,17 +984,18 @@ const SellerDealView: React.FC<SellerDealViewProps> = ({
       />
 
       {/* Custom Theme-Adaptive Alert Modal */}
-      {alertConfig && (
+      {alertConfig ? (
         <DealAlertModal
           {...alertConfig}
+          isOpen={true}
           onClose={() => {
-            if (alertConfig.onClose) {
-              alertConfig.onClose();
+            if (alertConfig.onAction) {
+              alertConfig.onAction();
             }
             setAlertConfig(null);
           }}
         />
-      )}
+      ) : null}
     </div>
   );
 };

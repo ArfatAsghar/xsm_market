@@ -39,14 +39,17 @@ function triggerDealNotificationAndEmail($deal_id, $stage) {
         $buyerEmail  = $deal['buyer_email_actual']  ?: ($deal['buyer_email']  ?? '');
         $sellerEmail = $deal['seller_email_actual'] ?: ($deal['seller_email'] ?? '');
 
+        $chatId = !empty($deal['chat_id']) ? (int)$deal['chat_id'] : null;
+        $chatParam = $chatId ? "/chat?chatId={$chatId}" : null;
+
         // 1. In-App Bell Notifications (direct DB insert)
         $isCompleted = in_array($stage, ['completed', 'payment_confirmed', 'deal_completed']);
         if ($isCompleted) {
             $notifTitle   = "Deal Completed! \xF0\x9F\x8E\x89";
             $notifMsgBuyer  = "Your deal for '$title' ($txnId) has been completed successfully! The payment has been confirmed.";
             $notifMsgSeller = "Your deal for '$title' ($txnId) has been completed successfully! Payment confirmation received.";
-            $buyerLink  = '/my-deals';
-            $sellerLink = '/seller-deals';
+            $buyerLink  = $chatParam ?: '/my-deals';
+            $sellerLink = $chatParam ?: '/seller-deals';
         } else {
             // Human-readable stage labels
             $stageLabels = [
@@ -61,8 +64,8 @@ function triggerDealNotificationAndEmail($deal_id, $stage) {
             $notifTitle   = "Deal Update \xF0\x9F\x94\x94";
             $notifMsgBuyer  = "[$stageLabel] Your deal for '$title' ($txnId) has been updated.";
             $notifMsgSeller = "[$stageLabel] Your deal for '$title' ($txnId) has been updated.";
-            $buyerLink  = '/my-deals';
-            $sellerLink = '/seller-deals';
+            $buyerLink  = $chatParam ?: '/my-deals';
+            $sellerLink = $chatParam ?: '/seller-deals';
         }
 
         try {
@@ -428,8 +431,7 @@ function createDeal($data) {
             FROM chats c
             INNER JOIN chat_participants cp1 ON c.id = cp1.chatId
             INNER JOIN chat_participants cp2 ON c.id = cp2.chatId
-            WHERE c.type IN ('direct', 'ad_inquiry')
-            AND cp1.userId = ? AND cp1.isActive = 1
+            WHERE cp1.userId = ? AND cp1.isActive = 1
             AND cp2.userId = ? AND cp2.isActive = 1
             AND cp1.chatId = cp2.chatId
             ORDER BY c.updatedAt DESC, c.createdAt DESC
@@ -439,7 +441,7 @@ function createDeal($data) {
         $existingChat = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($existingChat) {
-            $chat_id = $existingChat['id'];
+            $chat_id = (int)$existingChat['id'];
         } else {
             // Create a new direct chat
             $stmt = $pdo->prepare("
@@ -447,22 +449,18 @@ function createDeal($data) {
                 VALUES ('direct', NULL, NOW(), NOW())
             ");
             $stmt->execute();
-            $chat_id = $pdo->lastInsertId();
-            
-            // Add participants safely with INSERT IGNORE to prevent duplicate key error
-            $stmt = $pdo->prepare("
-                INSERT IGNORE INTO chat_participants (chatId, userId, role, joinedAt, isActive)
-                VALUES (?, ?, 'admin', NOW(), 1)
-            ");
-            $stmt->execute([$chat_id, $buyer_id]);
-            
-            if ($seller_id !== $buyer_id) {
-                $stmt = $pdo->prepare("
-                    INSERT IGNORE INTO chat_participants (chatId, userId, role, joinedAt, isActive)
-                    VALUES (?, ?, 'member', NOW(), 1)
-                ");
-                $stmt->execute([$chat_id, $seller_id]);
-            }
+            $chat_id = (int)$pdo->lastInsertId();
+        }
+        
+        // Ensure both participants are actively linked to this chat
+        $partStmt = $pdo->prepare("
+            INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+            VALUES (?, ?, ?, NOW(), 1)
+            ON DUPLICATE KEY UPDATE isActive = 1
+        ");
+        $partStmt->execute([$chat_id, $buyer_id, 'admin']);
+        if ($seller_id !== $buyer_id) {
+            $partStmt->execute([$chat_id, $seller_id, 'member']);
         }
         
         // Insert a chat message linking the deal with Transaction ID
@@ -474,13 +472,13 @@ function createDeal($data) {
         ");
         $stmt->execute([$chat_id, $buyer_id, $chat_message]);
         
-        // Update chat updatedAt and lastMessageTime
+        // Update chat updatedAt, lastMessageTime and lastMessage
         $stmt = $pdo->prepare("
             UPDATE chats 
-            SET updatedAt = NOW(), lastMessageTime = NOW()
+            SET updatedAt = NOW(), lastMessageTime = NOW(), lastMessage = ?
             WHERE id = ?
         ");
-        $stmt->execute([$chat_id]);
+        $stmt->execute([$chat_message, $chat_id]);
 
         // Link chat_id in deals table
         $stmt = $pdo->prepare("UPDATE deals SET chat_id = ? WHERE id = ?");
@@ -496,6 +494,7 @@ function createDeal($data) {
             'success' => true,
             'deal_id' => $deal_id,
             'transaction_id' => $transaction_id,
+            'chat_id' => (int)$chat_id,
             'message' => 'Deal created successfully'
         ];
         
@@ -839,9 +838,9 @@ try {
                                 json_decode($row['buyer_payment_methods'], true) ?: explode(',', $row['buyer_payment_methods']) 
                                 : $row['buyer_payment_methods']) 
                             : [],
-                        'seller_agreed' => $row['seller_agreed'],
+                        'seller_agreed' => (bool)($row['seller_agreed'] ?? false),
                         'seller_agreed_at' => $row['seller_agreed_at'],
-                        'buyer_agreed' => $row['buyer_agreed'],
+                        'buyer_agreed' => (bool)($row['buyer_agreed'] ?? false),
                         'buyer_agreed_at' => $row['buyer_agreed_at'],
                         'deal_status' => $row['deal_status'],
                         'assigned_email' => $row['assigned_email'] ?? null,
@@ -936,26 +935,28 @@ try {
                                 json_decode($row['buyer_payment_methods'], true) ?: explode(',', $row['buyer_payment_methods']) 
                                 : $row['buyer_payment_methods']) 
                             : [],
-                        'seller_agreed' => $row['seller_agreed'],
+                        'seller_agreed' => (bool)($row['seller_agreed'] ?? false),
                         'seller_agreed_at' => $row['seller_agreed_at'],
-                        'buyer_agreed' => $row['buyer_agreed'],
+                        'buyer_agreed' => (bool)($row['buyer_agreed'] ?? false),
                         'buyer_agreed_at' => $row['buyer_agreed_at'],
                         'deal_status' => $row['deal_status'],
                         'assigned_email' => $row['assigned_email'] ?? null,
-                        'transaction_fee_paid' => $row['transaction_fee_paid'],
+                        'transaction_fee_paid' => (bool)($row['transaction_fee_paid'] ?? false),
                         'transaction_fee_paid_at' => $row['transaction_fee_paid_at'],
                         'transaction_fee_paid_by' => $row['transaction_fee_paid_by'],
                         'transaction_fee_payment_method' => $row['transaction_fee_payment_method'],
-                        'agent_email_sent' => $row['agent_email_sent'],
+                        'agent_email_sent' => (bool)($row['agent_email_sent'] ?? false),
                         'agent_email_sent_at' => $row['agent_email_sent_at'],
-                        'seller_gave_rights' => $row['seller_gave_rights'],
+                        'seller_gave_rights' => (bool)($row['seller_gave_rights'] ?? false),
                         'seller_gave_rights_at' => $row['seller_gave_rights_at'],
-                        'seller_made_primary_owner' => $row['seller_made_primary_owner'],
+                        'seller_made_primary_owner' => (bool)($row['seller_made_primary_owner'] ?? false),
                         'seller_made_primary_owner_at' => $row['seller_made_primary_owner_at'],
-                        'buyer_paid_seller' => $row['buyer_paid_seller'],
+                        'buyer_paid_seller' => (bool)($row['buyer_paid_seller'] ?? false),
                         'buyer_paid_seller_at' => $row['buyer_paid_seller_at'],
+                        'seller_confirmed_payment' => (bool)($row['seller_confirmed_payment'] ?? false),
+                        'seller_confirmed_payment_at' => $row['seller_confirmed_payment_at'] ?? null,
                         'platform_type' => $row['platform_type'],
-                        'timer_completed' => $row['timer_completed'],
+                        'timer_completed' => (bool)($row['timer_completed'] ?? false),
                         'created_at' => $row['created_at'],
                         'updated_at' => $row['updated_at'],
                         'seller_username' => $row['seller_username'],
@@ -1614,8 +1615,8 @@ try {
         }
     }
     // Handle POST /deals/{id}/confirm-primary-owner - Seller confirms they made agent primary owner
-    elseif ($method === 'POST' && preg_match('/^\/deals\/(\d+)\/confirm-primary-owner$/', $path, $matches)) {
-        $deal_id = $matches[1];
+    elseif ($method === 'POST' && preg_match('/^\/deals\/([^\/]+)\/confirm-primary-owner$/', $path, $matches)) {
+        $deal_param = $matches[1];
         
         $currentUser = getCurrentUser();
         if (!$currentUser) {
@@ -1623,17 +1624,23 @@ try {
             echo json_encode(['success' => false, 'message' => 'Authentication required']);
             exit;
         }
+        $currentUserId = (int)($currentUser['userId'] ?? $currentUser['id'] ?? 0);
+        $isAdmin = !empty($currentUser['isAdmin']) || in_array($currentUser['role'] ?? '', ['admin', 'manager']);
         
         try {
             $pdo = Database::getConnection();
             
-            // Get deal and verify seller access
+            // Get deal and verify seller access (or admin)
             $stmt = $pdo->prepare("
                 SELECT * FROM deals 
-                WHERE id = ? AND seller_id = ?
+                WHERE (id = ? OR transaction_id = ?) AND (seller_id = ? OR ? = 1)
+                LIMIT 1
             ");
-            $stmt->execute([$deal_id, $currentUser['userId']]);
+            $stmt->execute([$deal_param, $deal_param, $currentUserId, $isAdmin ? 1 : 0]);
             $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($deal) {
+                $deal_id = (int)$deal['id'];
+            }
             
             if (!$deal) {
                 http_response_code(404);
@@ -1765,8 +1772,8 @@ try {
     }
     
     // Handle POST /deals/{id}/mark-primary-owner-made - Admin confirms agent has been made primary owner
-    elseif ($method === 'POST' && (preg_match('/^\/deals\/(\d+)\/mark-primary-owner-made$/', $path, $matches) || preg_match('/^\/admin\/deals\/(\d+)\/mark-primary-owner-made$/', $path, $matches))) {
-        $deal_id = $matches[1];
+    elseif ($method === 'POST' && (preg_match('/^\/deals\/([^\/]+)\/mark-primary-owner-made$/', $path, $matches) || preg_match('/^\/admin\/deals\/([^\/]+)\/mark-primary-owner-made$/', $path, $matches))) {
+        $deal_param = $matches[1];
         
         error_log("=== MARK PRIMARY OWNER MADE ENDPOINT CALLED ===");
         error_log("Deal ID: " . $deal_id);
@@ -1806,10 +1813,14 @@ try {
                 FROM deals d
                 LEFT JOIN users seller ON d.seller_id = seller.id
                 LEFT JOIN users buyer ON d.buyer_id = buyer.id
-                WHERE d.id = ?
+                WHERE (d.id = ? OR d.transaction_id = ?)
+                LIMIT 1
             ");
-            $stmt->execute([$deal_id]);
+            $stmt->execute([$deal_param, $deal_param]);
             $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($deal) {
+                $deal_id = (int)$deal['id'];
+            }
             
             if (!$deal) {
                 throw new Exception('Deal not found');
@@ -2042,8 +2053,8 @@ try {
         }
     }
     // Handle POST /deals/{id}/buyer-paid-seller - Alias for buyer confirms they paid the seller
-    elseif ($method === 'POST' && preg_match('/^\/deals\/(\d+)\/buyer-paid-seller$/', $path, $matches)) {
-        $deal_id = $matches[1];
+    elseif ($method === 'POST' && preg_match('/^\/deals\/([^\/]+)\/buyer-paid-seller$/', $path, $matches)) {
+        $deal_param = $matches[1];
         
         $currentUser = getCurrentUser();
         if (!$currentUser) {
@@ -2051,17 +2062,23 @@ try {
             echo json_encode(['success' => false, 'message' => 'Authentication required']);
             exit;
         }
+        $currentUserId = (int)($currentUser['userId'] ?? $currentUser['id'] ?? 0);
+        $isAdmin = !empty($currentUser['isAdmin']) || in_array($currentUser['role'] ?? '', ['admin', 'manager']);
         
         try {
             $pdo = Database::getConnection();
             
-            // Get deal and verify buyer access
+            // Get deal and verify buyer access (or admin)
             $stmt = $pdo->prepare("
                 SELECT * FROM deals 
-                WHERE id = ? AND buyer_id = ?
+                WHERE (id = ? OR transaction_id = ?) AND (buyer_id = ? OR ? = 1)
+                LIMIT 1
             ");
-            $stmt->execute([$deal_id, $currentUser['userId']]);
+            $stmt->execute([$deal_param, $deal_param, $currentUserId, $isAdmin ? 1 : 0]);
             $deal = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($deal) {
+                $deal_id = (int)$deal['id'];
+            }
             
             if (!$deal) {
                 http_response_code(404);
@@ -2394,6 +2411,10 @@ try {
                 'success' => true,
                 'deal_id' => $deal['id'],
                 'deal_status' => $deal['deal_status'],
+                'seller_agreed' => (bool)($deal['seller_agreed'] ?? false),
+                'seller_agreed_at' => $deal['seller_agreed_at'] ?? null,
+                'buyer_agreed' => (bool)($deal['buyer_agreed'] ?? false),
+                'buyer_agreed_at' => $deal['buyer_agreed_at'] ?? null,
                 'platform_type' => $deal['platform_type'],
                 'assigned_email' => $assignedEmail,
                 'transaction_fee_paid' => (bool)$deal['transaction_fee_paid'],

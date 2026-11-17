@@ -442,7 +442,8 @@ class AuthController {
                     'isBanned' => (bool)$user['isBanned'],
                     'banReason' => $user['banReason'] ?? null,
                     'banExpires' => $user['banExpires'] ?? null,
-                    'bannedAt' => $user['bannedAt'] ?? null
+                    'bannedAt' => $user['bannedAt'] ?? null,
+                    'kyc_status' => $user['kyc_status'] ?? 'unverified'
                 ]
             ]);
             
@@ -535,7 +536,8 @@ class AuthController {
                     'isBanned' => (bool)($user['isBanned'] ?? false),
                     'banReason' => $user['banReason'] ?? null,
                     'banExpires' => $user['banExpires'] ?? null,
-                    'bannedAt' => $user['bannedAt'] ?? null
+                    'bannedAt' => $user['bannedAt'] ?? null,
+                    'kyc_status' => $user['kyc_status'] ?? 'unverified'
                 ]
             ]);
             
@@ -756,7 +758,8 @@ class AuthController {
                     'isBanned' => (bool)($user['isBanned'] ?? false),
                     'banReason' => $user['banReason'] ?? null,
                     'banExpires' => $user['banExpires'] ?? null,
-                    'bannedAt' => $user['bannedAt'] ?? null
+                    'bannedAt' => $user['bannedAt'] ?? null,
+                    'kyc_status' => $user['kyc_status'] ?? 'unverified'
                 ]
             ]);
             

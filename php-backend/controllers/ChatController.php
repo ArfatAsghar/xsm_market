@@ -6,113 +6,348 @@ require_once __DIR__ . '/../models/ChatParticipant.php';
 require_once __DIR__ . '/../models/User.php';
 require_once __DIR__ . '/../models/Ad.php';
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../utils/EmailService.php';
+require_once __DIR__ . '/../utils/UploadHelper.php';
 
 class ChatController {
     private $db;
     private $authMiddleware;
+
+    private static $supportColsChecked = false;
+    private static $dealsTableChecked = false;
+    private static $dealsTableExists = false;
+    private static $dealsColumns = null;
+    private static $dealsSummaryCache = [];
 
     public function __construct() {
         $database = new Database();
         $this->db = $database->getConnection();
         $this->authMiddleware = new AuthMiddleware();
         
-        // Ensure support_requested columns exist on chats table
-        try {
-            $check = $this->db->query("SHOW COLUMNS FROM chats LIKE 'support_requested'");
-            if (!$check->fetch()) {
-                $this->db->exec("ALTER TABLE chats ADD COLUMN support_requested TINYINT(1) DEFAULT 0");
-                $this->db->exec("ALTER TABLE chats ADD COLUMN support_requested_at DATETIME NULL");
+        // Ensure support_requested columns exist on chats table (only check once per process)
+        if (!self::$supportColsChecked) {
+            self::$supportColsChecked = true;
+            try {
+                $check = $this->db->query("SHOW COLUMNS FROM chats LIKE 'support_requested'");
+                if (!$check->fetch()) {
+                    $this->db->exec("ALTER TABLE chats ADD COLUMN support_requested TINYINT(1) DEFAULT 0");
+                    $this->db->exec("ALTER TABLE chats ADD COLUMN support_requested_at DATETIME NULL");
+                }
+            } catch (Exception $e) {
+                error_log('Error adding support_requested columns: ' . $e->getMessage());
             }
-        } catch (Exception $e) {
-            error_log('Error adding support_requested columns: ' . $e->getMessage());
+
+            // Cleanup: ensure all automated deal/system messages have isRead = 1 in database
+            try {
+                $this->db->exec("
+                    UPDATE messages 
+                    SET isRead = 1 
+                    WHERE isRead = 0 
+                      AND (
+                          messageType IN ('system', 'deal_card', 'deal_event', 'deal', 'escrow')
+                          OR content LIKE '%Transaction ID:%'
+                          OR content LIKE '%Deal Initiated%'
+                      )
+                ");
+            } catch (Throwable $e) {}
         }
     }
 
-    // Get all chats for a user
+    /**
+     * Unified, robust authorization check for chat access.
+     * Auto-activates participants if they belong to a linked deal or ad.
+     */
+    public function ensureUserCanAccessChat($chatId, $userId, $user = null) {
+        $adminEmail = getenv('ADMIN_EMAIL');
+        $isStaff = ($adminEmail && !empty($user['email']) && strtolower($user['email']) === strtolower($adminEmail))
+            || !empty($user['isAdmin'])
+            || in_array($user['role'] ?? '', ['admin', 'manager', 'agent', 'viewer']);
+
+        if ($isStaff) {
+            return true;
+        }
+
+        // 1. Check if user is an active participant
+        $stmt = $this->db->prepare("
+            SELECT id FROM chat_participants
+            WHERE chatId = ? AND userId = ? AND isActive = 1
+        ");
+        $stmt->execute([$chatId, $userId]);
+        if ($stmt->fetch()) {
+            return true;
+        }
+
+        // 2. Check if user has an existing participant row marked inactive — reactivate!
+        $stmtInactive = $this->db->prepare("
+            SELECT id FROM chat_participants
+            WHERE chatId = ? AND userId = ?
+        ");
+        $stmtInactive->execute([$chatId, $userId]);
+        if ($stmtInactive->fetch()) {
+            $this->db->prepare("
+                UPDATE chat_participants SET isActive = 1 WHERE chatId = ? AND userId = ?
+            ")->execute([$chatId, $userId]);
+            return true;
+        }
+
+        // A user's own prior message is authoritative evidence of membership.
+        $messageCheck = $this->db->prepare("
+            SELECT 1 FROM messages WHERE chatId = ? AND senderId = ? LIMIT 1
+        ");
+        $messageCheck->execute([$chatId, $userId]);
+        if ($messageCheck->fetchColumn()) {
+            $this->db->prepare("
+                INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                VALUES (?, ?, 'member', NOW(), 1)
+                ON DUPLICATE KEY UPDATE isActive = 1
+            ")->execute([$chatId, $userId]);
+            return true;
+        }
+
+        // 3. Check if chat belongs to a deal where user is buyer or seller
+        $dealCheck = $this->db->prepare("
+            SELECT id, buyer_id, seller_id FROM deals
+            WHERE chat_id = ? AND (buyer_id = ? OR seller_id = ?)
+            LIMIT 1
+        ");
+        $dealCheck->execute([$chatId, $userId, $userId]);
+        $deal = $dealCheck->fetch(PDO::FETCH_ASSOC);
+        if ($deal) {
+            $this->db->prepare("
+                INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                VALUES (?, ?, 'member', NOW(), 1)
+                ON DUPLICATE KEY UPDATE isActive = 1
+            ")->execute([$chatId, $userId]);
+            return true;
+        }
+
+        // 4. Check if chat belongs to an ad where user is the seller
+        $chatCheck = $this->db->prepare("
+            SELECT c.adId, a.userId as adSellerId
+            FROM chats c
+            LEFT JOIN ads a ON c.adId = a.id
+            WHERE c.id = ?
+        ");
+        $chatCheck->execute([$chatId]);
+        $chatRow = $chatCheck->fetch(PDO::FETCH_ASSOC);
+        if ($chatRow && !empty($chatRow['adSellerId']) && (int)$chatRow['adSellerId'] === (int)$userId) {
+            $this->db->prepare("
+                INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                VALUES (?, ?, 'member', NOW(), 1)
+                ON DUPLICATE KEY UPDATE isActive = 1
+            ")->execute([$chatId, $userId]);
+            return true;
+        }
+
+        return false;
+    }
+
+    // Get all chats for a user (optimized: batch queries, no N+1, no quadratic joins)
     public function getUserChats() {
         try {
             $user = $this->authMiddleware->authenticate();
             $userId = (int)$user['id'];
 
+            require_once __DIR__ . '/../utils/SystemUser.php';
+            $systemUserId = function_exists('getSystemUserId') ? (int)getSystemUserId($this->db) : 1;
+
+            // Restore inbox membership only for chats this user has personally messaged in.
+            try {
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    SELECT DISTINCT m.chatId, m.senderId, 'member', NOW(), 1
+                    FROM messages m
+                    WHERE m.senderId = ?
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$userId]);
+            } catch (Throwable $ignore) {}
+
+            // Auto-heal missing or inactive chat_participants for any linked deals for this user
+            try {
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    SELECT d.chat_id, ?, 'member', NOW(), 1
+                    FROM deals d
+                    WHERE d.chat_id IS NOT NULL 
+                      AND (d.buyer_id = ? OR d.seller_id = ?)
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$userId, $userId, $userId]);
+            } catch (Throwable $ignore) {}
+
+            // Auto-heal: also ensure the counterparty (buyer/seller) is an active participant in each deal chat
+            // This repairs cases where the initial deal creation's participant INSERT failed or was skipped
+            try {
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    SELECT d.chat_id, d.buyer_id, 'member', NOW(), 1
+                    FROM deals d
+                    WHERE d.chat_id IS NOT NULL AND d.seller_id = ?
+                      AND d.buyer_id IS NOT NULL AND d.buyer_id > 0
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$userId]);
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    SELECT d.chat_id, d.seller_id, 'member', NOW(), 1
+                    FROM deals d
+                    WHERE d.chat_id IS NOT NULL AND d.buyer_id = ?
+                      AND d.seller_id IS NOT NULL AND d.seller_id > 0
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$userId]);
+            } catch (Throwable $ignore) {}
+
+            // Auto-heal missing or inactive chat_participants for any linked ads for this seller
+            try {
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    SELECT c.id, ?, 'member', NOW(), 1
+                    FROM chats c
+                    INNER JOIN ads a ON c.adId = a.id AND a.userId = ?
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$userId, $userId]);
+            } catch (Throwable $ignore) {}
+
+            // Fast indexed query: avoids quadratic self-join on messages
+            // System messages, deal cards/events are strictly excluded from unread counts.
             $stmt = $this->db->prepare("
                 SELECT DISTINCT c.*,
-                       a.id as ad_id, a.title as ad_title, a.price as ad_price,
-                       m.content as last_message_content, m.createdAt as last_message_time,
-                       sender.id as last_sender_id, sender.username as last_sender_username,
-                       (SELECT COUNT(*) FROM messages um WHERE um.chatId = c.id AND um.senderId != ? AND um.isRead = 0) as unread_count
+                       a.id as ad_id, a.title as ad_title, a.price as ad_price, a.userId as ad_seller_id,
+                       (SELECT COUNT(*) FROM messages um 
+                        WHERE um.chatId = c.id 
+                          AND um.senderId != ? 
+                          AND um.senderId IS NOT NULL 
+                          AND um.senderId != 0 
+                          AND (um.messageType IS NULL OR um.messageType NOT IN ('system', 'deal_card', 'deal_event', 'deal', 'escrow'))
+                          AND um.content NOT LIKE '%Transaction ID:%'
+                          AND um.content NOT LIKE '%Deal Initiated%'
+                          AND um.isRead = 0) as unread_count
                 FROM chats c
-                INNER JOIN chat_participants cp ON c.id = cp.chatId
+                LEFT JOIN chat_participants cp ON c.id = cp.chatId AND cp.userId = ?
                 LEFT JOIN ads a ON c.adId = a.id
-                LEFT JOIN messages m ON c.id = m.chatId
-                LEFT JOIN users sender ON m.senderId = sender.id
-                LEFT JOIN messages m2 ON c.id = m2.chatId AND m.createdAt < m2.createdAt
-                WHERE cp.userId = ? AND cp.isActive = 1 AND m2.id IS NULL
-                ORDER BY c.lastMessageTime DESC, c.updatedAt DESC, c.createdAt DESC
+                WHERE (cp.isActive = 1)
+                   OR c.id IN (SELECT chat_id FROM deals WHERE (buyer_id = ? OR seller_id = ?) AND chat_id IS NOT NULL)
+                   OR (c.adId IS NOT NULL AND c.adId IN (SELECT id FROM ads WHERE userId = ?))
+                ORDER BY COALESCE(c.lastMessageTime, c.updatedAt, c.createdAt) DESC
             ");
-            $stmt->execute([$userId, $userId]);
+            $stmt->execute([$userId, $userId, $userId, $userId, $userId]);
             $chats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (empty($chats)) {
+                http_response_code(200);
+                echo json_encode([]);
+                return;
+            }
+
+            $chatIds = array_map(function($c) { return (int)$c['id']; }, $chats);
+            $chatIdsStr = implode(',', $chatIds);
+
+            // 1. Batch fetch all participants for all user's chats in ONE query
+            $pStmt = $this->db->query("
+                SELECT cp.chatId, cp.userId, cp.role, u.id as user_id, u.username, u.email, u.profilePicture
+                FROM chat_participants cp
+                INNER JOIN users u ON cp.userId = u.id
+                WHERE cp.chatId IN ($chatIdsStr) AND cp.isActive = 1
+            ");
+            $allParticipants = $pStmt->fetchAll(PDO::FETCH_ASSOC);
+            $participantsByChat = [];
+            foreach ($allParticipants as $p) {
+                $participantsByChat[(int)$p['chatId']][] = $p;
+            }
+
+            // 2. Batch fetch latest message sender for each chat in ONE query
+            $latestMsgStmt = $this->db->query("
+                SELECT m.chatId, m.content, m.createdAt,
+                       u.id as sender_id, u.username as sender_username, u.profilePicture as sender_profilePicture
+                FROM messages m
+                INNER JOIN (
+                    SELECT chatId, MAX(id) as max_id
+                    FROM messages
+                    WHERE chatId IN ($chatIdsStr)
+                    GROUP BY chatId
+                ) latest ON m.id = latest.max_id
+                INNER JOIN users u ON m.senderId = u.id
+            ");
+            $latestMessagesByChat = [];
+            foreach ($latestMsgStmt->fetchAll(PDO::FETCH_ASSOC) as $lm) {
+                $latestMessagesByChat[(int)$lm['chatId']] = $lm;
+            }
 
             $result = [];
 
             foreach ($chats as $chat) {
-                $participantStmt = $this->db->prepare("
-                    SELECT cp.*, u.id as user_id, u.username, u.email
-                    FROM chat_participants cp
-                    INNER JOIN users u ON cp.userId = u.id
-                    WHERE cp.chatId = ? AND cp.isActive = 1
-                ");
-                $participantStmt->execute([$chat['id']]);
-                $participants = $participantStmt->fetchAll(PDO::FETCH_ASSOC);
+                $cId = (int)$chat['id'];
+                $participants = $participantsByChat[$cId] ?? [];
 
                 $otherParticipants = array_values(array_filter($participants, function($p) use ($userId) {
-                    return (int)$p['userId'] !== (int)$userId;
+                    $pUid = (int)($p['userId'] ?? $p['user_id'] ?? 0);
+                    return $pUid > 0 && $pUid !== $userId;
                 }));
 
-                // Determine buyer/seller for admin context
+                // Fallback: If otherParticipants is empty, resolve counterparty from deal or ad
+                if (empty($otherParticipants)) {
+                    try {
+                        $dealCheck = $this->db->prepare("SELECT buyer_id, seller_id FROM deals WHERE chat_id = ? ORDER BY id DESC LIMIT 1");
+                        $dealCheck->execute([$cId]);
+                        $dealRow = $dealCheck->fetch(PDO::FETCH_ASSOC);
+                        if ($dealRow) {
+                            $bId = (int)$dealRow['buyer_id'];
+                            $sId = (int)$dealRow['seller_id'];
+                            $otherId = ($userId === $bId) ? $sId : $bId;
+                            if ($otherId > 0) {
+                                $uStmt = $this->db->prepare("SELECT id as user_id, id as userId, username, email, profilePicture FROM users WHERE id = ?");
+                                $uStmt->execute([$otherId]);
+                                $uRow = $uStmt->fetch(PDO::FETCH_ASSOC);
+                                if ($uRow) {
+                                    $otherParticipants[] = $uRow;
+                                }
+                            }
+                        }
+                    } catch (Throwable $ignore) {}
+
+                    if (empty($otherParticipants) && !empty($chat['ad_id'])) {
+                        try {
+                            $adStmt = $this->db->prepare("SELECT u.id as user_id, u.id as userId, u.username, u.email, u.profilePicture FROM ads a INNER JOIN users u ON a.userId = u.id WHERE a.id = ?");
+                            $adStmt->execute([(int)$chat['ad_id']]);
+                            $adSeller = $adStmt->fetch(PDO::FETCH_ASSOC);
+                            if ($adSeller && (int)$adSeller['user_id'] !== $userId) {
+                                $otherParticipants[] = $adSeller;
+                            }
+                        } catch (Throwable $ignore) {}
+                    }
+                }
+
                 $buyerUserId = null;
                 $sellerUserId = null;
-                if ($chat['ad_id']) {
-                    // For ad_inquiry chats: the ad owner is the seller, the other participant is the buyer
-                    $adOwnerStmt = $this->db->prepare("SELECT userId FROM ads WHERE id = ? LIMIT 1");
-                    $adOwnerStmt->execute([$chat['ad_id']]);
-                    $adOwnerRow = $adOwnerStmt->fetch(PDO::FETCH_ASSOC);
-                    if ($adOwnerRow) {
-                        $sellerUserId = (int)$adOwnerRow['userId'];
-                        // Buyer is the participant who is NOT the seller
-                        foreach ($participants as $p) {
-                            if ((int)$p['user_id'] !== $sellerUserId) {
-                                $buyerUserId = (int)$p['user_id'];
-                                break;
-                            }
+                if (!empty($chat['ad_id'])) {
+                    $sellerUserId = !empty($chat['ad_seller_id']) ? (int)$chat['ad_seller_id'] : null;
+                    foreach ($participants as $p) {
+                        if ((int)$p['user_id'] !== $sellerUserId) {
+                            $buyerUserId = (int)$p['user_id'];
+                            break;
                         }
                     }
                 } else {
-                    // For direct chats: use deal history if available
-                    $dealCheckStmt = $this->db->prepare("
-                        SELECT buyer_id, seller_id FROM deals
-                        WHERE (buyer_id IN (SELECT userId FROM chat_participants WHERE chatId = ?)
-                           AND seller_id IN (SELECT userId FROM chat_participants WHERE chatId = ?))
-                        ORDER BY created_at DESC LIMIT 1
-                    ");
-                    try {
-                        $dealCheckStmt->execute([$chat['id'], $chat['id']]);
-                        $dealRow = $dealCheckStmt->fetch(PDO::FETCH_ASSOC);
-                        if ($dealRow) {
-                            $buyerUserId = (int)$dealRow['buyer_id'];
-                            $sellerUserId = (int)$dealRow['seller_id'];
-                        }
-                    } catch (Exception $e) { /* deals table may not exist */ }
+                    $dealCheck = $this->db->prepare("SELECT buyer_id, seller_id FROM deals WHERE chat_id = ? ORDER BY id DESC LIMIT 1");
+                    $dealCheck->execute([$cId]);
+                    $dealRow = $dealCheck->fetch(PDO::FETCH_ASSOC);
+                    if ($dealRow) {
+                        $buyerUserId = (int)$dealRow['buyer_id'];
+                        $sellerUserId = (int)$dealRow['seller_id'];
+                    }
                 }
 
+                $latestMsg = $latestMessagesByChat[$cId] ?? null;
+                $lastMsgContent = $latestMsg ? $latestMsg['content'] : ($chat['lastMessage'] ?? null);
+                $lastMsgTime = $latestMsg ? $latestMsg['createdAt'] : ($chat['lastMessageTime'] ?? null);
+
                 $chatData = [
-                    'id' => (int)$chat['id'],
+                    'id' => $cId,
                     'type' => $chat['type'],
                     'name' => $chat['name'],
                     'adId' => $chat['ad_id'] ? (int)$chat['ad_id'] : null,
                     'support_requested' => isset($chat['support_requested']) ? (bool)$chat['support_requested'] : false,
                     'support_requested_at' => $chat['support_requested_at'] ?? null,
-                    'lastMessage' => $chat['lastMessage'],
-                    'lastMessageTime' => $chat['lastMessageTime'],
+                    'lastMessage' => $lastMsgContent,
+                    'lastMessageTime' => $lastMsgTime,
                     'createdAt' => $chat['createdAt'],
                     'updatedAt' => $chat['updatedAt'],
                     'unread_count' => (int)($chat['unread_count'] ?? 0),
@@ -125,7 +360,8 @@ class ChatController {
                             'user' => [
                                 'id' => (int)$p['user_id'],
                                 'username' => $p['username'],
-                                'email' => $p['email']
+                                'email' => $p['email'],
+                                'profilePicture' => $p['profilePicture'] ?? null
                             ]
                         ];
                     }, $participants),
@@ -133,15 +369,17 @@ class ChatController {
                         return [
                             'id' => (int)$p['user_id'],
                             'username' => $p['username'],
-                            'email' => $p['email']
+                            'email' => $p['email'],
+                            'profilePicture' => $p['profilePicture'] ?? null
                         ];
                     }, $otherParticipants),
-                    'messages' => $chat['last_message_content'] ? [[
-                        'content' => $chat['last_message_content'],
-                        'createdAt' => $chat['last_message_time'],
+                    'messages' => $latestMsg ? [[
+                        'content' => $latestMsg['content'],
+                        'createdAt' => $latestMsg['createdAt'],
                         'sender' => [
-                            'id' => (int)$chat['last_sender_id'],
-                            'username' => $chat['last_sender_username']
+                            'id' => (int)$latestMsg['sender_id'],
+                            'username' => $latestMsg['sender_username'],
+                            'profilePicture' => $latestMsg['sender_profilePicture'] ?? null
                         ]
                     ]] : [],
                     'ad' => $chat['ad_id'] ? [
@@ -165,6 +403,36 @@ class ChatController {
             echo json_encode($result);
         } catch (Exception $e) {
             error_log('Error fetching user chats: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['message' => 'Server error', 'error' => $e->getMessage()]);
+        }
+    }
+
+
+    // Get single chat by ID
+    public function getChatById($chatId) {
+        try {
+            $user = $this->authMiddleware->authenticate();
+            $userId = (int)$user['id'];
+
+            if (!$this->ensureUserCanAccessChat($chatId, $userId, $user)) {
+                http_response_code(403);
+                echo json_encode(['message' => 'Access denied']);
+                return;
+            }
+
+            $result = $this->buildChatResponse($chatId, $userId);
+
+            if (!$result || empty($result['id'])) {
+                http_response_code(404);
+                echo json_encode(['message' => 'Chat not found']);
+                return;
+            }
+
+            http_response_code(200);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            error_log('Error fetching chat by ID: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['message' => 'Server error', 'error' => $e->getMessage()]);
         }
@@ -218,38 +486,39 @@ class ChatController {
                 }
             }
 
-            // Requirement 17: reuse any existing active direct/ad-inquiry chat between the same two users.
+            // Reuse the pair's existing chat even if either participant was deactivated.
             if ($type === 'direct') {
                 $stmt = $this->db->prepare("
                     SELECT c.*
                     FROM chats c
-                    INNER JOIN chat_participants cp1 ON c.id = cp1.chatId
-                    INNER JOIN chat_participants cp2 ON c.id = cp2.chatId
                     WHERE c.type IN ('direct', 'ad_inquiry')
-                    AND cp1.userId = ? AND cp1.isActive = 1
-                    AND cp2.userId = ? AND cp2.isActive = 1
-                    AND cp1.chatId = cp2.chatId
+                    AND (
+                        EXISTS (SELECT 1 FROM chat_participants cp1 WHERE cp1.chatId = c.id AND cp1.userId = ?)
+                        OR EXISTS (SELECT 1 FROM messages m1 WHERE m1.chatId = c.id AND m1.senderId = ?)
+                    )
+                    AND (
+                        EXISTS (SELECT 1 FROM chat_participants cp2 WHERE cp2.chatId = c.id AND cp2.userId = ?)
+                        OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.chatId = c.id AND m2.senderId = ?)
+                    )
                     ORDER BY c.updatedAt DESC, c.createdAt DESC
                     LIMIT 1
                 ");
-                $stmt->execute([$currentUserId, $participantId]);
+                $stmt->execute([$currentUserId, $currentUserId, $participantId, $participantId]);
                 $existingChat = $stmt->fetch(PDO::FETCH_ASSOC);
 
                 if ($existingChat) {
+                    $this->db->prepare("
+                        INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                        VALUES (?, ?, 'member', NOW(), 1), (?, ?, 'member', NOW(), 1)
+                        ON DUPLICATE KEY UPDATE isActive = 1
+                    ")->execute([(int)$existingChat['id'], $currentUserId, (int)$existingChat['id'], $participantId]);
                     http_response_code(200);
-                    echo json_encode([
-                        'id' => (int)$existingChat['id'],
-                        'type' => $existingChat['type'],
-                        'name' => $existingChat['name'],
-                        'adId' => $existingChat['adId'] ? (int)$existingChat['adId'] : null,
-                        'createdAt' => $existingChat['createdAt'],
-                        'updatedAt' => $existingChat['updatedAt'],
-                        'dealSummary' => $this->getDealSummaryForUserPair($currentUserId, $participantId)
-                    ]);
+                    echo json_encode($this->buildChatResponse((int)$existingChat['id'], $currentUserId, $participantId));
                     return;
                 }
             }
 
+            $this->db->beginTransaction();
             $stmt = $this->db->prepare("
                 INSERT INTO chats (type, adId, name, createdAt, updatedAt)
                 VALUES (?, ?, ?, NOW(), NOW())
@@ -261,17 +530,161 @@ class ChatController {
 
             $stmt = $this->db->prepare("
                 INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
-                VALUES (?, ?, ?, NOW(), 1)
+                VALUES (?, ?, 'admin', NOW(), 1), (?, ?, 'member', NOW(), 1)
+                ON DUPLICATE KEY UPDATE isActive = 1
             ");
-            $stmt->execute([$newChatId, $currentUserId, 'admin']);
-            $stmt->execute([$newChatId, $participantId, 'member']);
+            $stmt->execute([$newChatId, $currentUserId, $newChatId, $participantId]);
+            $this->db->commit();
 
             $result = $this->buildChatResponse($newChatId, $currentUserId, $participantId);
 
             http_response_code(201);
             echo json_encode($result);
         } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
             error_log('Error creating chat: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['message' => 'Server error', 'error' => $e->getMessage()]);
+        }
+    }
+
+
+    // Create or get chat initiated from an ad listing ("Contact Seller")
+    public function createAdInquiryChat() {
+        try {
+            $user = $this->authMiddleware->authenticate();
+            $buyerId = (int)$user['id'];
+            $input = json_decode(file_get_contents('php://input'), true);
+
+            $adId = isset($input['adId']) ? (int)$input['adId'] : null;
+            $sellerId = isset($input['sellerId']) ? (int)$input['sellerId'] : 0;
+            $initialMessage = trim((string)($input['message'] ?? ''));
+
+            if ($adId) {
+                $adStmt = $this->db->prepare("SELECT userId FROM ads WHERE id = ? LIMIT 1");
+                $adStmt->execute([$adId]);
+                $adSellerId = (int)($adStmt->fetchColumn() ?: 0);
+                if (!$adSellerId) {
+                    http_response_code(404);
+                    echo json_encode(['message' => 'Ad not found']);
+                    return;
+                }
+                $sellerId = $adSellerId;
+            }
+
+            if (!$sellerId) {
+                http_response_code(400);
+                echo json_encode(['message' => 'Seller ID is required']);
+                return;
+            }
+
+            if ($buyerId === $sellerId) {
+                http_response_code(400);
+                echo json_encode(['message' => 'Cannot start a chat with yourself']);
+                return;
+            }
+
+            // Reuse a prior thread when both users have membership or sent-message evidence.
+            $stmt = $this->db->prepare("
+                SELECT c.*
+                FROM chats c
+                WHERE c.type IN ('ad_inquiry', 'direct')
+                AND (
+                    EXISTS (SELECT 1 FROM chat_participants cp1 WHERE cp1.chatId = c.id AND cp1.userId = ?)
+                    OR EXISTS (SELECT 1 FROM messages m1 WHERE m1.chatId = c.id AND m1.senderId = ?)
+                )
+                AND (
+                    EXISTS (SELECT 1 FROM chat_participants cp2 WHERE cp2.chatId = c.id AND cp2.userId = ?)
+                    OR EXISTS (SELECT 1 FROM messages m2 WHERE m2.chatId = c.id AND m2.senderId = ?)
+                )
+                ORDER BY c.updatedAt DESC, c.createdAt DESC
+                LIMIT 1
+            ");
+            $stmt->execute([$buyerId, $buyerId, $sellerId, $sellerId]);
+            $existingChat = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            $chatId = null;
+            if ($existingChat) {
+                $chatId = (int)$existingChat['id'];
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    VALUES (?, ?, 'member', NOW(), 1), (?, ?, 'member', NOW(), 1)
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$chatId, $buyerId, $chatId, $sellerId]);
+            } else {
+                $this->db->beginTransaction();
+                $stmt = $this->db->prepare("
+                    INSERT INTO chats (type, adId, name, createdAt, updatedAt)
+                    VALUES ('ad_inquiry', ?, NULL, NOW(), NOW())
+                ");
+                $stmt->execute([$adId]);
+                $chatId = (int)$this->db->lastInsertId();
+
+                $stmt = $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    VALUES (?, ?, 'member', NOW(), 1), (?, ?, 'member', NOW(), 1)
+                ");
+                $stmt->execute([$chatId, $buyerId, $chatId, $sellerId]);
+                $this->db->commit();
+            }
+
+            if (!empty($initialMessage)) {
+                $msgStmt = $this->db->prepare("
+                    INSERT INTO messages (content, senderId, chatId, messageType, isRead, status, createdAt, updatedAt)
+                    VALUES (?, ?, ?, 'text', 0, 'sent', NOW(), NOW())
+                ");
+                $msgStmt->execute([$initialMessage, $buyerId, $chatId]);
+
+                $this->db->prepare("
+                    UPDATE chats SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW() WHERE id = ?
+                ")->execute([$initialMessage, $chatId]);
+
+                try {
+                    $sellerStmt = $this->db->prepare("SELECT id, username, email FROM users WHERE id = ? LIMIT 1");
+                    $sellerStmt->execute([$sellerId]);
+                    $sellerUser = $sellerStmt->fetch(PDO::FETCH_ASSOC);
+
+                    if ($sellerUser) {
+                        $senderName = $user['username'] ?? 'Someone';
+                        $preview = mb_strlen($initialMessage) > 60 ? mb_substr($initialMessage, 0, 60) . '...' : $initialMessage;
+
+                        $notifStmt = $this->db->prepare("
+                            INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                            VALUES (?, 'message', ?, ?, ?, 0, NOW())
+                        ");
+                        $notifStmt->execute([
+                            $sellerId,
+                            'New inquiry from ' . $senderName,
+                            $preview,
+                            '/chat?chatId=' . $chatId
+                        ]);
+
+                        if (!empty($sellerUser['email'])) {
+                            try {
+                                $emailService = new EmailService();
+                                $emailService->sendNewMessageEmail(
+                                    $sellerUser['email'],
+                                    $sellerUser['username'],
+                                    $senderName,
+                                    $preview,
+                                    '/chat?chatId=' . $chatId
+                                );
+                            } catch (Throwable $ignore) {}
+                        }
+                    }
+                } catch (Throwable $e) {}
+            }
+
+            $result = $this->buildChatResponse($chatId, $buyerId, $sellerId);
+            http_response_code($existingChat ? 200 : 201);
+            echo json_encode($result);
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log('Error creating ad inquiry chat: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['message' => 'Server error', 'error' => $e->getMessage()]);
         }
@@ -290,34 +703,48 @@ class ChatController {
             $isAdmin = ($adminEmail && strtolower($user['email']) === strtolower($adminEmail)) || !empty($user['isAdmin']) || in_array($user['role'] ?? '', ['admin', 'manager', 'viewer']);
 
             if (!$isAdmin) {
-                $stmt = $this->db->prepare("
-                    SELECT id FROM chat_participants
-                    WHERE chatId = ? AND userId = ? AND isActive = 1
-                ");
-                $stmt->execute([$chatId, $userId]);
-
-                if (!$stmt->fetch()) {
+                if (!$this->ensureUserCanAccessChat($chatId, $userId, $user)) {
                     http_response_code(403);
                     echo json_encode(['message' => 'Access denied']);
                     return;
                 }
             }
 
-            $stmt = $this->db->prepare("
-                SELECT m.*,
-                       sender.id as sender_id, sender.username as sender_username, sender.displayName as sender_displayName, sender.isAdmin as sender_isAdmin, sender.email as sender_email,
-                       reply.id as reply_id, reply.content as reply_content,
-                       reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username
-                FROM messages m
-                INNER JOIN users sender ON m.senderId = sender.id
-                LEFT JOIN messages reply ON m.replyToId = reply.id
-                LEFT JOIN users reply_sender ON reply.senderId = reply_sender.id
-                WHERE m.chatId = ?
-                ORDER BY m.createdAt DESC
-                LIMIT ? OFFSET ?
-            ");
-            $stmt->execute([$chatId, $limit, $offset]);
-            $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $safeLimit = max(1, (int)$limit);
+            $safeOffset = max(0, (int)$offset);
+            try {
+                $stmt = $this->db->prepare("
+                    SELECT m.*,
+                           sender.id as sender_id, sender.username as sender_username, sender.displayName as sender_displayName, sender.isAdmin as sender_isAdmin, sender.email as sender_email, sender.profilePicture as sender_profilePicture,
+                           reply.id as reply_id, reply.content as reply_content,
+                           reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username, reply_sender.profilePicture as reply_sender_profilePicture
+                    FROM messages m
+                    INNER JOIN users sender ON m.senderId = sender.id
+                    LEFT JOIN messages reply ON m.replyToId = reply.id
+                    LEFT JOIN users reply_sender ON reply.senderId = reply_sender.id
+                    WHERE m.chatId = ?
+                    ORDER BY m.createdAt DESC
+                    LIMIT {$safeLimit} OFFSET {$safeOffset}
+                ");
+                $stmt->execute([(int)$chatId]);
+                $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (Throwable $e) {
+                $stmt = $this->db->prepare("
+                    SELECT m.*,
+                           sender.id as sender_id, sender.username as sender_username, sender.username as sender_displayName, sender.isAdmin as sender_isAdmin, sender.email as sender_email, sender.profilePicture as sender_profilePicture,
+                           reply.id as reply_id, reply.content as reply_content,
+                           reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username, reply_sender.profilePicture as reply_sender_profilePicture
+                    FROM messages m
+                    INNER JOIN users sender ON m.senderId = sender.id
+                    LEFT JOIN messages reply ON m.replyToId = reply.id
+                    LEFT JOIN users reply_sender ON reply.senderId = reply_sender.id
+                    WHERE m.chatId = ?
+                    ORDER BY m.createdAt DESC
+                    LIMIT {$safeLimit} OFFSET {$safeOffset}
+                ");
+                $stmt->execute([(int)$chatId]);
+                $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
 
             $stmt = $this->db->prepare("
                 UPDATE chat_participants SET lastSeenAt = NOW()
@@ -328,11 +755,24 @@ class ChatController {
             // Auto-mark incoming sent messages as delivered
             Message::markDelivered((int)$chatId, $userId);
 
+            // Auto-mark incoming messages as read so viewing the conversation instantly clears unread state in DB
+            Message::markChatRead((int)$chatId, $userId);
+
+            // Also mark corresponding message notifications as read
+            try {
+                $notifStmt = $this->db->prepare("
+                    UPDATE notifications
+                    SET isRead = 1
+                    WHERE userId = ? AND isRead = 0 AND (link LIKE ? OR link = ?)
+                ");
+                $notifStmt->execute([$userId, "%chatId={$chatId}%", '/chat?chatId=' . $chatId]);
+            } catch (Exception $ne) {}
+
             $result = array_map(function($msg) use ($adminEmail) {
                 $formatted = [
                     'id' => (int)$msg['id'],
                     'content' => $msg['content'],
-                    'senderId' => (int)$msg['senderId'],
+                    'senderId' => (string)$msg['senderId'],
                     'chatId' => (int)$msg['chatId'],
                     'messageType' => $msg['messageType'],
                     'mediaUrl' => $msg['mediaUrl'],
@@ -351,7 +791,8 @@ class ChatController {
                         'id' => (int)$msg['sender_id'],
                         'username' => $msg['sender_username'],
                         'displayName' => $msg['sender_displayName'] ?? null,
-                        'isAdmin' => (!empty($msg['sender_isAdmin']) || ($adminEmail && strtolower($msg['sender_email'] ?? '') === strtolower($adminEmail)))
+                        'isAdmin' => (!empty($msg['sender_isAdmin']) || ($adminEmail && strtolower($msg['sender_email'] ?? '') === strtolower($adminEmail))),
+                        'profilePicture' => $msg['sender_profilePicture'] ?? null
                     ]
                 ];
 
@@ -361,7 +802,8 @@ class ChatController {
                         'content' => $msg['reply_content'],
                         'sender' => [
                             'id' => (int)$msg['reply_sender_id'],
-                            'username' => $msg['reply_sender_username']
+                            'username' => $msg['reply_sender_username'],
+                            'profilePicture' => $msg['reply_sender_profilePicture'] ?? null
                         ]
                     ];
                 }
@@ -391,18 +833,11 @@ class ChatController {
             $mediaUrl = null;
 
             if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
-                $uploadDir = __DIR__ . '/../uploads/chat/';
-
-                if (!is_dir($uploadDir)) {
-                    mkdir($uploadDir, 0777, true);
-                }
-
                 $fileTmp = $_FILES['image']['tmp_name'];
                 $fileName = uniqid('chatimg_') . '_' . basename($_FILES['image']['name']);
-                $filePath = $uploadDir . $fileName;
                 $publicPath = '/uploads/chat/' . $fileName;
 
-                if (move_uploaded_file($fileTmp, $filePath)) {
+                if (UploadHelper::saveUploadedFile($fileTmp, 'chat', $fileName)) {
                     $content = $publicPath;
                     $messageType = 'image';
                     $mediaUrl = $publicPath;
@@ -412,12 +847,6 @@ class ChatController {
                     return;
                 }
             } elseif (isset($_FILES['video']) && $_FILES['video']['error'] === UPLOAD_ERR_OK) {
-                $uploadDir = __DIR__ . '/../uploads/chat/';
-
-                if (!is_dir($uploadDir)) {
-                    mkdir($uploadDir, 0777, true);
-                }
-
                 $maxSize = 50 * 1024 * 1024;
 
                 if ($_FILES['video']['size'] > $maxSize) {
@@ -437,10 +866,9 @@ class ChatController {
 
                 $fileTmp = $_FILES['video']['tmp_name'];
                 $fileName = uniqid('chatvid_') . '_' . basename($_FILES['video']['name']);
-                $filePath = $uploadDir . $fileName;
                 $publicPath = '/uploads/chat/' . $fileName;
 
-                if (move_uploaded_file($fileTmp, $filePath)) {
+                if (UploadHelper::saveUploadedFile($fileTmp, 'chat', $fileName)) {
                     $content = $publicPath;
                     $messageType = 'video';
                     $mediaUrl = $publicPath;
@@ -466,13 +894,7 @@ class ChatController {
             $isStaff = ($adminEmail && strtolower($user['email']) === strtolower($adminEmail)) || !empty($user['isAdmin']) || in_array($user['role'] ?? '', ['admin', 'manager', 'viewer']);
 
             if (!$isStaff) {
-                $stmt = $this->db->prepare("
-                    SELECT id FROM chat_participants
-                    WHERE chatId = ? AND userId = ? AND isActive = 1
-                ");
-                $stmt->execute([$chatId, $senderId]);
-
-                if (!$stmt->fetch()) {
+                if (!$this->ensureUserCanAccessChat($chatId, $senderId, $user)) {
                     http_response_code(403);
                     echo json_encode(['message' => 'Access denied']);
                     return;
@@ -513,12 +935,31 @@ class ChatController {
                 }
             }
 
-            $stmt = $this->db->prepare("
-                INSERT INTO messages (content, senderId, chatId, messageType, replyToId, createdAt, updatedAt)
-                VALUES (?, ?, ?, ?, ?, NOW(), NOW())
-            ");
-            $stmt->execute([$content, $senderId, $chatId, $messageType, $replyToId]);
-            $messageId = $this->db->lastInsertId();
+            $messageId = null;
+            try {
+                $stmt = $this->db->prepare("
+                    INSERT INTO messages (content, senderId, chatId, messageType, replyToId, isStaffMessage, staffDisplayName, status, createdAt, updatedAt)
+                    VALUES (?, ?, ?, ?, ?, 0, NULL, 'sent', NOW(), NOW())
+                ");
+                $stmt->execute([$content, $senderId, $chatId, $messageType, $replyToId]);
+                $messageId = $this->db->lastInsertId();
+            } catch (Throwable $e1) {
+                try {
+                    $stmt = $this->db->prepare("
+                        INSERT INTO messages (content, senderId, chatId, messageType, replyToId, status, createdAt, updatedAt)
+                        VALUES (?, ?, ?, ?, ?, 'sent', NOW(), NOW())
+                    ");
+                    $stmt->execute([$content, $senderId, $chatId, $messageType, $replyToId]);
+                    $messageId = $this->db->lastInsertId();
+                } catch (Throwable $e2) {
+                    $stmt = $this->db->prepare("
+                        INSERT INTO messages (content, senderId, chatId, messageType, replyToId, createdAt, updatedAt)
+                        VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+                    ");
+                    $stmt->execute([$content, $senderId, $chatId, $messageType, $replyToId]);
+                    $messageId = $this->db->lastInsertId();
+                }
+            }
 
             $stmt = $this->db->prepare("
                 UPDATE chats SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW()
@@ -526,25 +967,48 @@ class ChatController {
             ");
             $stmt->execute([$content, $chatId]);
 
+            // Reactivate all participants in this chat so it surfaces for everyone
+            try {
+                $this->db->prepare("
+                    UPDATE chat_participants SET isActive = 1 WHERE chatId = ?
+                ")->execute([$chatId]);
+            } catch (Throwable $e) {}
+
             $adminEmail = getenv('ADMIN_EMAIL');
-            $stmt = $this->db->prepare("
-                SELECT m.*,
-                       sender.id as sender_id, sender.username as sender_username, sender.displayName as sender_displayName, sender.isAdmin as sender_isAdmin, sender.email as sender_email,
-                       reply.id as reply_id, reply.content as reply_content,
-                       reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username
-                FROM messages m
-                INNER JOIN users sender ON m.senderId = sender.id
-                LEFT JOIN messages reply ON m.replyToId = reply.id
-                LEFT JOIN users reply_sender ON reply.senderId = reply_sender.id
-                WHERE m.id = ?
-            ");
-            $stmt->execute([$messageId]);
-            $messageData = $stmt->fetch(PDO::FETCH_ASSOC);
+            try {
+                $stmt = $this->db->prepare("
+                    SELECT m.*,
+                           sender.id as sender_id, sender.username as sender_username, sender.displayName as sender_displayName, sender.isAdmin as sender_isAdmin, sender.email as sender_email, sender.profilePicture as sender_profilePicture,
+                           reply.id as reply_id, reply.content as reply_content,
+                           reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username, reply_sender.profilePicture as reply_sender_profilePicture
+                    FROM messages m
+                    INNER JOIN users sender ON m.senderId = sender.id
+                    LEFT JOIN messages reply ON m.replyToId = reply.id
+                    LEFT JOIN users reply_sender ON reply.senderId = reply_sender.id
+                    WHERE m.id = ?
+                ");
+                $stmt->execute([$messageId]);
+                $messageData = $stmt->fetch(PDO::FETCH_ASSOC);
+            } catch (Throwable $e) {
+                $stmt = $this->db->prepare("
+                    SELECT m.*,
+                           sender.id as sender_id, sender.username as sender_username, sender.username as sender_displayName, sender.isAdmin as sender_isAdmin, sender.email as sender_email, sender.profilePicture as sender_profilePicture,
+                           reply.id as reply_id, reply.content as reply_content,
+                           reply_sender.id as reply_sender_id, reply_sender.username as reply_sender_username, reply_sender.profilePicture as reply_sender_profilePicture
+                    FROM messages m
+                    INNER JOIN users sender ON m.senderId = sender.id
+                    LEFT JOIN messages reply ON m.replyToId = reply.id
+                    LEFT JOIN users reply_sender ON reply.senderId = reply_sender.id
+                    WHERE m.id = ?
+                ");
+                $stmt->execute([$messageId]);
+                $messageData = $stmt->fetch(PDO::FETCH_ASSOC);
+            }
 
             $result = [
                 'id' => (int)$messageData['id'],
                 'content' => $messageData['content'],
-                'senderId' => (int)$messageData['senderId'],
+                'senderId' => (string)$messageData['senderId'],
                 'chatId' => (int)$messageData['chatId'],
                 'messageType' => $messageData['messageType'],
                 'mediaUrl' => $mediaUrl ?: ($messageData['mediaUrl'] ?? null),
@@ -558,7 +1022,8 @@ class ChatController {
                     'id' => (int)$messageData['sender_id'],
                     'username' => $messageData['sender_username'],
                     'displayName' => $messageData['sender_displayName'] ?? null,
-                    'isAdmin' => (!empty($messageData['sender_isAdmin']) || ($adminEmail && strtolower($messageData['sender_email'] ?? '') === strtolower($adminEmail)))
+                    'isAdmin' => (!empty($messageData['sender_isAdmin']) || ($adminEmail && strtolower($messageData['sender_email'] ?? '') === strtolower($adminEmail))),
+                    'profilePicture' => $messageData['sender_profilePicture'] ?? null
                 ]
             ];
 
@@ -568,15 +1033,32 @@ class ChatController {
                     'content' => $messageData['reply_content'],
                     'sender' => [
                         'id' => (int)$messageData['reply_sender_id'],
-                        'username' => $messageData['reply_sender_username']
+                        'username' => $messageData['reply_sender_username'],
+                        'profilePicture' => $messageData['reply_sender_profilePicture'] ?? null
                     ]
                 ];
             }
 
-            // Notify all other participants in this chat
+            // Return response immediately so frontend experiences zero delay
+            http_response_code(201);
+            echo json_encode($result);
+
+            // Flush response to browser immediately
+            if (function_exists('fastcgi_finish_request')) {
+                fastcgi_finish_request();
+            } else {
+                if (ob_get_level() > 0) {
+                    ob_end_flush();
+                }
+                flush();
+            }
+
+            // In-app notifications & background email alerts (runs after response is already sent to user!)
             try {
                 $recipientStmt = $this->db->prepare("
-                    SELECT u.id, u.username FROM chat_participants cp
+                    SELECT u.id, u.username, u.email, u.lastSeenAt, u.lastUnreadReminderAt,
+                           cp.lastSeenAt as participantLastSeenAt
+                    FROM chat_participants cp
                     INNER JOIN users u ON cp.userId = u.id
                     WHERE cp.chatId = ? AND cp.userId != ? AND cp.isActive = 1
                 ");
@@ -599,13 +1081,39 @@ class ChatController {
                         $preview,
                         '/chat?chatId=' . $chatId
                     ]);
+
+                    // Send instant email notification to recipient if they are not active in this chat room
+                    // Throttled: max 1 notification email every 10 minutes to avoid flooding
+                    if (!empty($recipient['email'])) {
+                        $lastReminder = !empty($recipient['lastUnreadReminderAt']) ? strtotime($recipient['lastUnreadReminderAt']) : 0;
+                        $cooldownPassed = (time() - $lastReminder) >= 600; // 10 minutes
+
+                        $participantLastSeen = !empty($recipient['participantLastSeenAt']) ? strtotime($recipient['participantLastSeenAt']) : 0;
+                        $isInactiveInChat = (time() - $participantLastSeen) >= 120; // 2 minutes
+
+                        if ($cooldownPassed && $isInactiveInChat) {
+                            try {
+                                $emailService = new EmailService();
+                                $emailSent = $emailService->sendNewMessageEmail(
+                                    $recipient['email'],
+                                    $recipient['username'],
+                                    $senderName,
+                                    $preview,
+                                    '/chat?chatId=' . $chatId
+                                );
+                                if ($emailSent) {
+                                    $uStmt = $this->db->prepare("UPDATE users SET lastUnreadReminderAt = NOW() WHERE id = ?");
+                                    $uStmt->execute([(int)$recipient['id']]);
+                                }
+                            } catch (Throwable $mailEx) {
+                                error_log('Failed to send real-time message email notification: ' . $mailEx->getMessage());
+                            }
+                        }
+                    }
                 }
             } catch (Exception $ne) {
                 error_log('Notification insert error: ' . $ne->getMessage());
             }
-
-            http_response_code(201);
-            echo json_encode($result);
         } catch (Exception $e) {
             error_log('Error sending message: ' . $e->getMessage());
             http_response_code(500);
@@ -619,16 +1127,15 @@ class ChatController {
             $user = $this->authMiddleware->authenticate();
             $userId = (int)$user['id'];
 
-            $stmt = $this->db->prepare("
-                SELECT id FROM chat_participants
-                WHERE chatId = ? AND userId = ? AND isActive = 1
-            ");
-            $stmt->execute([$chatId, $userId]);
+            $adminEmail = getenv('ADMIN_EMAIL');
+            $isAdmin = ($adminEmail && strtolower($user['email'] ?? '') === strtolower($adminEmail)) || !empty($user['isAdmin']) || in_array($user['role'] ?? '', ['admin', 'manager', 'viewer']);
 
-            if (!$stmt->fetch()) {
-                http_response_code(403);
-                echo json_encode(['message' => 'Access denied']);
-                return;
+            if (!$isAdmin) {
+                if (!$this->ensureUserCanAccessChat($chatId, $userId, $user)) {
+                    http_response_code(403);
+                    echo json_encode(['message' => 'Access denied']);
+                    return;
+                }
             }
 
             $affected = Message::markChatRead((int)$chatId, $userId);
@@ -654,139 +1161,41 @@ class ChatController {
         }
     }
 
-    // Create ad inquiry chat
-    public function createAdInquiryChat() {
+    // Mark all unread messages as read for current user
+    public function markAllAsRead() {
         try {
             $user = $this->authMiddleware->authenticate();
-            $input = json_decode(file_get_contents('php://input'), true);
+            $userId = (int)$user['id'];
 
-            $adId = isset($input['adId']) ? (int)$input['adId'] : 0;
-            $message = trim($input['message'] ?? '');
-            $sellerId = isset($input['sellerId']) ? (int)$input['sellerId'] : 0;
-            $sellerName = trim($input['sellerName'] ?? '');
-            $buyerId = (int)$user['id'];
-
-            if (!$adId && !$sellerId) {
-                http_response_code(400);
-                echo json_encode(['message' => 'Ad ID or seller ID is required']);
-                return;
-            }
-
-            $actualSellerId = $sellerId;
-            $actualSellerName = $sellerName ?: 'Unknown Seller';
-
-            if ($adId) {
-                $stmt = $this->db->prepare("
-                    SELECT a.*, u.id as seller_id, u.username as seller_username
-                    FROM ads a
-                    INNER JOIN users u ON a.userId = u.id
-                    WHERE a.id = ?
-                    LIMIT 1
-                ");
-                $stmt->execute([$adId]);
-                $ad = $stmt->fetch(PDO::FETCH_ASSOC);
-
-                if (!$ad) {
-                    http_response_code(404);
-                    echo json_encode(['message' => 'Ad not found']);
-                    return;
-                }
-
-                $actualSellerId = (int)$ad['seller_id'];
-                $actualSellerName = $ad['seller_username'] ?: $actualSellerName;
-            } else {
-                $stmt = $this->db->prepare("
-                    SELECT id, username
-                    FROM users
-                    WHERE id = ?
-                    LIMIT 1
-                ");
-                $stmt->execute([$actualSellerId]);
-                $seller = $stmt->fetch(PDO::FETCH_ASSOC);
-
-                if (!$seller) {
-                    http_response_code(404);
-                    echo json_encode(['message' => 'Seller not found']);
-                    return;
-                }
-
-                $actualSellerName = $seller['username'] ?: $actualSellerName;
-            }
-
-            if ($actualSellerId === $buyerId) {
-                http_response_code(400);
-                echo json_encode(['message' => 'Cannot create chat with yourself']);
-                return;
-            }
-
-            // Requirement 17: one active chat per buyer/seller pair. Ignore ad/product ID here.
+            // CRITICAL FIX: Only mark INCOMING messages as read (senderId != userId).
+            // Never mark the user's own outgoing messages as isRead=1 here, because
+            // that would cause false double-ticks on the sender's side before recipients open them.
             $stmt = $this->db->prepare("
-                SELECT c.*
-                FROM chats c
-                INNER JOIN chat_participants cp1 ON c.id = cp1.chatId
-                INNER JOIN chat_participants cp2 ON c.id = cp2.chatId
-                WHERE c.type IN ('ad_inquiry', 'direct')
-                AND cp1.userId = ? AND cp1.isActive = 1
-                AND cp2.userId = ? AND cp2.isActive = 1
-                AND cp1.chatId = cp2.chatId
-                ORDER BY c.updatedAt DESC, c.createdAt DESC
-                LIMIT 1
+                UPDATE messages 
+                SET isRead = 1, status = 'read', readAt = NOW(), updatedAt = NOW()
+                WHERE chatId IN (
+                    SELECT cp.chatId FROM chat_participants cp WHERE cp.userId = ? AND cp.isActive = 1
+                ) AND senderId != ? AND (senderId IS NOT NULL AND senderId != 0) AND isRead = 0
             ");
-            $stmt->execute([$buyerId, $actualSellerId]);
-            $existingChat = $stmt->fetch(PDO::FETCH_ASSOC);
+            $stmt->execute([$userId, $userId]);
+            $affected = $stmt->rowCount();
 
-            if ($existingChat) {
-                $chatId = (int)$existingChat['id'];
-                error_log("Using existing chat $chatId for buyer $buyerId and seller $actualSellerId");
-            } else {
-                $stmt = $this->db->prepare("
-                    INSERT INTO chats (type, adId, name, createdAt, updatedAt)
-                    VALUES ('ad_inquiry', ?, ?, NOW(), NOW())
-                ");
-                $stmt->execute([$adId ?: null, "Chat with $actualSellerName"]);
-                $chatId = (int)$this->db->lastInsertId();
+            try {
+                $this->db->prepare("
+                    UPDATE notifications
+                    SET isRead = 1
+                    WHERE userId = ? AND type = 'message' AND isRead = 0
+                ")->execute([$userId]);
+            } catch (Throwable $ignore) {}
 
-                $stmt = $this->db->prepare("
-                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
-                    VALUES (?, ?, ?, NOW(), 1)
-                ");
-                $stmt->execute([$chatId, $actualSellerId, 'admin']);
-                $stmt->execute([$chatId, $buyerId, 'member']);
-
-                error_log("Created new single seller chat $chatId for buyer $buyerId and seller $actualSellerId");
-            }
-
-            // Requirement 14 stays intact: no automatic message unless explicitly provided.
-            if (!empty($message)) {
-                $stmt = $this->db->prepare("
-                    INSERT INTO messages (content, senderId, chatId, messageType, createdAt, updatedAt)
-                    VALUES (?, ?, ?, 'text', NOW(), NOW())
-                ");
-                $stmt->execute([$message, $buyerId, $chatId]);
-
-                $stmt = $this->db->prepare("
-                    UPDATE chats SET lastMessage = ?, lastMessageTime = NOW(), updatedAt = NOW()
-                    WHERE id = ?
-                ");
-                $stmt->execute([$message, $chatId]);
-            } else {
-                $stmt = $this->db->prepare("
-                    UPDATE chats SET updatedAt = NOW()
-                    WHERE id = ?
-                ");
-                $stmt->execute([$chatId]);
-            }
-
-            $result = $this->buildChatResponse($chatId, $buyerId, $actualSellerId);
-
-            http_response_code($existingChat ? 200 : 201);
-            echo json_encode($result);
+            http_response_code(200);
+            echo json_encode(['success' => true, 'markedRead' => $affected]);
         } catch (Exception $e) {
-            error_log('Error creating ad inquiry chat: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['message' => 'Server error', 'error' => $e->getMessage()]);
         }
     }
+
 
     // Admin find deal chat between buyer and seller
     public function adminFindDealChat() {
@@ -925,8 +1334,8 @@ class ChatController {
             $staffNameVal = $sendAsStaff ? $effectiveDisplayName : null;
 
             $stmt = $this->db->prepare("
-                INSERT INTO messages (content, senderId, chatId, messageType, isStaffMessage, staffDisplayName, createdAt, updatedAt)
-                VALUES (?, ?, ?, 'text', ?, ?, NOW(), NOW())
+                INSERT INTO messages (content, senderId, chatId, messageType, isStaffMessage, staffDisplayName, isRead, status, createdAt, updatedAt)
+                VALUES (?, ?, ?, 'text', ?, ?, 0, 'sent', NOW(), NOW())
             ");
             $stmt->execute([$content, (int)$currentUser['id'], $chatId, $isStaffVal, $staffNameVal]);
             $messageId = $this->db->lastInsertId();
@@ -937,8 +1346,54 @@ class ChatController {
             ");
             $stmt->execute([$content, $chatId]);
 
+            // Admin replies should restore chats hidden by inactive participant rows.
+            $this->db->prepare("
+                UPDATE chat_participants SET isActive = 1 WHERE chatId = ?
+            ")->execute([$chatId]);
+
+            try {
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    SELECT DISTINCT m.chatId, m.senderId, 'member', NOW(), 1
+                    FROM messages m
+                    INNER JOIN users u ON u.id = m.senderId
+                    WHERE m.chatId = ? AND m.senderId > 0
+                      AND COALESCE(u.isAdmin, 0) = 0
+                      AND COALESCE(u.role, 'user') NOT IN ('admin', 'manager', 'agent', 'viewer')
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$chatId]);
+            } catch (Throwable $ignore) {}
+
+            try {
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    SELECT d.chat_id, d.buyer_id, 'member', NOW(), 1
+                    FROM deals d
+                    WHERE d.chat_id = ? AND d.buyer_id IS NOT NULL AND d.buyer_id > 0
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$chatId]);
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    SELECT d.chat_id, d.seller_id, 'member', NOW(), 1
+                    FROM deals d
+                    WHERE d.chat_id = ? AND d.seller_id IS NOT NULL AND d.seller_id > 0
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$chatId]);
+            } catch (Throwable $ignore) {}
+
+            try {
+                $this->db->prepare("
+                    INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+                    SELECT c.id, a.userId, 'member', NOW(), 1
+                    FROM chats c
+                    INNER JOIN ads a ON c.adId = a.id
+                    WHERE c.id = ? AND a.userId > 0
+                    ON DUPLICATE KEY UPDATE isActive = 1
+                ")->execute([$chatId]);
+            } catch (Throwable $ignore) {}
+
             $stmt = $this->db->prepare("
-                SELECT m.*, u.username as sender_username, u.displayName as sender_displayName
+                SELECT m.*, u.username as sender_username, u.displayName as sender_displayName, u.profilePicture as sender_profilePicture
                 FROM messages m
                 LEFT JOIN users u ON m.senderId = u.id
                 WHERE m.id = ?
@@ -953,12 +1408,62 @@ class ChatController {
             $result = [
                 'id' => (int)$message['id'],
                 'content' => $message['content'],
-                'senderId' => (int)$currentUser['id'],
+                'senderId' => (string)$currentUser['id'],
+                'chatId' => (int)$chatId,
+                'messageType' => 'text',
                 'sender' => $senderName,
                 'isStaffMessage' => (bool)$isStaffVal,
                 'staffDisplayName' => $sendAsStaff ? $staffNameVal : null,
+                'senderProfilePicture' => $message['sender_profilePicture'] ?? null,
+                'profilePicture' => $message['sender_profilePicture'] ?? null,
+                'status' => 'sent',
+                'createdAt' => $message['createdAt'],
+                'updatedAt' => $message['updatedAt'],
                 'timestamp' => $message['createdAt']
             ];
+
+            // Notify chat participants about admin message
+            try {
+                $recipientStmt = $this->db->prepare("
+                    SELECT u.id, u.username, u.email
+                    FROM chat_participants cp
+                    INNER JOIN users u ON cp.userId = u.id
+                    WHERE cp.chatId = ? AND cp.userId != ? AND cp.isActive = 1
+                ");
+                $recipientStmt->execute([$chatId, (int)$currentUser['id']]);
+                $recipients = $recipientStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $preview = mb_strlen($content) > 60 ? mb_substr($content, 0, 60) . '...' : $content;
+                $notifStmt = $this->db->prepare("
+                    INSERT INTO notifications (userId, type, title, message, link, isRead, createdAt)
+                    VALUES (?, 'admin_message', ?, ?, ?, 0, NOW())
+                ");
+                $emailService = new EmailService();
+
+                foreach ($recipients as $recipient) {
+                    $notifStmt->execute([
+                        (int)$recipient['id'],
+                        'Support message from ' . $senderName,
+                        $preview,
+                        '/chat?chatId=' . $chatId
+                    ]);
+
+                    if (!empty($recipient['email'])) {
+                        try {
+                            $emailService->sendAdminMessageEmail(
+                                $recipient['email'],
+                                $recipient['username'],
+                                $senderName,
+                                $preview
+                            );
+                        } catch (Throwable $emEx) {
+                            error_log('Failed to send admin message email: ' . $emEx->getMessage());
+                        }
+                    }
+                }
+            } catch (Throwable $ne) {
+                error_log('Admin notification error: ' . $ne->getMessage());
+            }
 
             http_response_code(201);
             echo json_encode($result);
@@ -1045,7 +1550,7 @@ class ChatController {
             $currentUserId = (int)$user['id'];
 
             $stmt = $this->db->prepare("
-                SELECT id, username
+                SELECT id, username, profilePicture
                 FROM users
                 WHERE isAdmin = 1 AND id <> ?
                 ORDER BY id ASC
@@ -1085,7 +1590,8 @@ class ChatController {
                     'otherParticipants' => [[
                         'id' => (string)$agentId,
                         'username' => 'Website Agent',
-                        'email' => ''
+                        'email' => '',
+                        'profilePicture' => $agent['profilePicture'] ?? null
                     ]]
                 ]);
                 return;
@@ -1113,7 +1619,8 @@ class ChatController {
                 'otherParticipants' => [[
                     'id' => (string)$agentId,
                     'username' => 'Website Agent',
-                    'email' => ''
+                    'email' => '',
+                    'profilePicture' => $agent['profilePicture'] ?? null
                 ]]
             ]);
         } catch (Exception $e) {
@@ -1230,7 +1737,7 @@ class ChatController {
         $chatData = $stmt->fetch(PDO::FETCH_ASSOC);
 
         $stmt = $this->db->prepare("
-            SELECT cp.*, u.id as user_id, u.username, u.email
+            SELECT cp.*, u.id as user_id, u.username, u.email, u.profilePicture
             FROM chat_participants cp
             INNER JOIN users u ON cp.userId = u.id
             WHERE cp.chatId = ? AND cp.isActive = 1
@@ -1247,7 +1754,7 @@ class ChatController {
         }
 
         $stmt = $this->db->prepare("
-            SELECT m.*, sender.id as sender_id, sender.username as sender_username
+            SELECT m.*, sender.id as sender_id, sender.username as sender_username, sender.profilePicture as sender_profilePicture
             FROM messages m
             INNER JOIN users sender ON m.senderId = sender.id
             WHERE m.chatId = ?
@@ -1275,7 +1782,8 @@ class ChatController {
                     'user' => [
                         'id' => (int)$p['user_id'],
                         'username' => $p['username'],
-                        'email' => $p['email']
+                        'email' => $p['email'],
+                        'profilePicture' => $p['profilePicture'] ?? null
                     ]
                 ];
             }, $participants),
@@ -1283,7 +1791,8 @@ class ChatController {
                 return [
                     'id' => (int)$p['user_id'],
                     'username' => $p['username'],
-                    'email' => $p['email']
+                    'email' => $p['email'],
+                    'profilePicture' => $p['profilePicture'] ?? null
                 ];
             }, $otherParticipants),
             'ad' => $chatData['ad_id'] ? [
@@ -1298,7 +1807,8 @@ class ChatController {
                 'createdAt' => $latestMessage['createdAt'],
                 'sender' => [
                     'id' => (int)$latestMessage['sender_id'],
-                    'username' => $latestMessage['sender_username']
+                    'username' => $latestMessage['sender_username'],
+                    'profilePicture' => $latestMessage['sender_profilePicture'] ?? null
                 ]
             ]] : []
         ];
@@ -1314,18 +1824,34 @@ class ChatController {
             'deals' => []
         ];
 
-        try {
-            $tableCheck = $this->db->query("SHOW TABLES LIKE 'deals'");
+        $cacheKey = "{$currentUserId}_{$otherUserId}";
+        if (isset(self::$dealsSummaryCache[$cacheKey])) {
+            return self::$dealsSummaryCache[$cacheKey];
+        }
 
-            if (!$tableCheck || !$tableCheck->fetch(PDO::FETCH_NUM)) {
+        try {
+            // Check table existence once per PHP execution
+            if (!self::$dealsTableChecked) {
+                self::$dealsTableChecked = true;
+                $tableCheck = $this->db->query("SHOW TABLES LIKE 'deals'");
+                if ($tableCheck && $tableCheck->fetch(PDO::FETCH_NUM)) {
+                    self::$dealsTableExists = true;
+                    $columnStmt = $this->db->query("SHOW COLUMNS FROM deals");
+                    $columnsRaw = $columnStmt ? $columnStmt->fetchAll(PDO::FETCH_ASSOC) : [];
+                    self::$dealsColumns = array_map(function($column) {
+                        return $column['Field'];
+                    }, $columnsRaw);
+                } else {
+                    self::$dealsTableExists = false;
+                }
+            }
+
+            if (!self::$dealsTableExists || empty(self::$dealsColumns)) {
+                self::$dealsSummaryCache[$cacheKey] = $emptySummary;
                 return $emptySummary;
             }
 
-            $columnStmt = $this->db->query("SHOW COLUMNS FROM deals");
-            $columnsRaw = $columnStmt->fetchAll(PDO::FETCH_ASSOC);
-            $columns = array_map(function($column) {
-                return $column['Field'];
-            }, $columnsRaw);
+            $columns = self::$dealsColumns;
 
             $pickColumn = function($possibleColumns) use ($columns) {
                 foreach ($possibleColumns as $column) {
@@ -1345,6 +1871,7 @@ class ChatController {
             $createdCol = $pickColumn(['created_at', 'createdAt', 'created']);
 
             if (!$buyerCol || !$sellerCol) {
+                self::$dealsSummaryCache[$cacheKey] = $emptySummary;
                 return $emptySummary;
             }
 
@@ -1389,7 +1916,7 @@ class ChatController {
                 ];
             }, $deals));
 
-            return [
+            $summary = [
                 'totalDeals' => count($deals),
                 'channels' => array_values(array_map(function($deal) {
                     return $deal['channel_title'] ?: 'Deal';
@@ -1405,6 +1932,9 @@ class ChatController {
                 })),
                 'deals' => $dealItems
             ];
+
+            self::$dealsSummaryCache[$cacheKey] = $summary;
+            return $summary;
         } catch (Exception $e) {
             error_log('Deal summary error: ' . $e->getMessage());
             return $emptySummary;

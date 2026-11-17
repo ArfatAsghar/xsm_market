@@ -332,7 +332,7 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
           channelTitle={selectedAd.title}
           sellerId={userId}
           platform={selectedAd.platform as any}
-          onNavigateToChat={() => navigate('/chat')}
+          onNavigateToChat={(targetId) => targetId ? navigate(`/chat?chatId=${targetId}`) : navigate('/chat')}
         />
       )}
     </>

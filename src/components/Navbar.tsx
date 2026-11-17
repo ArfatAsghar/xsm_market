@@ -4,7 +4,7 @@ import {
   FaStore, FaInbox, FaTag, FaBell, FaUser, FaSignOutAlt,
   FaFileAlt, FaCrown, FaTachometerAlt, FaBars, FaTimes,
   FaChevronDown, FaEnvelope, FaCheck, FaBan, FaCheckCircle,
-  FaSun, FaMoon, FaGift
+  FaSun, FaMoon, FaGift, FaShieldAlt
 } from 'react-icons/fa';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
@@ -434,6 +434,7 @@ const Navbar: React.FC = () => {
                       <FaGift className="text-amber-400 text-sm flex-shrink-0" />
                       <span className="text-sm">Refer a Friend</span>
                     </DropdownMenuItem>
+
 
 
                     {isUserAdmin && (

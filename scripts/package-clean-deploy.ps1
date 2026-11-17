@@ -41,11 +41,20 @@ Get-ChildItem -Path "$root\php-backend" -Recurse | Where-Object {
 }
 
 # 3. Deploy ROOT .htaccess (React SPA + /api/* routing)
-if (Test-Path "$root\php-backend\.htaccess") {
-    Copy-Item "$root\php-backend\.htaccess" "$pkg\.htaccess"
-    Write-Host "Root .htaccess deployed OK"
+if (Test-Path "$root\public\.htaccess") {
+    Copy-Item "$root\public\.htaccess" "$pkg\.htaccess" -Force
+    Write-Host "Root .htaccess deployed OK (from public/.htaccess)"
+} elseif (Test-Path "$root\dist\.htaccess") {
+    Copy-Item "$root\dist\.htaccess" "$pkg\.htaccess" -Force
+    Write-Host "Root .htaccess deployed OK (from dist/.htaccess)"
 } else {
-    Write-Host "WARNING: php-backend\.htaccess not found!"
+    Write-Host "WARNING: Root .htaccess not found!"
+}
+
+# 4. Deploy API .htaccess (protect .env and route inside api/)
+if (Test-Path "$root\php-backend\.htaccess") {
+    Copy-Item "$root\php-backend\.htaccess" "$apiDir\.htaccess" -Force
+    Write-Host "API .htaccess deployed OK"
 }
 
 # 5. Ensure uploads directory exists

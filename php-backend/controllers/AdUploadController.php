@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../utils/Response.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../utils/UploadHelper.php';
 
 class AdUploadController {
     private $db;
@@ -123,16 +124,15 @@ class AdUploadController {
                 // Generate unique filename
                 $fileExtension = pathinfo($files['name'][$i], PATHINFO_EXTENSION);
                 $fileName = uniqid() . '_' . time() . '_' . $i . '.' . $fileExtension;
-                $filePath = $uploadDir . $fileName;
                 
-                // Move uploaded file to permanent location
-                if (!move_uploaded_file($files['tmp_name'][$i], $filePath)) {
-                    error_log("Failed to move uploaded file from {$files['tmp_name'][$i]} to $filePath");
+                // Move uploaded file to permanent locations (dual redundant)
+                if (!UploadHelper::saveUploadedFile($files['tmp_name'][$i], 'ads', $fileName)) {
+                    error_log("Failed to move uploaded file from {$files['tmp_name'][$i]} via UploadHelper");
                     Response::error("Failed to save file " . ($i + 1), 500);
                     return;
                 }
                 
-                error_log("Successfully moved file to: $filePath");
+                error_log("Successfully saved file to redundant storage: $fileName");
                 
                 // Generate URL for the file using correct domain
                 // Files are stored in /api/uploads/ads/ on the server

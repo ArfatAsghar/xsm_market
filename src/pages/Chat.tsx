@@ -258,6 +258,78 @@ const ChatImageBubble: React.FC<ChatImageBubbleProps> = ({
   );
 };
 
+// Shimmer Skeleton for Inbox Conversation List
+const InboxSkeleton: React.FC = () => {
+  return (
+    <div className="divide-y divide-white/5">
+      {[1, 2, 3, 4, 5, 6].map((idx) => (
+        <div key={idx} className="p-4 flex items-center gap-3 animate-pulse">
+          {/* Avatar circle */}
+          <div className="w-10 h-10 rounded-full bg-neutral-200 dark:bg-neutral-800 shrink-0" />
+          
+          {/* Texts */}
+          <div className="flex-1 min-w-0 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <div 
+                className="h-3.5 bg-neutral-200 dark:bg-neutral-800 rounded-md" 
+                style={{ width: `${55 + (idx % 3) * 15}%`, maxWidth: '140px' }} 
+              />
+              <div className="h-2.5 w-10 bg-neutral-200 dark:bg-neutral-800 rounded-md shrink-0" />
+            </div>
+            <div 
+              className="h-3 bg-neutral-200/80 dark:bg-neutral-800/80 rounded-md" 
+              style={{ width: `${65 + (idx % 4) * 8}%`, maxWidth: '190px' }} 
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// Shimmer Skeleton for Messages View
+const MessagesSkeleton: React.FC = () => {
+  return (
+    <div className="flex-1 p-4 space-y-4 overflow-hidden animate-pulse">
+      {/* 1. Incoming */}
+      <div className="flex items-start gap-2.5 max-w-[75%]">
+        <div className="w-7 h-7 rounded-full bg-neutral-200 dark:bg-neutral-800 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <div className="h-10 bg-neutral-200 dark:bg-neutral-800 rounded-2xl rounded-tl-sm w-48" />
+          <div className="h-2 w-10 bg-neutral-200 dark:bg-neutral-800 rounded ml-1" />
+        </div>
+      </div>
+
+      {/* 2. Outgoing */}
+      <div className="flex items-end justify-end gap-2.5 ml-auto max-w-[75%]">
+        <div className="space-y-1 flex flex-col items-end">
+          <div className="h-14 bg-amber-500/20 dark:bg-amber-500/15 rounded-2xl rounded-tr-sm w-64 border border-amber-500/20" />
+          <div className="h-2 w-12 bg-neutral-200 dark:bg-neutral-800 rounded mr-1" />
+        </div>
+        <div className="w-7 h-7 rounded-full bg-amber-500/20 shrink-0" />
+      </div>
+
+      {/* 3. Incoming */}
+      <div className="flex items-start gap-2.5 max-w-[75%]">
+        <div className="w-7 h-7 rounded-full bg-neutral-200 dark:bg-neutral-800 shrink-0 mt-0.5" />
+        <div className="space-y-1">
+          <div className="h-16 bg-neutral-200 dark:bg-neutral-800 rounded-2xl rounded-tl-sm w-60" />
+          <div className="h-2 w-14 bg-neutral-200 dark:bg-neutral-800 rounded ml-1" />
+        </div>
+      </div>
+
+      {/* 4. Outgoing */}
+      <div className="flex items-end justify-end gap-2.5 ml-auto max-w-[75%]">
+        <div className="space-y-1 flex flex-col items-end">
+          <div className="h-10 bg-amber-500/20 dark:bg-amber-500/15 rounded-2xl rounded-tr-sm w-44 border border-amber-500/20" />
+          <div className="h-2 w-10 bg-neutral-200 dark:bg-neutral-800 rounded mr-1" />
+        </div>
+        <div className="w-7 h-7 rounded-full bg-amber-500/20 shrink-0" />
+      </div>
+    </div>
+  );
+};
+
 const Chat: React.FC = () => {
   const { user, isLoggedIn } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -274,6 +346,8 @@ const Chat: React.FC = () => {
   const [announcementsUnread, setAnnouncementsUnread] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const isInitialLoadRef = useRef(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [lastMessageId, setLastMessageId] = useState<number | null>(null);
@@ -287,6 +361,8 @@ const Chat: React.FC = () => {
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSeenAnnouncementIdRef = useRef<number>(parseInt(localStorage.getItem('xsm_lastSeenAnnouncementId') || '0', 10));
+  // Capture the chatId URL param immediately at mount so we can select it after chats load
+  const pendingChatIdRef = useRef<string | null>(new URLSearchParams(window.location.search).get('chatId'));
   // Deal card refs: dealId / txnId / channelTitle -> DOM element for scroll-to-highlight
   const dealCardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [highlightedDealId, setHighlightedDealId] = useState<string | number | null>(null);
@@ -641,13 +717,25 @@ const Chat: React.FC = () => {
     }
   }, [isLoggedIn, user]);
 
-  // Auto-scroll to bottom only when chat is first selected or manually sending messages
+  // Auto-scroll to bottom whenever a chat is opened so the latest message is always shown
   useEffect(() => {
-    if (selectedChat) {
-      // Scroll to bottom when a chat is first selected
-      setTimeout(scrollToBottom, 100);
+    isInitialLoadRef.current = true;
+  }, [selectedChat?.id]);
+
+  useEffect(() => {
+    if (selectedChat && messages.length > 0 && isInitialLoadRef.current) {
+      scrollToBottom('auto');
+      const t1 = setTimeout(() => scrollToBottom('auto'), 40);
+      const t2 = setTimeout(() => scrollToBottom('auto'), 120);
+      const t3 = setTimeout(() => scrollToBottom('auto'), 260);
+      isInitialLoadRef.current = false;
+      return () => {
+        clearTimeout(t1);
+        clearTimeout(t2);
+        clearTimeout(t3);
+      };
     }
-  }, [selectedChat]);
+  }, [selectedChat?.id, messages]);
 
   // Mark announcements as read when user opens them
   useEffect(() => {
@@ -736,8 +824,51 @@ const Chat: React.FC = () => {
         };
       });
 
-      setChats(normalizedChats);
-      // Note: filteredChats is updated by the useEffect that sorts unread chats to top
+      setChats(prev => {
+        if (selectedChat && !normalizedChats.some(c => c.id === selectedChat.id)) {
+          return [selectedChat, ...normalizedChats];
+        }
+        return normalizedChats;
+      });
+
+      // Resolve any pending chatId from the URL param (set at mount time)
+      if (pendingChatIdRef.current) {
+        const pendingId = pendingChatIdRef.current;
+        pendingChatIdRef.current = null; // consume it so we only do this once
+        const targetChat = normalizedChats.find((chat: ChatData) => chat.id.toString() === pendingId);
+        if (targetChat) {
+          setSelectedChat(targetChat);
+          setIsAnnouncementsSelected(false);
+          fetchMessages(targetChat.id);
+          setSearchParams(new URLSearchParams(), { replace: true });
+        } else {
+          // Chat not in list yet — fetch it directly from API
+          try {
+            const chatRes = await fetch(`${API_URL}/chat/chats/${pendingId}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (chatRes.ok) {
+              const chatData = await chatRes.json();
+              const newChat: ChatData = {
+                ...chatData,
+                otherParticipants: Array.isArray(chatData.otherParticipants) ? chatData.otherParticipants : [],
+                unread_count: 0,
+                unreadCount: 0,
+              };
+              setChats(prev => {
+                const exists = prev.find(c => c.id === newChat.id);
+                return exists ? prev : [newChat, ...prev];
+              });
+              setSelectedChat(newChat);
+              setIsAnnouncementsSelected(false);
+              fetchMessages(newChat.id);
+              setSearchParams(new URLSearchParams(), { replace: true });
+            }
+          } catch (e) {
+            console.error('Failed to fetch chat by ID:', e);
+          }
+        }
+      }
     } catch (error) {
       console.error('Error fetching chats:', error);
     } finally {
@@ -747,25 +878,52 @@ const Chat: React.FC = () => {
     }
   };
 
-  // Handle URL parameters to auto-select chat
+  // Handle URL chatId param changes AFTER initial load (e.g. navigating from another page
+  // while already on /chat). The initial mount case is handled inside fetchChats via pendingChatIdRef.
   useEffect(() => {
     const chatId = searchParams.get('chatId');
+    if (!chatId) return;
 
-    if (chatId && chats.length > 0) {
-      const targetChat = chats.find(chat => chat.id.toString() === chatId);
+    // Only handle if chats are already loaded (avoids conflicting with pendingChatIdRef)
+    if (chats.length === 0) return;
 
-      if (targetChat) {
-        setSelectedChat(targetChat);
-        fetchMessages(targetChat.id);
-
-        // Clear the URL parameter without adding another chat page to browser history
-        setSearchParams(new URLSearchParams(), { replace: true });
-      }
+    const targetChat = chats.find(chat => chat.id.toString() === chatId);
+    if (targetChat) {
+      setSelectedChat(targetChat);
+      setIsAnnouncementsSelected(false);
+      fetchMessages(targetChat.id);
+      setSearchParams(new URLSearchParams(), { replace: true });
+    } else {
+      // Not in list — fetch directly
+      const token = localStorage.getItem('token');
+      fetch(`${API_URL}/chat/chats/${chatId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(chatData => {
+          if (!chatData) return;
+          const newChat: ChatData = {
+            ...chatData,
+            otherParticipants: Array.isArray(chatData.otherParticipants) ? chatData.otherParticipants : [],
+            unread_count: 0,
+            unreadCount: 0,
+          };
+          setChats(prev => {
+            const exists = prev.find(c => c.id === newChat.id);
+            return exists ? prev : [newChat, ...prev];
+          });
+          setSelectedChat(newChat);
+          setIsAnnouncementsSelected(false);
+          fetchMessages(newChat.id);
+          setSearchParams(new URLSearchParams(), { replace: true });
+        })
+        .catch(e => console.error('Failed to fetch chat by ID:', e));
     }
-  }, [chats, searchParams, setSearchParams]);
+  }, [searchParams]);
 
   const fetchMessages = async (chatId: number) => {
     try {
+      setMessagesLoading(true);
       const token = localStorage.getItem('token');
       const response = await fetch(`${API_URL}/chat/chats/${chatId}/messages`, {
         headers: {
@@ -779,6 +937,13 @@ const Chat: React.FC = () => {
           const latestMessage = data[data.length - 1];
           setLastMessageId(latestMessage.id);
         }
+        // Force immediate and post-render scroll to the latest message at bottom
+        requestAnimationFrame(() => {
+          scrollToBottom('auto');
+        });
+        setTimeout(() => scrollToBottom('auto'), 40);
+        setTimeout(() => scrollToBottom('auto'), 120);
+        setTimeout(() => scrollToBottom('auto'), 280);
       } else {
         console.warn('Failed to load chat messages:', data);
         setMessages([]);
@@ -797,6 +962,8 @@ const Chat: React.FC = () => {
     } catch (error) {
       console.error('Error fetching messages:', error);
       setMessages([]);
+    } finally {
+      setMessagesLoading(false);
     }
   };
 
@@ -955,10 +1122,13 @@ const Chat: React.FC = () => {
     ).sort((a, b) => new Date(b.lastMessageTime || 0).getTime() - new Date(a.lastMessageTime || 0).getTime()));
   };
 
-  const scrollToBottom = () => {
+  const scrollToBottom = (behavior: ScrollBehavior = 'auto') => {
     if (messagesContainerRef.current) {
       // Scroll the messages container to bottom, not the entire page
       messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+    }
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior, block: 'end' });
     }
   };
 
@@ -1109,6 +1279,23 @@ const Chat: React.FC = () => {
     return cleaned;
   };
 
+  const formatSidebarMessage = (msg?: string | null) => {
+    if (!msg) return 'No messages yet';
+    const trimmed = msg.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed.deal_id || parsed.channel_title) {
+          const id = parsed.transaction_id || `Deal #${parsed.deal_id}`;
+          const title = parsed.channel_title || 'Listing';
+          const price = parsed.channel_price ? ` ($${parsed.channel_price})` : '';
+          return `🤝 ${id}: ${title}${price}`;
+        }
+      } catch {}
+    }
+    return msg;
+  };
+
   const getChatDisplayName = (chat?: ChatData | null) => {
     if (!chat) {
       return 'Unknown';
@@ -1118,37 +1305,29 @@ const Chat: React.FC = () => {
       return 'Website Agent';
     }
 
-    const otherParticipants = Array.isArray(chat.otherParticipants)
+    const otherParticipants = Array.isArray(chat.otherParticipants) && chat.otherParticipants.length > 0
       ? chat.otherParticipants
+      : Array.isArray(chat.participants)
+      ? chat.participants
+          .filter(p => String(p.userId || p.user?.id) !== String(user?.id))
+          .map(p => p.user || { id: p.userId, username: 'User' })
       : [];
 
-    // For ad inquiries, show seller name instead of ad title
-    if (chat.type === 'ad_inquiry') {
-      if (otherParticipants.length > 0) {
-        return otherParticipants[0].username;
-      }
-
-      if (chat.name) {
-        return chat.name.replace(/^Chat with\s+/i, '').trim();
-      }
-
-      // Fallback to ad title if no participants
-      if (chat.ad) {
-        return `Inquiry: ${chat.ad.title}`;
-      }
-    }
-
-    // For direct chats, show the other participant's name
     if (otherParticipants.length > 0) {
-      return otherParticipants[0].username;
+      const other = otherParticipants[0];
+      const name = other.username || (other as any).name || (other as any).fullName || other.email;
+      if (name) return name;
     }
 
-    // Use chat name if available
     if (chat.name) {
       return chat.name.replace(/^Chat with\s+/i, '').trim();
     }
 
-    return 'Unknown';
+    if (chat.ad?.title) {
+      return `Inquiry: ${chat.ad.title}`;
+    }
+
+    return 'Conversation';
   };
 
   const getProfileUsernameFromChat = (chat?: ChatData | null) => {
@@ -1359,7 +1538,7 @@ const Chat: React.FC = () => {
                 </div>
 
                 {loading && chats.length === 0 ? (
-                  <div className="p-4 text-center text-white">Loading chats...</div>
+                  <InboxSkeleton />
                 ) : filteredChats.length === 0 ? (
                   <div className="p-4 text-center text-gray-400">
                     <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
@@ -1382,8 +1561,13 @@ const Chat: React.FC = () => {
                         <div
                           key={chat.id}
                           onClick={() => {
-                            setSelectedChat(chat);
-                            setIsAnnouncementsSelected(false);
+                            if (selectedChat?.id !== chat.id) {
+                              setSelectedChat(chat);
+                              setIsAnnouncementsSelected(false);
+                              setMessages([]);
+                              setMessagesLoading(true);
+                              isInitialLoadRef.current = true;
+                            }
                           }}
                           className={`p-4 border-b cursor-pointer transition-all relative ${
                             selectedChat?.id === chat.id && !isAnnouncementsSelected
@@ -1440,7 +1624,7 @@ const Chat: React.FC = () => {
                             </div>
                           </div>
                           <p className={`text-sm truncate ${hasUnread ? 'text-foreground font-semibold' : 'text-muted-foreground'}`}>
-                            {chat.lastMessage || 'No messages yet'}
+                            {formatSidebarMessage(chat.lastMessage)}
                           </p>
                         </div>
                       );
@@ -1604,7 +1788,9 @@ const Chat: React.FC = () => {
                     className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar messages-scrollbar"
                     style={{ background: 'var(--xsm-bg)' }}
                   >
-                    {messages.length === 0 ? (
+                    {messagesLoading && messages.length === 0 ? (
+                      <MessagesSkeleton />
+                    ) : messages.length === 0 ? (
                       <div className="text-center text-gray-400 py-8">
                         <MessageCircle className="w-12 h-12 mx-auto mb-2 opacity-50" />
                         <p>No messages yet. Start the conversation!</p>

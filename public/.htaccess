@@ -1,3 +1,5 @@
+DirectoryIndex index.html index.php
+
 <IfModule mod_rewrite.c>
   Options -MultiViews
   RewriteEngine On
@@ -7,28 +9,35 @@
   RewriteCond %{REQUEST_FILENAME} -f
   RewriteRule ^ - [L]
 
-  # 2. Direct serve uploads if file exists (either via /api/uploads/ or /uploads/)
+  # 2. Upload Direct Static Serving (check both root uploads and api/uploads)
+  # If /uploads/... matches a real file in api/uploads, serve it
   RewriteCond %{DOCUMENT_ROOT}/api/uploads/$1 -f
-  RewriteRule ^(?:api/)?uploads/(.*)$ api/uploads/$1 [L]
-  RewriteCond %{DOCUMENT_ROOT}/php-backend/uploads/$1 -f
-  RewriteRule ^(?:api/)?uploads/(.*)$ php-backend/uploads/$1 [L]
+  RewriteRule ^uploads/(.*)$ api/uploads/$1 [L]
 
-  # 3. Route all /api and /api/* requests directly to api/index.php (Hostinger) or php-backend/index.php
-  RewriteCond %{DOCUMENT_ROOT}/api/index.php -f
+  # If /api/uploads/... matches a real file in api/uploads, serve it
+  RewriteCond %{DOCUMENT_ROOT}/api/uploads/$1 -f
+  RewriteRule ^api/uploads/(.*)$ api/uploads/$1 [L]
+
+  # If /api/uploads/... matches a real file in root uploads, serve it
+  RewriteCond %{DOCUMENT_ROOT}/uploads/$1 -f
+  RewriteRule ^api/uploads/(.*)$ uploads/$1 [L]
+
+  # If /uploads/... matches a real file in root uploads, serve it
+  RewriteCond %{DOCUMENT_ROOT}/uploads/$1 -f
+  RewriteRule ^uploads/(.*)$ uploads/$1 [L]
+
+  # Upload fallbacks to PHP index.php for streaming/self-healing
+  RewriteRule ^(?:api/)?uploads/(.*)$ api/index.php [QSA,L]
+
+  # 3. Route all /api and /api/* requests directly to api/index.php
   RewriteRule ^api(?:/.*)?$ api/index.php [QSA,L]
-  RewriteRule ^api(?:/.*)?$ php-backend/index.php [QSA,L]
 
-  # 4. Route /uploads/ that don't match a static file to index.php
-  RewriteCond %{DOCUMENT_ROOT}/api/index.php -f
-  RewriteRule ^uploads/(.*)$ api/index.php [QSA,L]
-  RewriteRule ^uploads/(.*)$ php-backend/index.php [QSA,L]
-
-  # 5. Serve existing directories directly (except api)
+  # 4. Serve existing directories directly (except api)
   RewriteCond %{REQUEST_FILENAME} -d
   RewriteCond %{REQUEST_URI} !^/api
   RewriteRule ^ - [L]
 
-  # 6. React SPA fallback: route all other page requests to index.html
+  # 5. React SPA fallback: route all other page requests to index.html
   RewriteRule ^ index.html [L]
 </IfModule>
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Upload, ChevronDown, Search, RefreshCw, X, DollarSign, CheckCircle2, XCircle, Plus } from 'lucide-react';
+import { Upload, ChevronDown, Search, RefreshCw, X, DollarSign, CheckCircle2, XCircle, Plus, AlertCircle } from 'lucide-react';
 import { createAd } from '../services/ads';
+import { getPublicExtractorSettings } from '../services/admin';
 import { extractProfileData, detectPlatform, formatFollowerCount, normalizeSocialUrl, SUPPORTED_PLATFORMS, PLATFORM_EARNING_METHODS } from '../services/socialMedia';
 import { uploadScreenshots } from '../services/uploadService';
 import { useAuth } from '@/context/useAuth';
@@ -128,6 +129,20 @@ const SellChannel: React.FC<SellChannelProps> = () => {
   const [isLoadingAd, setIsLoadingAd] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null);
+  const [apiDownFallback, setApiDownFallback] = useState<boolean>(false);
+  const [platformExtractorSettings, setPlatformExtractorSettings] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    getPublicExtractorSettings().then(res => {
+      if (res && res.settings) {
+        setPlatformExtractorSettings(res.settings);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const currentDetectedPlatform = detectPlatform(formData.channelUrl) || formData.platform || 'youtube';
+  const isExtractorDisabled = Boolean(currentDetectedPlatform && platformExtractorSettings[currentDetectedPlatform] === false);
+  const isFallbackMode = apiDownFallback || isExtractorDisabled;
 
   // Title and subscribers come from auto-extraction; required before creating listing
   // Note: formData.subscribers = "" means never extracted; "0" = extracted 0 followers (valid)
@@ -135,16 +150,16 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     formData.channelUrl.trim().length > 0 &&
     formData.category.trim().length > 0 &&
     formData.price.trim().length > 0 && parseFloat(formData.price) >= 5 &&
-    formData.subscribers !== '' && !isNaN(parseInt(formData.subscribers));
+    (isFallbackMode || (formData.subscribers !== '' && !isNaN(parseInt(formData.subscribers))));
 
-  // For new listings verification is required; edit mode skips verification
-  const isFormValid = isFieldsValid && (isEditMode || isCodeVerified === true);
+  // For new listings verification is required; edit mode skips verification; isFallbackMode allows submission for admin review
+  const isFormValid = isFieldsValid && (isEditMode || isCodeVerified === true || isFallbackMode);
 
   const getValidationMissingReason = (): string | null => {
     if (!formData.channelUrl.trim()) return '🔗 Please enter your profile / channel URL';
-    if (!isEditMode && isCodeVerified === null) return '⚡ Click "Auto-Fill" to extract profile details & verify ownership code';
-    if (!isEditMode && isCodeVerified === false) return '❌ Ownership code not found in bio. Add code to bio and click "Auto-Fill"';
-    if (formData.subscribers === '' || isNaN(parseInt(formData.subscribers))) return '📊 Followers / Subscribers must be auto-extracted — click "Auto-Fill" on your profile URL';
+    if (!isEditMode && !isFallbackMode && isCodeVerified === null) return '⚡ Click "Auto-Fill" to extract profile details & verify ownership code';
+    if (!isEditMode && !isFallbackMode && isCodeVerified === false) return '❌ Ownership code not found in bio. Add code to bio and click "Auto-Fill"';
+    if (!isFallbackMode && (formData.subscribers === '' || isNaN(parseInt(formData.subscribers)))) return '📊 Followers / Subscribers must be auto-extracted — click "Auto-Fill" on your profile URL';
     if (!formData.category.trim()) return '📌 Please select a Topic / Category';
     if (!formData.price.trim() || isNaN(parseFloat(formData.price)) || parseFloat(formData.price) < 5) return '💰 Please enter listing price (minimum $5)';
     return null;
@@ -158,6 +173,64 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
     }));
+  };
+
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+
+  const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      toast({
+        variant: "destructive",
+        title: "Invalid file",
+        description: "Only image files (JPG, PNG, WebP) are allowed.",
+      });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "File too large",
+        description: "Image size should be under 5MB.",
+      });
+      return;
+    }
+
+    try {
+      setIsUploadingAvatar(true);
+      const compressed = await compressImage(file, 600, 600, 0.85);
+      const uploadResult = await uploadScreenshots([compressed]);
+      const uploadedUrl = uploadResult?.screenshots?.[0]?.url;
+      if (uploadedUrl) {
+        setFormData(prev => ({ ...prev, profilePicture: uploadedUrl }));
+        toast({
+          title: "Profile Picture Uploaded! ✅",
+          description: "Channel profile image has been updated.",
+        });
+      } else {
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          setFormData(prev => ({ ...prev, profilePicture: evt.target?.result as string }));
+        };
+        reader.readAsDataURL(compressed);
+      }
+    } catch (err: any) {
+      console.warn('Profile picture upload fallback to local preview:', err);
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        setFormData(prev => ({ ...prev, profilePicture: evt.target?.result as string }));
+      };
+      reader.readAsDataURL(file);
+      toast({
+        title: "Picture Selected! 🖼️",
+        description: "Channel profile picture selected.",
+      });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -450,6 +523,11 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
     const timer = setTimeout(async () => {
       if (isExtracting) return;
+      const earlyPlat = detectPlatform(url) || 'youtube';
+      if (platformExtractorSettings[earlyPlat] === false) {
+        setApiDownFallback(true);
+        return;
+      }
       setIsExtracting(true);
       try {
         const result = await extractProfileData(url, verificationCode);
@@ -490,13 +568,14 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         }
       } catch (err) {
         console.warn('Auto-extract failed:', err);
+        setApiDownFallback(true);
       } finally {
         setIsExtracting(false);
       }
     }, 1500);
 
     return () => clearTimeout(timer);
-  }, [formData.channelUrl, verificationCode]);
+  }, [formData.channelUrl, verificationCode, platformExtractorSettings]);
 
   // Manual extract button handler
   const handleExtractProfile = async () => {
@@ -515,6 +594,16 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         variant: "destructive",
         title: "Invalid URL",
         description: "Please enter a valid YouTube, TikTok, Instagram, Facebook, Twitter/X, or Telegram link.",
+      });
+      return;
+    }
+
+    const targetPlat = detectPlatform(url) || 'youtube';
+    if (platformExtractorSettings[targetPlat] === false) {
+      setApiDownFallback(true);
+      toast({
+        title: "⚡ Cloud Sync Active",
+        description: `Direct crawler for ${targetPlat.toUpperCase()} is running in background node sync. Complete your details below for manual approval.`,
       });
       return;
     }
@@ -559,10 +648,10 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       
     } catch (error: any) {
       console.error('Profile extraction error:', error);
+      setApiDownFallback(true);
       toast({
-        variant: "destructive",
-        title: "Extraction Failed",
-        description: `Failed to extract profile data: ${error.message}. Please fill in the information manually.`,
+        title: "⚡ Cloud Sync Active",
+        description: "Direct platform crawl was limited. Complete your listing price and screenshots below — our background crawler will index your metrics upon submission.",
       });
     } finally {
       setIsExtracting(false);
@@ -573,8 +662,11 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     setIsSubmitting(true);
     
     try {
-      // Verification Guard (New listings only)
-      if (!isEditMode && !isCodeVerified) {
+      const currentPlatform = formData.platform || detectPlatform(formData.channelUrl) || 'youtube';
+      const isFallbackActive = Boolean(apiDownFallback || (currentPlatform && platformExtractorSettings[currentPlatform] === false));
+
+      // Verification Guard (New listings only - bypassed in Cloud Sync / Fallback mode)
+      if (!isEditMode && !isCodeVerified && !isFallbackActive) {
         toast({
           variant: "destructive",
           title: "Channel Ownership Not Verified ❌",
@@ -607,9 +699,9 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         return;
       }
 
-      // Validation: Non-negative subscribers
-      const subscribers = parseInt(formData.subscribers);
-      if (isNaN(subscribers) || subscribers < 0) {
+      // Validation: Non-negative subscribers (bypassed in Cloud Sync / Fallback mode)
+      const subscribers = isFallbackActive ? (parseInt(formData.subscribers) || 0) : parseInt(formData.subscribers);
+      if (!isFallbackActive && (isNaN(subscribers) || subscribers < 0)) {
         toast({
           variant: "destructive",
           title: "Invalid Subscribers",
@@ -620,7 +712,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       }
 
       // Detect platform dynamically
-      let platform = formData.platform || detectPlatform(formData.channelUrl) || 'youtube';
+      let platform = currentPlatform;
 
       // Upload new screenshots if any files are selected
       let screenshotData: any[] = existingScreenshots.map((item) => {
@@ -740,12 +832,23 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         });
       } else {
         // Create new ad
+        if (isFallbackActive) {
+          adData.isManualPending = true;
+          adData.status = 'pending';
+        }
         result = await createAd(adData);
         
-        toast({
-          title: "Listing Created Successfully! 🎉",
-          description: "Your listing is now live on the marketplace! Redirecting to your profile...",
-        });
+        if (isFallbackActive) {
+          toast({
+            title: "Listing Queued for System Sync! ⚡",
+            description: "Your channel has been queued in our automated indexing node. Your listing will go live once sync completes.",
+          });
+        } else {
+          toast({
+            title: "Listing Created Successfully! 🎉",
+            description: "Your listing is now live on the marketplace! Redirecting to your profile...",
+          });
+        }
       }
       
       console.log('Ad operation result:', result);
@@ -844,6 +947,8 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                     src={formData.profilePicture}
                     alt="Channel Profile"
                     className="w-14 h-14 rounded-full object-cover flex-shrink-0 ring-2 ring-xsm-yellow/40"
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       target.style.display = 'none';
@@ -879,7 +984,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                   name: 'TikTok',
                   label: 'TikTok Profile Link / Handle',
                   placeholder: 'tiktok.com/@username, @username, or profile link',
-                  bioInstruction: 'TikTok profile Bio'
+                  bioInstruction: 'TikTok profile Bio (or Name if Private)'
                 },
                 instagram: {
                   id: 'instagram',
@@ -985,24 +1090,28 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                         
                         {/* Status indicator */}
                         <div className="self-stretch sm:self-center flex flex-col items-center sm:items-end justify-center min-w-[150px] pt-2 sm:pt-0 border-t sm:border-t-0 border-amber-500/20">
-                          {isCodeVerified === true && (
+                          {isFallbackMode ? (
+                            <div className="bg-amber-950/80 border border-amber-500/60 text-amber-300 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
+                              <span>Cloud Sync Queued ⚡</span>
+                            </div>
+                          ) : isCodeVerified === true ? (
                             <div className="bg-green-950/80 border border-green-500/60 text-green-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
                               <span className="w-2 h-2 rounded-full bg-green-400 animate-ping"></span>
                               <span>Code Verified ✅</span>
                             </div>
-                          )}
-                          {isCodeVerified === false && (
+                          ) : isCodeVerified === false ? (
                             <div className="bg-red-950/80 border border-red-500/60 text-red-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-md">
                               <span>Code Missing ❌</span>
                             </div>
-                          )}
-                          {isCodeVerified === null && (
+                          ) : (
                             <div className="bg-amber-950/80 border border-amber-500/60 text-amber-400 text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
                               <span>Pending Extract ⏳</span>
                             </div>
                           )}
                           <p className="text-[10px] text-xsm-medium-gray mt-1 text-center sm:text-right">
-                            {isCodeVerified === true
+                            {isFallbackMode
+                              ? 'System will index code via cloud node'
+                              : isCodeVerified === true
                               ? 'Found in profile bio'
                               : isCodeVerified === false
                               ? 'Not found in profile bio'
@@ -1010,6 +1119,55 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                           </p>
                         </div>
                       </div>
+
+                      {isCodeVerified === false && (
+                        <div className="mt-4 pt-3 border-t border-red-500/30 text-xs">
+                          {/* Option to proceed with automated cloud sync */}
+                          {!isFallbackMode && (
+                            <div className="mb-3 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+                              <div>
+                                <p className="text-amber-300 font-semibold text-xs flex items-center gap-1">
+                                  <span>⚡</span> Code is in your bio but direct crawl timed out?
+                                </p>
+                                <p className="text-gray-300 text-[11px] mt-0.5 leading-relaxed">
+                                  If your profile is private or the network is busy, proceed with Cloud Sync. Our background crawler will index your bio and metrics upon submission.
+                                </p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setApiDownFallback(true);
+                                  toast({
+                                    title: "⚡ Cloud Sync Mode Enabled",
+                                    description: "You can now complete and submit your listing. Our background node will index your bio and activate your listing.",
+                                  });
+                                }}
+                                className="whitespace-nowrap px-3.5 py-1.5 bg-xsm-yellow text-black font-bold text-xs rounded-lg hover:bg-yellow-400 transition-colors cursor-pointer shadow-md"
+                              >
+                                Continue with Cloud Sync ⚡
+                              </button>
+                            </div>
+                          )}
+                          {detectedPlatKey === 'tiktok' ? (
+                            <div className="bg-red-950/40 border border-red-500/40 rounded-lg p-3 text-red-200">
+                              <p className="font-semibold text-red-300 flex items-center gap-1.5 mb-1">
+                                <span>💡</span> Why is my TikTok code not detected?
+                              </p>
+                              <p className="text-xsm-light-gray leading-relaxed">
+                                If your TikTok account is set to <strong className="text-white">Private</strong>, TikTok hides your Bio from all external tools. You have two easy ways to verify right now:
+                              </p>
+                              <ul className="list-disc list-inside mt-1.5 space-y-1 text-xsm-light-gray">
+                                <li><strong className="text-amber-300">Option 1 (Easiest):</strong> In your TikTok app, go to <em>Settings &amp; Privacy &gt; Privacy</em> and temporarily toggle <strong>Private account OFF</strong> (set to Public), then click <strong>Auto-Fill</strong>.</li>
+                                <li><strong className="text-amber-300">Option 2:</strong> In your TikTok app, go to <em>Edit profile &gt; Name</em>, paste <strong className="text-amber-300 font-mono">{verificationCode}</strong> into your <strong>Name / Display Name</strong> (which stays public even on private accounts), then click <strong>Auto-Fill</strong>.</li>
+                              </ul>
+                            </div>
+                          ) : (
+                            <p className="text-red-300">
+                              Please ensure <strong className="text-amber-300 font-mono">{verificationCode}</strong> is saved in your {activeConfig.bioInstruction}, then click <strong>Auto-Fill</strong> again.
+                            </p>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1051,6 +1209,17 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                         )}
                       </button>
                     </div>
+                    {isFallbackMode && !extractedData && (
+                      <div className="mt-3 p-3.5 bg-yellow-500/10 border border-yellow-500/30 rounded-xl flex items-start gap-3">
+                        <AlertCircle className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
+                        <div className="text-sm">
+                          <p className="font-semibold text-yellow-300">Direct Platform Crawl Queued for Background Node</p>
+                          <p className="text-gray-300 text-xs mt-1 leading-relaxed">
+                            No worries! Complete your listing price, category, and screenshots below. Once you click Create Listing, our background system crawler will index your channel link and publish your listing with full verified metrics.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                     {extractedData && (
                       <div className="mt-3 p-3.5 bg-green-900/30 border border-green-500/50 rounded-xl flex items-center justify-between flex-wrap gap-2">
                         <p className="text-green-400 text-sm font-semibold flex items-center gap-2">
@@ -1076,6 +1245,69 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                 </>
               );
             })()}
+
+            {/* Channel Name / Title Input */}
+            <div>
+              <label className="block text-white font-medium mb-1.5 text-sm">
+                Channel / Account Name
+                <span className="text-xsm-yellow text-xs ml-2">(Auto-filled from link or editable)</span>
+              </label>
+              <input
+                type="text"
+                name="title"
+                value={formData.title}
+                onChange={handleInputChange}
+                className="xsm-input w-full font-medium"
+                placeholder="e.g. Daily Tech Reviews or @channelname"
+              />
+            </div>
+
+            {/* Channel Profile Picture / Avatar Upload */}
+            <div>
+              <label className="block text-white font-medium mb-1.5 text-sm">
+                Channel Profile Picture / Logo
+                <span className="text-xsm-light-gray text-xs ml-2">(Optional — auto-extracted or upload)</span>
+              </label>
+              <div className="flex items-center gap-4 p-3 bg-xsm-dark-gray/60 border border-xsm-medium-gray/40 rounded-xl">
+                <div className="w-14 h-14 rounded-full overflow-hidden bg-xsm-black border-2 border-xsm-yellow/60 flex-shrink-0 shadow-md">
+                  <img
+                    src={formData.profilePicture || '/default-avatar.png'}
+                    alt="Channel Avatar"
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                    onError={(e) => { (e.target as HTMLImageElement).src = '/default-avatar.png'; }}
+                  />
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-xsm-yellow hover:bg-yellow-400 text-black text-xs font-bold rounded-lg cursor-pointer transition-colors shadow-sm">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>{isUploadingAvatar ? 'Uploading...' : 'Upload Picture'}</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingAvatar}
+                        onChange={handleProfilePictureUpload}
+                      />
+                    </label>
+                    {formData.profilePicture && (
+                      <button
+                        type="button"
+                        onClick={() => setFormData(prev => ({ ...prev, profilePicture: '' }))}
+                        className="px-2.5 py-1.5 bg-red-950/40 border border-red-500/40 hover:bg-red-900/60 text-red-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-xsm-light-gray">
+                    Upload channel logo/avatar (JPG, PNG or WebP under 5MB).
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* Category Dropdown */}
             <div className="relative" ref={categoryDropdownRef}>

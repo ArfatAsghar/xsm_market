@@ -163,6 +163,30 @@ const VipSubscriptionModal: React.FC<VipSubscriptionModalProps> = ({ isOpen, onC
     }
   }, [step, paymentData?.payment_id, paymentStatus]);
 
+  // Fetch user referral credit balance & VIP coupons when modal opens (declared BEFORE early return)
+  useEffect(() => {
+    if (isOpen && user) {
+      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+      if (token) {
+        const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'https://xsmmarket.com/api');
+        fetch(`${apiUrl}/referral/dashboard`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+          .then(res => res.json())
+          .then(res => {
+            if (res.success && res.data) {
+              if (res.data.user?.referral_credit_balance !== undefined) {
+                setCreditBalance(parseFloat(res.data.user.referral_credit_balance) || 0);
+              }
+              const coupons = res.data.user?.vip_coupons_available ?? res.data.rewards?.vip_coupons_available ?? 0;
+              setVipCouponsAvailable(Number(coupons) || 0);
+            }
+          })
+          .catch(() => {});
+      }
+    }
+  }, [isOpen, user]);
+
   if (!isOpen) return null;
 
   const copyToClipboard = (text: string, field: string) => {
@@ -255,30 +279,6 @@ const VipSubscriptionModal: React.FC<VipSubscriptionModalProps> = ({ isOpen, onC
       setIsAdminActivating(false);
     }
   };
-
-  // Fetch user referral credit balance & VIP coupons when modal opens
-  useEffect(() => {
-    if (isOpen && user) {
-      const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-      if (token) {
-        const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'https://xsmmarket.com/api');
-        fetch(`${apiUrl}/referral/dashboard`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-          .then(res => res.json())
-          .then(res => {
-            if (res.success && res.data) {
-              if (res.data.user?.referral_credit_balance !== undefined) {
-                setCreditBalance(parseFloat(res.data.user.referral_credit_balance) || 0);
-              }
-              const coupons = res.data.user?.vip_coupons_available ?? res.data.rewards?.vip_coupons_available ?? 0;
-              setVipCouponsAvailable(Number(coupons) || 0);
-            }
-          })
-          .catch(() => {});
-      }
-    }
-  }, [isOpen, user]);
 
   const handlePayWithCredit = async () => {
     setIsCreditPaying(true);

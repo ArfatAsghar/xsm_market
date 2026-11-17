@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, Zap, TrendingUp, Pin, Clock, Crown, X, FileText, MoreHorizontal, User } from 'lucide-react';
+import { Star, Users, Shield, MessageCircle, CreditCard, ArrowLeft, Edit, Trash2, Zap, TrendingUp, Pin, Clock, Crown, X, FileText, MoreHorizontal, User, XCircle } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import DealCreationModal from '@/components/DealCreationModal';
 import EditListingModal from '@/components/EditListingModal';
 import { extractIdFromSlug } from '@/utils/idEncoder';
 import { pullUpAd, togglePinAd } from '@/services/ads';
-import { getImageUrl } from '@/config/api';
+import { getImageUrl, getAlternateImageUrl } from '@/config/api';
 
 // Get API URL from environment variables
 const getApiUrl = () => {
@@ -39,6 +39,8 @@ interface ChannelData {
   incomeDetails?: string;
   promotionDetails?: string;
   preferredPaymentMethods?: string[];
+  status?: string;
+  isBanned?: boolean;
   seller: {
     id: number;
     name: string;
@@ -48,6 +50,7 @@ interface ChannelData {
     profilePicture?: string;
     lastSeenAt?: string;
     isVip?: boolean;
+    isKycVerified?: boolean;
   };
 }
 
@@ -103,6 +106,110 @@ const PlatformIcon = ({ platform }: { platform: ChannelData['platform'] }) => {
     default:
       return null;
   }
+};
+
+const AdScreenshotCard: React.FC<{
+  screenshot: any;
+  index: number;
+  channelName: string;
+  onOpen: (url: string) => void;
+}> = ({ screenshot, index, channelName, onOpen }) => {
+  const initialUrl = getImageUrl(screenshot);
+  const [src, setSrc] = useState<string | null>(initialUrl);
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const retryStep = React.useRef(0);
+
+  useEffect(() => {
+    const freshUrl = getImageUrl(screenshot);
+    setSrc(freshUrl);
+    setLoaded(false);
+    setFailed(false);
+    retryStep.current = 0;
+  }, [screenshot]);
+
+  const handleError = () => {
+    if (!src) {
+      setFailed(true);
+      return;
+    }
+
+    if (retryStep.current === 0) {
+      retryStep.current = 1;
+      const alt = getAlternateImageUrl(src);
+      if (alt && alt !== src) {
+        setSrc(alt);
+        return;
+      }
+    }
+
+    if (retryStep.current === 1) {
+      retryStep.current = 2;
+      if (!src.startsWith('http') && !src.startsWith('blob:')) {
+        const fullUrl = `${window.location.origin}${src.startsWith('/') ? '' : '/'}${src}`;
+        if (fullUrl !== src) {
+          setSrc(fullUrl);
+          return;
+        }
+      }
+    }
+
+    if (retryStep.current === 2) {
+      retryStep.current = 3;
+      setSrc(`${src}${src.includes('?') ? '&' : '?'}retry=${Date.now()}`);
+      return;
+    }
+
+    setFailed(true);
+  };
+
+  if (failed || !src) {
+    return (
+      <div className="w-full h-48 rounded-lg border border-xsm-medium-gray/30 bg-xsm-dark-gray/60 flex flex-col items-center justify-center p-4 text-center select-none">
+        <svg xmlns="http://www.w3.org/2000/svg" className="w-8 h-8 text-neutral-500 mb-2 opacity-80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </svg>
+        <span className="text-xs text-neutral-400 font-medium">Screenshot {index + 1} unavailable</span>
+        <button
+          type="button"
+          onClick={() => {
+            retryStep.current = 0;
+            setFailed(false);
+            setSrc(`${initialUrl || ''}${initialUrl?.includes('?') ? '&' : '?'}t=${Date.now()}`);
+          }}
+          className="mt-2 text-xs text-xsm-yellow hover:underline flex items-center gap-1 font-semibold"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="relative group cursor-pointer overflow-hidden rounded-lg border border-xsm-medium-gray/30 hover:border-xsm-yellow transition-all duration-300 w-full h-48 bg-neutral-900/60"
+      onClick={() => onOpen(src)}
+    >
+      {!loaded && (
+        <div className="absolute inset-0 bg-neutral-900 animate-pulse flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-xsm-yellow border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+      <img
+        src={src}
+        alt={`${channelName} screenshot ${index + 1}`}
+        className={`w-full h-48 object-cover transition-transform duration-300 group-hover:scale-105 ${loaded ? 'opacity-100' : 'opacity-0'}`}
+        onLoad={() => setLoaded(true)}
+        onError={handleError}
+      />
+      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+        <div className="bg-black/60 text-white text-xs font-semibold px-3 py-1.5 rounded-full backdrop-blur-sm flex items-center gap-1.5">
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+          View Full Size
+        </div>
+      </div>
+    </div>
+  );
 };
 
 const AdDetails: React.FC = () => {
@@ -242,6 +349,8 @@ const AdDetails: React.FC = () => {
         subscribers: data.subscribers,
         price: data.price,
         monthlyIncome: data.monthlyIncome,
+        status: data.status || 'active',
+        isBanned: Boolean(data.isBanned),
         verified: data.verified || false,
         premium: data.premium || false,
         rating: data.rating || 4.5,
@@ -275,7 +384,8 @@ const AdDetails: React.FC = () => {
           sales: data.seller?.sales || 0,
           profilePicture: data.seller?.profilePicture,
           lastSeenAt: data.seller?.lastSeenAt,
-          isVip: Boolean(data.seller?.isVip || data.seller_isVip || data.sellerIsVip || data.isVip)
+          isVip: Boolean(data.seller?.isVip || data.seller_isVip || data.sellerIsVip || data.isVip),
+          isKycVerified: Boolean(data.seller?.isKycVerified)
         }
       };
       
@@ -664,6 +774,44 @@ const AdDetails: React.FC = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        {/* Pending or Rejected Notice Banner */}
+        {channel?.status === 'pending' && (
+          <div className="mb-6 p-4 bg-gradient-to-r from-yellow-950/70 via-xsm-black to-xsm-dark-gray border border-yellow-500/60 rounded-2xl shadow-xl flex items-start sm:items-center gap-3">
+            <div className="p-2.5 bg-yellow-500/20 border border-yellow-500/40 rounded-xl text-yellow-400 flex-shrink-0">
+              <Clock className="w-5 h-5 animate-pulse" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-yellow-300 font-bold text-sm sm:text-base">Listing Pending Admin Approval ⏳</h3>
+                <span className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Under Verification
+                </span>
+              </div>
+              <p className="text-gray-300 text-xs mt-1 leading-relaxed">
+                This channel listing is currently undergoing administrative verification. It will be made publicly available in the marketplace once verified.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {channel?.status === 'rejected' && (
+          <div className="mb-6 p-4 bg-gradient-to-r from-red-950/70 via-xsm-black to-xsm-dark-gray border border-red-500/60 rounded-2xl shadow-xl flex items-start sm:items-center gap-3">
+            <div className="p-2.5 bg-red-500/20 border border-red-500/40 rounded-xl text-red-400 flex-shrink-0">
+              <XCircle className="w-5 h-5" />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-red-300 font-bold text-sm sm:text-base">Listing Rejected ❌</h3>
+                <span className="bg-red-500/20 text-red-300 border border-red-500/50 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
+                  Not Published
+                </span>
+              </div>
+              <p className="text-gray-300 text-xs mt-1 leading-relaxed">
+                This listing was not approved for publication on the marketplace. Please check channel details or contact support.
+              </p>
+            </div>
+          </div>
+        )}
         {/* Owner Action Buttons */}
         {isOwner && (
           <div className="mb-6 flex justify-end gap-3">
@@ -731,6 +879,14 @@ const AdDetails: React.FC = () => {
                       className="text-white font-semibold text-lg hover:text-xsm-yellow transition-colors underline decoration-dotted cursor-pointer mb-1 flex items-center gap-1.5 justify-center"
                     >
                       {channel.seller.name}
+                      {channel.seller.isKycVerified && (
+                        <span
+                          title="KYC Identity Verified"
+                          className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 text-white flex-shrink-0 text-[9px] font-black"
+                        >
+                          ✓
+                        </span>
+                      )}
                       {channel.seller.isVip && <Crown className="w-4 h-4 text-yellow-400 flex-shrink-0" />}
                     </button>
                     {channel.seller.isVip && (
@@ -804,6 +960,14 @@ const AdDetails: React.FC = () => {
                     title="You cannot purchase your own listing"
                   >
                     <span>YOUR LISTING</span>
+                  </button>
+                ) : channel.status === 'pending' ? (
+                  <button
+                    disabled
+                    className="w-full bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 text-base font-bold py-4 rounded-xl cursor-not-allowed flex items-center justify-center space-x-2 shadow-sm"
+                  >
+                    <Clock className="w-5 h-5 text-yellow-400 animate-pulse" />
+                    <span>AWAITING ADMIN APPROVAL</span>
                   </button>
                 ) : (
                   <button
@@ -901,12 +1065,6 @@ const AdDetails: React.FC = () => {
                 {channel.premium && (
                   <span className="xsm-badge-premium">PREMIUM</span>
                 )}
-                {channel.verified && (
-                  <span className="bg-blue-500 text-white px-3 py-1 rounded-full text-sm font-bold flex items-center">
-                    <Shield className="w-4 h-4 mr-1" />
-                    VERIFIED
-                  </span>
-                )}
                 <span className="bg-xsm-yellow text-xsm-black px-3 py-1 rounded-full text-sm font-bold">
                   {channel.category}
                 </span>
@@ -993,45 +1151,15 @@ const AdDetails: React.FC = () => {
               <div className="xsm-card max-w-3xl mx-auto">
                 <h4 className="text-lg font-semibold text-xsm-yellow mb-4 text-center">Channel Screenshots</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                   {channel.screenshots.map((screenshot, index) => {
-                    const imageUrl = getImageUrl(screenshot);
-                    return (
-                      <div
-                        key={index}
-                        className="relative group cursor-pointer overflow-hidden rounded-lg border border-xsm-medium-gray/30 hover:border-xsm-yellow transition-all duration-300"
-                        onClick={() => imageUrl && setActiveScreenshot(imageUrl)}
-                      >
-                        <img
-                          src={imageUrl || undefined}
-                          alt={`${channel.name} screenshot ${index + 1}`}
-                          className="w-full h-48 object-cover transition-transform duration-300 group-hover:scale-110"
-                          onError={(e) => {
-                            const target = e.currentTarget;
-                            const currentSrc = target.getAttribute('src') || '';
-                            // Auto-retry with /api/ prefix if /uploads/ was used and vice versa
-                            if (currentSrc.startsWith('/uploads/') && !target.dataset.retried) {
-                              target.dataset.retried = 'true';
-                              target.setAttribute('src', `/api${currentSrc}`);
-                              return;
-                            }
-                            if (currentSrc.startsWith('/api/uploads/') && !target.dataset.retried) {
-                              target.dataset.retried = 'true';
-                              target.setAttribute('src', currentSrc.replace('/api/uploads/', '/uploads/'));
-                              return;
-                            }
-                            console.error('Image failed to load:', screenshot, 'Resolved to:', imageUrl);
-                            target.style.display = 'none';
-                          }}
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
-                          <div className="bg-black/60 text-white text-xs font-semibold px-3 py-1.5 rounded-full backdrop-blur-sm flex items-center gap-1.5">
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
-                            View Full Size
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {channel.screenshots.map((screenshot, index) => (
+                    <AdScreenshotCard
+                      key={index}
+                      screenshot={screenshot}
+                      index={index}
+                      channelName={channel.name}
+                      onOpen={(url) => setActiveScreenshot(url)}
+                    />
+                  ))}
                 </div>
                 <p className="text-xsm-medium-gray text-sm mt-3 text-center">
                   {channel.screenshots.length} screenshot{channel.screenshots.length > 1 ? 's' : ''} uploaded by seller
@@ -1051,7 +1179,7 @@ const AdDetails: React.FC = () => {
           channelTitle={channel.name}
           sellerId={channel.seller.id.toString()}
           platform={channel.platform as any}
-          onNavigateToChat={() => navigate('/chat')}
+          onNavigateToChat={(targetId) => targetId ? navigate(`/chat?chatId=${targetId}`) : navigate('/chat')}
         />
 
       )}

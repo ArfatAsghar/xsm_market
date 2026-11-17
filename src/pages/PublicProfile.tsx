@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { User as UserIcon, Edit, Calendar, MessageCircle, Crown, Clock, DollarSign, CheckCircle2, ShieldCheck, Users, ChevronDown, ChevronUp, X, Check, Camera, Upload, Lock } from 'lucide-react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { User as UserIcon, Edit, Calendar, MessageCircle, Crown, Clock, DollarSign, CheckCircle2, ShieldCheck, Shield, Users, ChevronDown, ChevronUp, X, Check, Camera, Upload, Lock } from 'lucide-react';
 import { useAuth } from '@/context/useAuth';
 import { useNotifications } from '@/context/NotificationContext';
 import { getPublicProfile, updateProfile, API_URL, SellerMetrics, ReviewItem } from '@/services/auth';
 import UserAdList from '@/components/UserAdList';
 import PublicAdList from '@/components/PublicAdList';
+import VerificationSection from '@/components/VerificationSection';
 
 const DEFAULT_DESCRIPTION = "Welcome to my marketplace profile! I specialize in buying and selling verified social media accounts, YouTube channels, and digital assets with safe and secure escrow transactions.";
 
@@ -18,6 +19,7 @@ interface PublicUser {
   createdAt: string;
   adCount?: number;
   isEmailVerified?: boolean;
+  isKycVerified?: boolean;
   isVip?: boolean;
   vipUntil?: string | null;
   averageResponseTime?: string;
@@ -213,6 +215,10 @@ const PublicProfile: React.FC = () => {
   const [showResponseInfoModal, setShowResponseInfoModal] = useState(false);
   const [, setTick] = useState(0);
 
+  // KYC Verification Modal State
+  const [showKycModal, setShowKycModal] = useState(false);
+  const location = useLocation();
+
   // Edit Profile / Description Modal State
   const [showEditModal, setShowEditModal] = useState(false);
   const [editFullName, setEditFullName] = useState('');
@@ -245,6 +251,10 @@ const PublicProfile: React.FC = () => {
     };
 
     fetchProfile();
+
+    if (location.search.includes('tab=kyc') || location.hash === '#kyc') {
+      setShowKycModal(true);
+    }
 
     // Background polling every 45 seconds to keep online/last seen status accurate
     const pollInterval = setInterval(async () => {
@@ -561,8 +571,17 @@ const PublicProfile: React.FC = () => {
 
               {/* User Info (Username, Crown, VIP badge) */}
               <div className="text-center pt-0.5">
-                <h1 className="text-lg font-bold text-white flex items-center justify-center gap-1.5 leading-snug">
+              <h1 className="text-lg font-bold text-white flex items-center justify-center gap-1.5 leading-snug">
                   {profileUser.fullName || profileUser.username}
+                  {profileUser.isKycVerified && (
+                    <span
+                      title="KYC Identity Verified"
+                      className="inline-flex items-center justify-center w-4.5 h-4.5 rounded-full bg-blue-500 text-white flex-shrink-0"
+                      style={{ width: '18px', height: '18px', fontSize: '9px', fontWeight: 900 }}
+                    >
+                      ✓
+                    </span>
+                  )}
                   {profileUser.isVip && (
                     <Crown className="w-4 h-4 text-yellow-400 fill-yellow-400/20 animate-pulse" title="VIP Seller" />
                   )}
@@ -614,14 +633,23 @@ const PublicProfile: React.FC = () => {
 
               {/* Action Button: Edit Profile or Message Seller */}
               {isOwnProfile ? (
-                <div>
+                <div className="space-y-2">
                   <button
                     type="button"
                     onClick={handleOpenEditModal}
-                    className="w-full bg-xsm-yellow text-black px-4 py-2 rounded-lg hover:bg-yellow-500 transition-colors font-bold flex items-center justify-center gap-2 text-xs shadow-md"
+                    className="w-full bg-xsm-yellow text-black px-4 py-2 rounded-lg hover:bg-yellow-500 transition-colors font-bold flex items-center justify-center gap-2 text-xs shadow-md cursor-pointer"
                   >
                     <Edit className="w-3.5 h-3.5" />
                     Edit Profile
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowKycModal(true)}
+                    className="w-full bg-neutral-900 border border-amber-500/50 hover:border-amber-400 text-amber-400 hover:text-white px-4 py-2 rounded-lg transition-colors font-bold flex items-center justify-center gap-2 text-xs shadow-md cursor-pointer"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-xsm-yellow" />
+                    <span>{profileUser.isKycVerified ? 'KYC Verified ✓' : 'KYC Verification'}</span>
                   </button>
                 </div>
               ) : (
@@ -939,6 +967,22 @@ const PublicProfile: React.FC = () => {
                 Got It
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* KYC Verification Modal */}
+      {showKycModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative w-full max-w-4xl max-h-[92vh] overflow-y-auto rounded-2xl shadow-2xl">
+            <VerificationSection
+              onClose={() => setShowKycModal(false)}
+              onStatusChange={(status) => {
+                if (status === 'verified') {
+                  setProfileUser(prev => prev ? ({ ...prev, isKycVerified: true }) : prev);
+                }
+              }}
+            />
           </div>
         </div>
       )}

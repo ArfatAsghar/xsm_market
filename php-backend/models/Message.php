@@ -92,6 +92,9 @@ class Message {
             FROM messages m
             INNER JOIN chat_participants cp ON m.chatId = cp.chatId
             WHERE cp.userId = ? AND cp.isActive = 1 AND m.senderId != ? AND m.isRead = 0
+              AND (m.messageType IS NULL OR m.messageType NOT IN ('system', 'deal_card', 'deal_event', 'deal', 'escrow'))
+              AND m.content NOT LIKE '%Transaction ID:%'
+              AND m.content NOT LIKE '%Deal Initiated%'
         ");
         $stmt->execute([$userId, $userId]);
         $row = $stmt->fetch(PDO::FETCH_ASSOC);

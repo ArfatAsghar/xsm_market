@@ -34,6 +34,7 @@ yarn-error.log*
 Thumbs.db
 .vscode/
 .idea/
+.agents/
 
 # ZIP/backups/generated copies
 *.zip

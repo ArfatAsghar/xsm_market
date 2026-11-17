@@ -300,7 +300,7 @@ class UserController {
             $user = AuthMiddleware::authenticate();
             
             $stmt = Database::getConnection()->prepare("
-                SELECT id, username, displayName, email, profilePicture, description, isEmailVerified, authProvider, role, createdAt, vipUntil, isBanned, banReason, banExpires, bannedAt
+                SELECT id, username, displayName, email, profilePicture, description, isEmailVerified, authProvider, role, createdAt, vipUntil, isBanned, banReason, banExpires, bannedAt, kyc_status
                 FROM users WHERE id = ?
             ");
             $stmt->execute([$user['id']]);
@@ -360,7 +360,8 @@ class UserController {
                     'isBanned' => (bool)($userData['isBanned'] ?? false),
                     'banReason' => $userData['banReason'] ?? null,
                     'banExpires' => $userData['banExpires'] ?? null,
-                    'bannedAt' => $userData['bannedAt'] ?? null
+                    'bannedAt' => $userData['bannedAt'] ?? null,
+                    'kyc_status' => $userData['kyc_status'] ?? 'unverified'
                 ]
             ]);
         } catch (Exception $e) {
@@ -1309,7 +1310,7 @@ public function getUserByUsername($username) {
         // Find user by username.
         // Do not block seller profile only because local/test account is not email verified.
         $stmt = $pdo->prepare("
-            SELECT id, username, fullName, profilePicture, description, isEmailVerified, createdAt, vipUntil, lastSeenAt, isOnline
+            SELECT id, username, fullName, profilePicture, description, isEmailVerified, createdAt, vipUntil, lastSeenAt, isOnline, kyc_status
             FROM users
             WHERE LOWER(TRIM(username)) = LOWER(TRIM(?))
             LIMIT 1
@@ -1364,6 +1365,10 @@ public function getUserByUsername($username) {
         // Compute seller profile card 5 metrics
         $sellerMetrics = self::calculateSellerMetrics($userData['id']);
 
+        // Compute KYC verification status
+        $kycStatus = $userData['kyc_status'] ?? 'unverified';
+        $isKycVerified = in_array(strtolower($kycStatus), ['approved', 'verified']);
+
         // Return public information
         $publicUser = [
             'id' => (int)$userData['id'],
@@ -1379,7 +1384,8 @@ public function getUserByUsername($username) {
             'averageResponseTime' => $avgResponseTime,
             'sellerMetrics' => $sellerMetrics,
             'lastSeenAt' => $lastSeenAt,
-            'isOnline' => $isOnline
+            'isOnline' => $isOnline,
+            'isKycVerified' => $isKycVerified
         ];
 
         Response::json([

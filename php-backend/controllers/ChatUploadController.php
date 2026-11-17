@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../utils/Response.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../middleware/auth.php';
+require_once __DIR__ . '/../utils/UploadHelper.php';
 
 class ChatUploadController {
     private $db;
@@ -76,18 +77,14 @@ class ChatUploadController {
             }
             
             // Create upload directory if it doesn't exist
-            $uploadDir = __DIR__ . '/../uploads/chat/';
-            if (!is_dir($uploadDir)) {
-                mkdir($uploadDir, 0755, true);
-            }
-            
             // Generate unique filename
             $fileExtension = pathinfo($file['name'], PATHINFO_EXTENSION);
             $fileName = uniqid() . '_' . time() . '.' . $fileExtension;
+            $uploadDir = __DIR__ . '/../uploads/chat/';
             $filePath = $uploadDir . $fileName;
             
-            // Move uploaded file
-            if (!move_uploaded_file($file['tmp_name'], $filePath)) {
+            // Move uploaded file to redundant storage
+            if (!UploadHelper::saveUploadedFile($file['tmp_name'], 'chat', $fileName)) {
                 Response::error('Failed to save uploaded file', 500);
                 return;
             }
@@ -96,6 +93,13 @@ class ChatUploadController {
             $thumbnail = null;
             if ($messageType === 'image') {
                 $thumbnail = $this->generateThumbnail($filePath, $uploadDir);
+                if ($thumbnail) {
+                    $thumbnailFileName = basename($thumbnail);
+                    $thumbLocalPath = $uploadDir . $thumbnailFileName;
+                    if (file_exists($thumbLocalPath)) {
+                        UploadHelper::mirrorFile($thumbLocalPath, 'chat', $thumbnailFileName);
+                    }
+                }
             }
             
             // Save message to database

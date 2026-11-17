@@ -105,6 +105,28 @@ class Database {
             self::addColumnIfMissing($pdo, 'chats', 'unread_count', 'INT DEFAULT 0');
         }
 
+        // ── chat_participants table ───────────────────────────────────────────────
+        if (self::tableExists($pdo, 'chat_participants')) {
+            self::addColumnIfMissing($pdo, 'chat_participants', 'isActive', 'TINYINT(1) DEFAULT 1');
+            self::addColumnIfMissing($pdo, 'chat_participants', 'lastSeenAt', 'DATETIME NULL');
+
+            // Ensure unique key on (chatId, userId) so ON DUPLICATE KEY UPDATE works reliably
+            try {
+                $idxCheck = $pdo->query("SHOW INDEX FROM chat_participants WHERE Key_name = 'chat_user_unique'");
+                if (!$idxCheck->fetch()) {
+                    // Clean duplicate rows first
+                    $pdo->exec("
+                        DELETE c1 FROM chat_participants c1
+                        INNER JOIN chat_participants c2 
+                        WHERE c1.id > c2.id AND c1.chatId = c2.chatId AND c1.userId = c2.userId
+                    ");
+                    $pdo->exec("ALTER TABLE chat_participants ADD UNIQUE KEY `chat_user_unique` (`chatId`, `userId`)");
+                }
+            } catch (Throwable $e) {
+                error_log('chat_participants unique key check: ' . $e->getMessage());
+            }
+        }
+
         // ── deals table ──────────────────────────────────────────────────────────
         if (self::tableExists($pdo, 'deals')) {
             self::addColumnIfMissing($pdo, 'deals', 'transaction_id', 'VARCHAR(50) NULL');
@@ -118,6 +140,21 @@ class Database {
                 $pdo->exec("UPDATE deals SET transaction_id = CONCAT('TXN', LPAD(id, 4, '0')) WHERE transaction_id IS NULL OR transaction_id = '' OR transaction_id = '0'");
             } catch (Throwable $e) {
                 error_log('TXN backfill warning: ' . $e->getMessage());
+            }
+
+            // Backfill existing deal notifications to point directly to /chat?chatId=...
+            try {
+                $pdo->exec("
+                    UPDATE notifications n
+                    INNER JOIN deals d ON (n.userId = d.buyer_id OR n.userId = d.seller_id)
+                    SET n.link = CONCAT('/chat?chatId=', d.chat_id)
+                    WHERE n.type = 'deal' 
+                      AND d.chat_id IS NOT NULL 
+                      AND d.chat_id > 0
+                      AND (n.link = '/my-deals' OR n.link = '/seller-deals' OR n.link IS NULL)
+                ");
+            } catch (Throwable $e) {
+                error_log('Notification link backfill warning: ' . $e->getMessage());
             }
         }
 
@@ -435,6 +472,24 @@ class Database {
             }
         } catch (Throwable $e) {
             error_log('Referral & KYC tables create warning: ' . $e->getMessage());
+        }
+
+        // ── social_media_cache table ──────────────────────────────────────────
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS `social_media_cache` (
+                `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                `url_hash` CHAR(32) NOT NULL COMMENT 'MD5 hash of lowercase normalized URL',
+                `platform` VARCHAR(30) NOT NULL,
+                `channel_url` VARCHAR(500) NOT NULL,
+                `cached_data` MEDIUMTEXT NOT NULL COMMENT 'JSON-encoded profile data',
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                `expires_at` DATETIME NOT NULL COMMENT 'Expiration timestamp (24h TTL)',
+                UNIQUE KEY `idx_url_hash_unique` (`url_hash`),
+                INDEX `idx_expires_at` (`expires_at`),
+                INDEX `idx_platform` (`platform`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        } catch (Throwable $e) {
+            error_log('social_media_cache table create warning: ' . $e->getMessage());
         }
     }
 

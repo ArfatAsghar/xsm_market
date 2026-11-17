@@ -84,6 +84,10 @@ class AdController {
         $verificationCode = $input['verificationCode'] ?? null;
         
         // Validation - exact match to Node.js
+        if (!$title && $channelUrl) {
+            $title = ucfirst($platform ?: 'Social Media') . ' Channel';
+        }
+
         if (!$title || !$channelUrl || !$platform || !$category || !$price) {
             Response::error('Title, channel URL, platform, category, and price are required', 400);
             return;
@@ -148,7 +152,8 @@ class AdController {
                 'screenshots' => $screenshots,
                 'tags' => $tags,
                 'verificationCode' => $verificationCode,
-                'status' => 'active' // All new ads start as active for immediate listing
+                'status' => (!empty($input['isManualPending']) || ($input['status'] ?? '') === 'pending') ? 'pending' : 'active',
+                'verified' => (!empty($input['isManualPending']) || ($input['status'] ?? '') === 'pending') ? 0 : (isset($input['verified']) ? intval($input['verified']) : 0)
             ];
             
             error_log('Processed ad data: ' . json_encode($adData));

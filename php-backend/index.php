@@ -23,43 +23,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') == 'OPTIONS') {
 
 // Auto-detect and configure environment
 require_once __DIR__ . '/config/auto-env.php';
+require_once __DIR__ . '/utils/UploadHelper.php';
 
-// Serve uploaded files from php-backend/uploads
+// Serve uploaded files from php-backend/uploads or root uploads
 $requestPathForUpload = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 
-// Support both /uploads/... and /api/uploads/...
-if (strpos($requestPathForUpload, '/api/uploads/') === 0) {
-    $requestPathForUpload = substr($requestPathForUpload, 4); // converts /api/uploads/... to /uploads/...
-}
-
-if (strpos($requestPathForUpload, '/uploads/') === 0) {
-    $uploadRoot = realpath(__DIR__ . '/uploads');
-    $requestedFile = realpath(__DIR__ . $requestPathForUpload);
-
-    if (
-        $uploadRoot &&
-        $requestedFile &&
-        strpos($requestedFile, $uploadRoot) === 0 &&
-        is_file($requestedFile)
-    ) {
-        $mimeType = mime_content_type($requestedFile) ?: 'application/octet-stream';
-
-        header('Content-Type: ' . $mimeType);
-        header('Content-Length: ' . filesize($requestedFile));
-        header('Cache-Control: public, max-age=86400');
-
-        readfile($requestedFile);
-        exit;
-    }
-
-    http_response_code(404);
-    header('Content-Type: application/json');
-    echo json_encode([
-        'success' => false,
-        'message' => 'Uploaded file not found',
-        'path' => $requestPathForUpload
-    ]);
-    exit;
+if (
+    strpos($requestPathForUpload, '/api/uploads/') === 0 ||
+    strpos($requestPathForUpload, '/uploads/') === 0
+) {
+    UploadHelper::serveUploadedFile($requestPathForUpload);
 }
 
 // Load environment variables
@@ -156,33 +129,8 @@ error_log("UPLOAD REQUEST DETECTED: Method=" . ($_SERVER['REQUEST_METHOD'] ?? ''
 // Route handling
 try {
     // Static file serving fallback for uploads (e.g. /uploads/ads/... or /uploads/chat/...)
-    if (preg_match('#^/uploads/(.+)$#', $path, $uploadMatches) && $method === 'GET') {
-        $relUploadPath = $uploadMatches[1];
-        $targetFile = __DIR__ . '/uploads/' . $relUploadPath;
-        $realUploadsBase = realpath(__DIR__ . '/uploads');
-        $realTargetFile = realpath($targetFile);
-        
-        if ($realTargetFile && $realUploadsBase && strpos($realTargetFile, $realUploadsBase) === 0 && file_exists($realTargetFile)) {
-            $ext = strtolower(pathinfo($realTargetFile, PATHINFO_EXTENSION));
-            $contentTypes = [
-                'jpg'  => 'image/jpeg',
-                'jpeg' => 'image/jpeg',
-                'png'  => 'image/png',
-                'gif'  => 'image/gif',
-                'webp' => 'image/webp',
-                'svg'  => 'image/svg+xml',
-                'mp4'  => 'video/mp4',
-                'webm' => 'video/webm',
-                'mov'  => 'video/quicktime',
-            ];
-            $contentType = $contentTypes[$ext] ?? (mime_content_type($realTargetFile) ?: 'application/octet-stream');
-            
-            header('Content-Type: ' . $contentType);
-            header('Content-Length: ' . filesize($realTargetFile));
-            header('Cache-Control: public, max-age=31536000');
-            readfile($realTargetFile);
-            exit();
-        }
+    if (preg_match('#^/uploads/(.+)$#', $path) && $method === 'GET') {
+        UploadHelper::serveUploadedFile($path);
     }
 
     // Simple delete ad endpoint (no authentication) - placed early to ensure it gets matched
@@ -287,6 +235,33 @@ try {
             ]);
         } catch (Exception $e) {
             Response::error('Debug failed: ' . $e->getMessage(), 500);
+        }
+    }
+    // Public extractor settings status check
+    elseif ($path === '/extractor-settings' && $method === 'GET') {
+        try {
+            $pdo = Database::getConnection();
+            $settings = [
+                'youtube' => true,
+                'tiktok' => true,
+                'instagram' => true,
+                'facebook' => true,
+                'twitter' => true,
+                'telegram' => true
+            ];
+            $r = $pdo->query("SHOW TABLES LIKE 'extractor_settings'")->fetch();
+            if ($r) {
+                $rows = $pdo->query("SELECT platform, is_enabled FROM extractor_settings")->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as $row) {
+                    $settings[$row['platform']] = (bool)$row['is_enabled'];
+                }
+            }
+            Response::json(['success' => true, 'settings' => $settings]);
+        } catch (Throwable $e) {
+            Response::json(['success' => true, 'settings' => [
+                'youtube' => true, 'tiktok' => true, 'instagram' => true,
+                'facebook' => true, 'twitter' => true, 'telegram' => true
+            ]]);
         }
     }
     // Website updates / announcements routes per Revision 28
@@ -801,6 +776,12 @@ function handleChatRoutes($controller, $path, $method) {
         case $path === '/chat/chats' && $method === 'GET':
             $controller->getUserChats();
             break;
+        case preg_match('/^\/chat\/chats\/(\d+)$/', $path, $matches) && $method === 'GET':
+            $controller->getChatById($matches[1]);
+            break;
+        case preg_match('/^\/chat\/(\d+)$/', $path, $matches) && $method === 'GET':
+            $controller->getChatById($matches[1]);
+            break;
         case $path === '/chat' && $method === 'POST':
             $controller->createOrGetChat();
             break;
@@ -1029,6 +1010,14 @@ function handleAdminRoutes($controller, $path, $method) {
             break;
         case preg_match('/^\/admin\/email-pool\/(\d+)$/', $path, $matches) && $method === 'DELETE':
             (new EmailPoolController())->deleteEmail((int)$matches[1]);
+            break;
+
+        // ── Admin Extractor Settings Routes ──
+        case $path === '/admin/extractor-settings' && $method === 'GET':
+            $controller->getExtractorSettings();
+            break;
+        case ($path === '/admin/extractor-settings' || $path === '/admin/extractor-settings/toggle') && ($method === 'POST' || $method === 'PUT'):
+            $controller->updateExtractorSettings();
             break;
 
         default:

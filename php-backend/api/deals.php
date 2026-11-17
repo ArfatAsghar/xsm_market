@@ -166,19 +166,47 @@ function createDeal() {
         $deal = getDealWithDetails($deal_id);
 
         // ── Post a deal_card message into the buyer-seller chat ──
-        // Find the existing chat between buyer and seller
+        $seller_id = (int)$input['seller_id'];
+        $buyer_id = (int)$user['id'];
+        $chat_id = null;
+
+        // Find existing chat between buyer and seller
         $chatStmt = $pdo->prepare("
             SELECT c.id as chat_id FROM chats c
-            INNER JOIN chat_participants cp1 ON c.id = cp1.chatId AND cp1.isActive = 1
-            INNER JOIN chat_participants cp2 ON c.id = cp2.chatId AND cp2.isActive = 1
-            WHERE cp1.userId = ? AND cp2.userId = ?
+            INNER JOIN chat_participants cp1 ON c.id = cp1.chatId
+            INNER JOIN chat_participants cp2 ON c.id = cp2.chatId
+            WHERE cp1.userId = ? AND cp1.isActive = 1
+            AND cp2.userId = ? AND cp2.isActive = 1
             AND cp1.chatId = cp2.chatId
+            ORDER BY c.updatedAt DESC, c.createdAt DESC
             LIMIT 1
         ");
-        $chatStmt->execute([$user['id'], $input['seller_id']]);
-        $chat = $chatStmt->fetch(PDO::FETCH_ASSOC);
+        $chatStmt->execute([$buyer_id, $seller_id]);
+        $existingChat = $chatStmt->fetch(PDO::FETCH_ASSOC);
 
-        if ($chat && isset($chat['chat_id'])) {
+        if ($existingChat) {
+            $chat_id = (int)$existingChat['chat_id'];
+        } else {
+            $stmt = $pdo->prepare("
+                INSERT INTO chats (type, name, createdAt, updatedAt)
+                VALUES ('direct', NULL, NOW(), NOW())
+            ");
+            $stmt->execute();
+            $chat_id = (int)$pdo->lastInsertId();
+        }
+
+        // Ensure both participants are actively linked to this chat
+        $partStmt = $pdo->prepare("
+            INSERT INTO chat_participants (chatId, userId, role, joinedAt, isActive)
+            VALUES (?, ?, ?, NOW(), 1)
+            ON DUPLICATE KEY UPDATE isActive = 1
+        ");
+        $partStmt->execute([$chat_id, $buyer_id, 'admin']);
+        if ($seller_id !== $buyer_id) {
+            $partStmt->execute([$chat_id, $seller_id, 'member']);
+        }
+
+        if ($chat_id) {
             // Build compact deal card JSON payload for the message content
             $paymentMethodsList = array_map(function($m) { return ['id' => $m['id'], 'name' => $m['name'], 'category' => $m['category']]; }, $input['payment_methods']);
             $dealCardContent = json_encode([
@@ -199,7 +227,20 @@ function createDeal() {
                 INSERT INTO messages (chatId, senderId, content, messageType, isRead, createdAt, updatedAt)
                 VALUES (?, ?, ?, 'deal_card', 0, NOW(), NOW())
             ");
-            $msgStmt->execute([$chat['chat_id'], $user['id'], $dealCardContent]);
+            $msgStmt->execute([$chat_id, $buyer_id, $dealCardContent]);
+
+            // Update chat metadata so it floats to the top of both users' sidebars
+            $chatUpdateStmt = $pdo->prepare("
+                UPDATE chats 
+                SET updatedAt = NOW(), lastMessageTime = NOW(), lastMessage = ?
+                WHERE id = ?
+            ");
+            $chatUpdateStmt->execute([$dealCardContent, $chat_id]);
+
+            // Link chat_id to the deal
+            try {
+                $pdo->prepare("UPDATE deals SET chat_id = ? WHERE id = ?")->execute([$chat_id, $deal_id]);
+            } catch (Exception $e) {}
         }
         
         http_response_code(201);
@@ -207,6 +248,7 @@ function createDeal() {
             'message' => 'Deal created successfully',
             'deal_id' => $deal_id,
             'transaction_id' => $transaction_id,
+            'chat_id' => (int)$chat_id,
             'deal' => $deal
         ]);
         

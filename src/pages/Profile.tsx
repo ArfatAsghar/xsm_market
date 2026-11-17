@@ -666,6 +666,15 @@ const Profile: React.FC<ProfileProps> = () => {
               {/* Username + VIP */}
               <h2 className="text-xl font-bold text-white mb-1 flex items-center justify-center gap-1.5">
                 {profile.username}
+                {((user as any)?.kyc_status === 'approved' || (user as any)?.kyc_status === 'verified') && (
+                  <span
+                    title="KYC Identity Verified"
+                    className="inline-flex items-center justify-center rounded-full bg-blue-500 text-white flex-shrink-0 font-black"
+                    style={{ width: '18px', height: '18px', fontSize: '9px' }}
+                  >
+                    ✓
+                  </span>
+                )}
                 {(user as any)?.isVip && (
                   <Crown className="w-4 h-4 text-yellow-400 fill-yellow-400/20 animate-pulse" title="VIP Member" />
                 )}
@@ -741,18 +750,39 @@ const Profile: React.FC<ProfileProps> = () => {
                   <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-white">
                     <Shield className="w-3.5 h-3.5 text-xsm-yellow" />
                     <span>ID Verification (KYC)</span>
+                    {((user as any)?.kyc_status === 'approved' || (user as any)?.kyc_status === 'verified') && (
+                      <span
+                        title="KYC Verified"
+                        className="inline-flex items-center justify-center rounded-full bg-blue-500 text-white font-black"
+                        style={{ width: '16px', height: '16px', fontSize: '8px' }}
+                      >
+                        ✓
+                      </span>
+                    )}
                   </div>
-                  <p className="text-[11px] text-gray-400">
-                    Verify CNIC or Passport to unlock Free 72h Pin & verified trust badge.
-                  </p>
+                  {((user as any)?.kyc_status === 'approved' || (user as any)?.kyc_status === 'verified') ? (
+                    <p className="text-[11px] text-green-400 font-semibold">✓ Identity verified</p>
+                  ) : (user as any)?.kyc_status === 'pending' ? (
+                    <p className="text-[11px] text-yellow-400">⏳ Under review by admin</p>
+                  ) : (
+                    <p className="text-[11px] text-gray-400">
+                      Verify CNIC or Passport to unlock Free 72h Pin &amp; verified trust badge.
+                    </p>
+                  )}
                   <button
                     onClick={() => {
                       const kycEl = document.getElementById('kyc-verification-section');
-                      if (kycEl) kycEl.scrollIntoView({ behavior: 'smooth' });
+                      if (kycEl) {
+                        kycEl.scrollIntoView({ behavior: 'smooth' });
+                      } else {
+                        setShowSettings(true);
+                        setActiveSettingsTab('verification');
+                      }
                     }}
-                    className="w-full bg-neutral-800 hover:bg-neutral-700 text-xsm-yellow border border-xsm-yellow/40 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer"
+                    className="w-full bg-neutral-800 hover:bg-neutral-700 text-xsm-yellow border border-xsm-yellow/40 py-2 rounded-lg font-bold text-xs transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                   >
-                    Manage Verification
+                    <Shield className="w-3.5 h-3.5 text-xsm-yellow" />
+                    <span>{((user as any)?.kyc_status === 'approved' || (user as any)?.kyc_status === 'verified') ? 'View Verification' : 'Start KYC Verification'}</span>
                   </button>
                 </div>
               </div>
@@ -767,7 +797,28 @@ const Profile: React.FC<ProfileProps> = () => {
                 <h3 className="text-xl font-bold text-xsm-yellow">Profile Information</h3>
                 
                 {/* Quick Actions - moved here */}
-                <div className="flex space-x-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => {
+                      const kycEl = document.getElementById('kyc-verification-section');
+                      if (kycEl) {
+                        kycEl.scrollIntoView({ behavior: 'smooth' });
+                      } else {
+                        setShowSettings(true);
+                        setActiveSettingsTab('verification');
+                      }
+                    }}
+                    className="xsm-button-secondary flex items-center space-x-1.5 text-xs px-3 py-2 border-amber-500/40 text-amber-400 hover:bg-amber-500/10 cursor-pointer"
+                    title="KYC Verification"
+                  >
+                    <Shield className="w-3.5 h-3.5 text-xsm-yellow" />
+                    <span>KYC Verification</span>
+                    {((user as any)?.kyc_status === 'approved' || (user as any)?.kyc_status === 'verified') && (
+                      <span className="w-3.5 h-3.5 rounded-full bg-blue-500 text-white inline-flex items-center justify-center text-[8px] font-black">
+                        ✓
+                      </span>
+                    )}
+                  </button>
                   <button
                     onClick={() => {
                       showInfo('Feature coming soon', 'Pin Your Listing feature will be available soon!');

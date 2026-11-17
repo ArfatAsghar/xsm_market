@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Search, MoreVertical, CheckCircle, XCircle, AlertCircle, Eye, MessageCircle, Flag, Trash, X, Star, Users, DollarSign, Shield, Ban, Unlock } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search, MoreVertical, CheckCircle, XCircle, AlertCircle, Eye, MessageCircle, Flag, Trash, X, Star, Users, DollarSign, Shield, Ban, Unlock, SlidersHorizontal, Clock, Layers, Upload } from 'lucide-react';
+import AdminExtractorControls from './AdminExtractorControls';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -9,7 +10,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from '@/context/useAuth';
 import { useToast } from '@/components/ui/use-toast';
-import { deleteListing, banListing, unbanListing, getAdminAds } from '@/services/admin';
+import { deleteListing, banListing, unbanListing, getAdminAds, updateAdStatus } from '@/services/admin';
+import { uploadScreenshots } from '@/services/uploadService';
 
 const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'https://xsmmarket.com/api');
 
@@ -41,6 +43,8 @@ interface Listing {
   verified: boolean;
   premium: boolean;
   isMonetized: boolean;
+  channelUrl?: string;
+  verificationCode?: string;
   // Ban fields
   isBanned?: boolean | number;
   banReason?: string;
@@ -56,12 +60,13 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [isBanningListing, setIsBanningListing] = useState(false);
+  const [showExtractorModal, setShowExtractorModal] = useState(false);
 
   const { isLoggedIn, user } = useAuth();
   const { toast } = useToast();
 
   const currentUserRole = (user as any)?.role || 'user';
-  const isCurrentUserAdmin = currentUserRole === 'admin' || (user as any)?.isAdmin === true;
+  const isCurrentUserAdmin = currentUserRole === 'admin' || Boolean((user as any)?.isAdmin);
   const isCurrentUserViewer = currentUserRole === 'viewer';
 
   React.useEffect(() => {
@@ -93,6 +98,8 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
           verified: ad.verified || false,
           premium: ad.premium || false,
           isMonetized: ad.isMonetized || false,
+          channelUrl: ad.channelUrl || '',
+          verificationCode: ad.verificationCode || '',
           isBanned: ad.isBanned || false,
           banReason: ad.banReason || '',
           bannedAt: ad.bannedAt || '',
@@ -106,9 +113,114 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
       });
   }, []);
 
+  const [enrichTitle, setEnrichTitle] = useState<string>('');
+  const [enrichSubscribers, setEnrichSubscribers] = useState<string>('');
+  const [enrichThumbnail, setEnrichThumbnail] = useState<string>('');
+  const [enrichDescription, setEnrichDescription] = useState<string>('');
+  const [isApprovingAd, setIsApprovingAd] = useState<boolean>(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState<boolean>(false);
+
+  const handleAvatarUploadAdmin = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      setIsUploadingAvatar(true);
+      const uploadResult = await uploadScreenshots([file]);
+      const url = uploadResult?.screenshots?.[0]?.url;
+      if (url) {
+        setEnrichThumbnail(url);
+        toast({ title: 'Avatar Uploaded! ✅', description: 'Listing avatar updated.' });
+      }
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Upload Failed', description: err.message || 'Failed to upload image' });
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
   const handleViewDetails = (listing: Listing) => {
     setSelectedListing(listing);
+    setEnrichTitle(listing.title || '');
+    setEnrichSubscribers(listing.subscribers > 0 ? String(listing.subscribers) : '');
+    const initialThumb = (listing.thumbnail && listing.thumbnail !== '/placeholder.svg')
+      ? listing.thumbnail 
+      : (listing.primary_image || (listing.screenshots && listing.screenshots.length > 0 
+          ? (typeof listing.screenshots[0] === 'string' ? listing.screenshots[0] : (listing.screenshots[0]?.url || listing.screenshots[0]?.data || '')) 
+          : ''));
+    setEnrichThumbnail(initialThumb);
+    setEnrichDescription(listing.description || '');
     setShowDetailsModal(true);
+  };
+
+  const handleApprovePendingAd = async () => {
+    if (!selectedListing) return;
+    try {
+      setIsApprovingAd(true);
+      const subNum = parseInt(enrichSubscribers) || 0;
+      const approvedTitle = enrichTitle.trim() || selectedListing.title;
+      await updateAdStatus(selectedListing.id, 'active', '', {
+        title: approvedTitle,
+        subscribers: subNum,
+        thumbnail: enrichThumbnail.trim() || undefined,
+        description: enrichDescription.trim() || undefined,
+        verified: 1
+      });
+
+      setListings(prev => prev.map(l => l.id === selectedListing.id ? {
+        ...l,
+        title: approvedTitle,
+        status: 'active',
+        subscribers: subNum,
+        thumbnail: enrichThumbnail.trim() || l.thumbnail,
+        description: enrichDescription.trim() || l.description,
+        verified: true
+      } : l));
+
+      setSelectedListing(prev => prev ? {
+        ...prev,
+        title: approvedTitle,
+        status: 'active',
+        subscribers: subNum,
+        thumbnail: enrichThumbnail.trim() || prev.thumbnail,
+        description: enrichDescription.trim() || prev.description,
+        verified: true
+      } : null);
+
+      toast({
+        title: '✅ Listing Approved & Published!',
+        description: `"${approvedTitle}" is now active and live on the marketplace.`,
+      });
+      setShowDetailsModal(false);
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: '❌ Approval Failed',
+        description: err.message || 'Failed to approve listing'
+      });
+    } finally {
+      setIsApprovingAd(false);
+    }
+  };
+
+  const handleRejectPendingAd = async () => {
+    if (!selectedListing) return;
+    const reason = prompt('Please enter rejection reason:');
+    if (reason === null) return;
+    try {
+      await updateAdStatus(selectedListing.id, 'rejected', reason.trim() || 'Did not meet listing criteria');
+      setListings(prev => prev.map(l => l.id === selectedListing.id ? { ...l, status: 'rejected' } : l));
+      toast({
+        title: 'Listing Rejected',
+        description: `"${selectedListing.title}" has been rejected.`,
+      });
+      setShowDetailsModal(false);
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: '❌ Rejection Failed',
+        description: err.message || 'Failed to reject listing'
+      });
+    }
   };
 
   /** Contact Seller — creates or finds a chat, then navigates admin directly to it */
@@ -324,6 +436,28 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
 
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'banned' | 'pending' | 'rejected' | 'reported'>('all');
 
+  const statusCounts = useMemo(() => {
+    const counts = {
+      all: listings.length,
+      pending: 0,
+      active: 0,
+      rejected: 0,
+      banned: 0,
+      reported: 0,
+    };
+    listings.forEach(l => {
+      if (l.isBanned) {
+        counts.banned++;
+      } else {
+        if (l.status === 'pending') counts.pending++;
+        else if (l.status === 'active') counts.active++;
+        else if (l.status === 'rejected') counts.rejected++;
+        if (l.reportCount > 0) counts.reported++;
+      }
+    });
+    return counts;
+  }, [listings]);
+
   const filteredListings = listings.filter(listing => {
     const matchesSearch = 
       (listing.title ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -337,19 +471,21 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
 
   const getStatusIcon = (status: string) => {
     switch (status) {
-      case 'active': return <CheckCircle className="w-5 h-5 text-green-400" />;
-      case 'rejected': return <XCircle className="w-5 h-5 text-red-400" />;
-      case 'reported': return <Flag className="w-5 h-5 text-yellow-400" />;
-      default: return <AlertCircle className="w-5 h-5 text-blue-400" />;
+      case 'active': return <CheckCircle className="w-4 h-4 text-green-400 mr-1" />;
+      case 'pending': return <Clock className="w-4 h-4 text-yellow-400 mr-1" />;
+      case 'rejected': return <XCircle className="w-4 h-4 text-red-400 mr-1" />;
+      case 'reported': return <Flag className="w-4 h-4 text-yellow-400 mr-1" />;
+      default: return <AlertCircle className="w-4 h-4 text-blue-400 mr-1" />;
     }
   };
 
   const getStatusBadgeClass = (status: string) => {
     switch (status) {
-      case 'active': return 'bg-green-400/10 text-green-400 border-green-400/20';
-      case 'rejected': return 'bg-red-400/10 text-red-400 border-red-400/20';
-      case 'reported': return 'bg-yellow-400/10 text-yellow-400 border-yellow-400/20';
-      default: return 'bg-blue-400/10 text-blue-400 border-blue-400/20';
+      case 'active': return 'bg-green-400/10 text-green-400 border-green-400/30';
+      case 'pending': return 'bg-yellow-400/15 text-yellow-300 border-yellow-400/40 animate-pulse';
+      case 'rejected': return 'bg-red-400/10 text-red-400 border-red-400/30';
+      case 'reported': return 'bg-yellow-400/10 text-yellow-400 border-yellow-400/30';
+      default: return 'bg-blue-400/10 text-blue-400 border-blue-400/30';
     }
   };
 
@@ -362,33 +498,139 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
   return (
     <div className="p-6 bg-xsm-black min-h-screen">
       <div className="mb-8">
-        <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="flex flex-col md:flex-row gap-4 mb-4">
           <div className="relative flex-1">
             <input
               type="text"
-              placeholder="Search listings..."
+              placeholder="Search listings by title or seller..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg px-4 py-2 pl-10 focus:outline-none focus:border-xsm-yellow text-white"
+              className="w-full bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg px-4 py-2.5 pl-10 focus:outline-none focus:border-xsm-yellow text-white"
             />
-            <Search className="absolute left-3 top-2.5 h-5 w-5 text-xsm-medium-gray" />
+            <Search className="absolute left-3 top-3 h-5 w-5 text-xsm-medium-gray" />
           </div>
-          <div className="w-full md:w-48">
+          <div className="w-full md:w-56">
             <select
               value={filterStatus}
               onChange={(e) => setFilterStatus(e.target.value as any)}
-              className="w-full bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg px-4 py-2 focus:outline-none focus:border-xsm-yellow text-white cursor-pointer"
+              className="w-full bg-xsm-dark-gray border border-xsm-medium-gray rounded-lg px-4 py-2.5 focus:outline-none focus:border-xsm-yellow text-white cursor-pointer font-medium text-sm"
             >
-              <option value="all">All Listings</option>
-              <option value="active">Active</option>
-              <option value="banned">Banned</option>
-              <option value="pending">Pending</option>
-              <option value="rejected">Rejected</option>
-              <option value="reported">Reported</option>
+              <option value="all">All Listings ({statusCounts.all})</option>
+              <option value="pending">Pending ({statusCounts.pending})</option>
+              <option value="active">Approved / Active ({statusCounts.active})</option>
+              <option value="rejected">Rejected ({statusCounts.rejected})</option>
+              <option value="banned">Banned ({statusCounts.banned})</option>
+              <option value="reported">Reported ({statusCounts.reported})</option>
             </select>
           </div>
+          {isCurrentUserAdmin && (
+            <button
+              onClick={() => setShowExtractorModal(true)}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-amber-500/20 to-yellow-500/10 hover:from-amber-500/30 hover:to-yellow-500/20 border border-amber-500/40 text-amber-300 rounded-lg text-sm font-semibold transition-all cursor-pointer shrink-0 shadow-sm"
+              title="Manage API platform extractors"
+            >
+              <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+              <span>API Extractors</span>
+            </button>
+          )}
         </div>
 
+        {/* Quick Filter Buttons: All, Pending, Approved, Rejected, Banned */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none mb-6">
+          <button
+            type="button"
+            onClick={() => setFilterStatus('all')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap border shadow-sm ${
+              filterStatus === 'all'
+                ? 'bg-xsm-yellow text-black border-xsm-yellow shadow-yellow-500/20 ring-1 ring-yellow-400'
+                : 'bg-xsm-dark-gray text-gray-300 border-xsm-medium-gray/50 hover:border-xsm-yellow/40 hover:text-white'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>All Listings</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
+              filterStatus === 'all' ? 'bg-black text-xsm-yellow' : 'bg-black/60 text-gray-400'
+            }`}>
+              {statusCounts.all}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterStatus('pending')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap border shadow-sm ${
+              filterStatus === 'pending'
+                ? 'bg-amber-500 text-black border-amber-400 shadow-amber-500/25 ring-2 ring-amber-400/40'
+                : 'bg-xsm-dark-gray text-amber-300 border-amber-500/40 hover:border-amber-400 hover:bg-amber-500/10'
+            }`}
+          >
+            <Clock className={`w-4 h-4 ${filterStatus === 'pending' ? 'text-black' : 'text-amber-400'}`} />
+            <span>Pending</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
+              filterStatus === 'pending'
+                ? 'bg-black text-amber-400'
+                : statusCounts.pending > 0
+                ? 'bg-amber-500/30 text-amber-300 border border-amber-500/50 animate-pulse'
+                : 'bg-black/60 text-gray-400'
+            }`}>
+              {statusCounts.pending}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterStatus('active')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap border shadow-sm ${
+              filterStatus === 'active'
+                ? 'bg-emerald-500 text-black border-emerald-400 shadow-emerald-500/25 ring-2 ring-emerald-400/40'
+                : 'bg-xsm-dark-gray text-emerald-300 border-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-500/10'
+            }`}
+          >
+            <CheckCircle className={`w-4 h-4 ${filterStatus === 'active' ? 'text-black' : 'text-emerald-400'}`} />
+            <span>Approved</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
+              filterStatus === 'active' ? 'bg-black text-emerald-400' : 'bg-black/60 text-gray-400'
+            }`}>
+              {statusCounts.active}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterStatus('rejected')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap border shadow-sm ${
+              filterStatus === 'rejected'
+                ? 'bg-red-600 text-white border-red-500 shadow-red-500/25 ring-2 ring-red-400/40'
+                : 'bg-xsm-dark-gray text-red-300 border-red-500/40 hover:border-red-400 hover:bg-red-500/10'
+            }`}
+          >
+            <XCircle className={`w-4 h-4 ${filterStatus === 'rejected' ? 'text-white' : 'text-red-400'}`} />
+            <span>Rejected</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
+              filterStatus === 'rejected' ? 'bg-black text-red-400' : 'bg-black/60 text-gray-400'
+            }`}>
+              {statusCounts.rejected}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setFilterStatus('banned')}
+            className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer whitespace-nowrap border shadow-sm ${
+              filterStatus === 'banned'
+                ? 'bg-red-950 text-red-200 border-red-600 ring-2 ring-red-500/40'
+                : 'bg-xsm-dark-gray text-gray-400 border-xsm-medium-gray/40 hover:border-red-500/40'
+            }`}
+          >
+            <Ban className="w-4 h-4 text-red-400" />
+            <span>Banned</span>
+            <span className={`px-2 py-0.5 rounded-full text-xs font-mono font-black ${
+              filterStatus === 'banned' ? 'bg-black text-red-400' : 'bg-black/60 text-gray-400'
+            }`}>
+              {statusCounts.banned}
+            </span>
+          </button>
+        </div>
 
         {/* Listings Grid - 4+ cards per row */}
         {loading ? (
@@ -399,6 +641,7 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
             {filteredListings.map((listing) => {
               const isVipListing = Boolean((listing as any).isVip || (listing as any).sellerIsVip || (listing as any).seller_isVip);
+              const isPending = listing.status === 'pending' && !listing.isBanned;
 
               return (
                 <div 
@@ -406,6 +649,8 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                   className={`bg-xsm-dark-gray rounded-xl border overflow-hidden relative transition-all duration-300 flex flex-col justify-between ${
                     listing.isBanned 
                       ? 'border-red-800/60' 
+                      : isPending
+                      ? 'border-2 border-amber-500/80 shadow-[0_0_14px_rgba(245,158,11,0.25)] bg-gradient-to-b from-amber-950/20 via-xsm-dark-gray to-xsm-dark-gray'
                       : isVipListing
                       ? 'border-2 border-amber-500/80 shadow-[0_0_14px_rgba(245,158,11,0.25)]'
                       : 'border-xsm-medium-gray/50 hover:border-xsm-yellow/50'
@@ -472,69 +717,92 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                   </div>
 
                   {/* Card Bottom Status & Action */}
-                  <div className="p-3 pt-0 flex items-center justify-between">
-                    <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${listing.isBanned ? 'bg-red-950 text-red-400 border-red-800' : getStatusBadgeClass(listing.status)}`}>
-                      {listing.isBanned ? <Ban className="w-3.5 h-3.5 mr-1" /> : getStatusIcon(listing.status)}
-                      <span className="capitalize text-[11px]">{listing.isBanned ? 'Banned' : listing.status}</span>
+                  <div className="p-3 pt-0">
+                    <div className="flex items-center justify-between">
+                      <div className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${listing.isBanned ? 'bg-red-950 text-red-400 border-red-800' : getStatusBadgeClass(listing.status)}`}>
+                        {listing.isBanned ? <Ban className="w-3.5 h-3.5 mr-1" /> : getStatusIcon(listing.status)}
+                        <span className="capitalize text-[11px] font-semibold">{listing.isBanned ? 'Banned' : listing.status}</span>
+                      </div>
+
+                      <DropdownMenu>
+                        <DropdownMenuTrigger className="p-2 hover:bg-xsm-medium-gray rounded-lg transition-colors">
+                          <MoreVertical className="h-5 w-5 text-xsm-light-gray" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="bg-xsm-dark-gray border-xsm-medium-gray min-w-[180px]">
+                          <DropdownMenuItem
+                            className="text-white hover:text-xsm-yellow cursor-pointer"
+                            onClick={() => handleViewDetails(listing)}
+                          >
+                            <Eye className="w-4 h-4 mr-2" />
+                            View Details
+                          </DropdownMenuItem>
+                          {isPending && isCurrentUserAdmin && (
+                            <DropdownMenuItem
+                              className="text-amber-400 hover:text-amber-300 font-bold cursor-pointer"
+                              onClick={() => handleViewDetails(listing)}
+                            >
+                              <CheckCircle className="w-4 h-4 mr-2 text-amber-400" />
+                              Review &amp; Approve
+                            </DropdownMenuItem>
+                          )}
+                          {!isCurrentUserViewer && (
+                            <>
+                              <DropdownMenuItem
+                                className="text-blue-400 hover:text-blue-300 cursor-pointer"
+                                onClick={() => handleContactSeller(listing)}
+                                disabled={isCreatingChat}
+                              >
+                                <MessageCircle className="w-4 h-4 mr-2" />
+                                {isCreatingChat ? 'Opening...' : 'Contact Seller'}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator className="bg-xsm-medium-gray" />
+                              {listing.isBanned ? (
+                                <DropdownMenuItem
+                                  className="text-green-400 hover:text-green-300 cursor-pointer"
+                                  onClick={() => handleUnbanListing(listing)}
+                                >
+                                  <Unlock className="w-4 h-4 mr-2" />
+                                  Unban Listing
+                                </DropdownMenuItem>
+                              ) : (
+                                <DropdownMenuItem
+                                  className="text-orange-400 hover:text-orange-300 cursor-pointer"
+                                  onClick={() => handleBanListing(listing)}
+                                  disabled={isBanningListing}
+                                >
+                                  <Ban className="w-4 h-4 mr-2" />
+                                  Ban Listing
+                                </DropdownMenuItem>
+                              )}
+                              {isCurrentUserAdmin && (
+                                <>
+                                  <DropdownMenuSeparator className="bg-xsm-medium-gray" />
+                                  <DropdownMenuItem
+                                    className="text-red-500 hover:text-red-400 cursor-pointer"
+                                    onClick={() => handleDeleteListing(listing)}
+                                  >
+                                    <Trash className="w-4 h-4 mr-2" />
+                                    Delete Listing
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
 
-                    <DropdownMenu>
-                      <DropdownMenuTrigger className="p-2 hover:bg-xsm-medium-gray rounded-lg transition-colors">
-                        <MoreVertical className="h-5 w-5 text-xsm-light-gray" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent className="bg-xsm-dark-gray border-xsm-medium-gray min-w-[180px]">
-                        <DropdownMenuItem
-                          className="text-white hover:text-xsm-yellow cursor-pointer"
-                          onClick={() => handleViewDetails(listing)}
-                        >
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Details
-                        </DropdownMenuItem>
-                        {!isCurrentUserViewer && (
-                          <>
-                            <DropdownMenuItem
-                              className="text-blue-400 hover:text-blue-300 cursor-pointer"
-                              onClick={() => handleContactSeller(listing)}
-                              disabled={isCreatingChat}
-                            >
-                              <MessageCircle className="w-4 h-4 mr-2" />
-                              {isCreatingChat ? 'Opening...' : 'Contact Seller'}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator className="bg-xsm-medium-gray" />
-                            {listing.isBanned ? (
-                              <DropdownMenuItem
-                                className="text-green-400 hover:text-green-300 cursor-pointer"
-                                onClick={() => handleUnbanListing(listing)}
-                              >
-                                <Unlock className="w-4 h-4 mr-2" />
-                                Unban Listing
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem
-                                className="text-orange-400 hover:text-orange-300 cursor-pointer"
-                                onClick={() => handleBanListing(listing)}
-                                disabled={isBanningListing}
-                              >
-                                <Ban className="w-4 h-4 mr-2" />
-                                Ban Listing
-                              </DropdownMenuItem>
-                            )}
-                            {isCurrentUserAdmin && (
-                              <>
-                                <DropdownMenuSeparator className="bg-xsm-medium-gray" />
-                                <DropdownMenuItem
-                                  className="text-red-500 hover:text-red-400 cursor-pointer"
-                                  onClick={() => handleDeleteListing(listing)}
-                                >
-                                  <Trash className="w-4 h-4 mr-2" />
-                                  Delete Listing
-                                </DropdownMenuItem>
-                              </>
-                            )}
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {/* Prominent Quick Review & Approve Button for Pending Listings */}
+                    {isPending && isCurrentUserAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => handleViewDetails(listing)}
+                        className="w-full mt-2.5 py-2 px-3 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black font-extrabold text-xs rounded-lg flex items-center justify-center gap-1.5 shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+                      >
+                        <CheckCircle className="w-4 h-4 text-black" />
+                        <span>Review &amp; Approve</span>
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -609,6 +877,31 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                         <span className="text-3xl font-bold text-xsm-yellow">{selectedListing.price}</span>
                       </div>
                     </div>
+                    {/* Channel Live Link & Verification Code Box */}
+                    <div className="bg-xsm-black/80 border border-xsm-medium-gray/50 rounded-xl p-4 my-3 space-y-3">
+                      {selectedListing.channelUrl && (
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <span className="text-xs text-xsm-light-gray uppercase tracking-wider font-semibold">Channel URL:</span>
+                          <a 
+                            href={selectedListing.channelUrl} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 text-xsm-yellow hover:text-yellow-400 font-mono text-xs bg-xsm-yellow/10 hover:bg-xsm-yellow/20 px-3 py-1.5 rounded-lg border border-xsm-yellow/30 transition-colors"
+                          >
+                            <span>🔗 Open Live Profile</span>
+                          </a>
+                        </div>
+                      )}
+                      {selectedListing.verificationCode && (
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <span className="text-xs text-xsm-light-gray uppercase tracking-wider font-semibold">Verification Code in Bio:</span>
+                          <span className="bg-xsm-yellow text-black font-mono font-bold text-sm px-3 py-1 rounded-md tracking-wider">
+                            {selectedListing.verificationCode}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
                     {selectedListing.description && (
                       <div>
                         <h4 className="text-lg font-semibold text-white mb-2">Description</h4>
@@ -702,6 +995,137 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                   {/* Action Buttons */}
                   {!isCurrentUserViewer && (
                     <div className="space-y-3">
+                      {/* Pending Approval & Enrichment Card (Admin only) */}
+                      {selectedListing.status === 'pending' && isCurrentUserAdmin && (
+                        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 space-y-3 text-left mb-4">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-5 h-5 text-yellow-400" />
+                            <h4 className="font-semibold text-yellow-300 text-sm">Review & Enrich Pending Listing</h4>
+                          </div>
+                          <p className="text-xs text-gray-300 leading-relaxed">
+                            Check the code in bio via the channel link, then enter verified followers and avatar below before approving:
+                          </p>
+
+                          <div>
+                            <label className="text-xs text-xsm-light-gray block mb-1">Channel Name / Title:</label>
+                            <input
+                              type="text"
+                              value={enrichTitle}
+                              onChange={(e) => setEnrichTitle(e.target.value)}
+                              placeholder="Channel name or title"
+                              className="w-full bg-xsm-black border border-xsm-medium-gray rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-xsm-yellow font-semibold"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-xs text-xsm-light-gray block mb-1">Verified Followers / Subscribers:</label>
+                            <input
+                              type="number"
+                              value={enrichSubscribers}
+                              onChange={(e) => setEnrichSubscribers(e.target.value)}
+                              placeholder="e.g. 54000"
+                              className="w-full bg-xsm-black border border-xsm-medium-gray rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-xsm-yellow"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="text-xs text-xsm-light-gray block mb-1">Profile Avatar / Picture:</label>
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-10 h-10 rounded-full overflow-hidden bg-xsm-black border border-xsm-yellow/50 flex-shrink-0">
+                                <img
+                                  src={enrichThumbnail || '/default-avatar.png'}
+                                  alt="Avatar"
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => { (e.target as HTMLImageElement).src = '/default-avatar.png'; }}
+                                />
+                              </div>
+                              <input
+                                type="text"
+                                value={enrichThumbnail}
+                                onChange={(e) => setEnrichThumbnail(e.target.value)}
+                                placeholder="Paste image URL or upload image"
+                                className="flex-1 bg-xsm-black border border-xsm-medium-gray rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-xsm-yellow font-mono"
+                              />
+                              <label className="px-3 py-1.5 bg-xsm-yellow hover:bg-yellow-400 text-black font-bold text-xs rounded-lg transition-colors cursor-pointer shrink-0 shadow-sm flex items-center gap-1">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>{isUploadingAvatar ? 'Uploading...' : 'Upload'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={isUploadingAvatar}
+                                  onChange={handleAvatarUploadAdmin}
+                                />
+                              </label>
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="text-xs text-xsm-light-gray block mb-1">Description / Bio (optional):</label>
+                            <textarea
+                              value={enrichDescription}
+                              onChange={(e) => setEnrichDescription(e.target.value)}
+                              rows={2}
+                              placeholder="Channel bio description..."
+                              className="w-full bg-xsm-black border border-xsm-medium-gray rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-xsm-yellow"
+                            />
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={handleApprovePendingAd}
+                              disabled={isApprovingAd}
+                              className="flex-1 bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                            >
+                              <CheckCircle className="w-4 h-4" />
+                              <span>{isApprovingAd ? 'Approving...' : 'Approve & Publish'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleRejectPendingAd}
+                              disabled={isApprovingAd}
+                              className="bg-red-900/60 hover:bg-red-800 text-red-200 border border-red-700/50 font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer"
+                            >
+                              Reject
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Rejected Listing Re-Approve Option */}
+                      {selectedListing.status === 'rejected' && isCurrentUserAdmin && (
+                        <div className="bg-red-950/20 border border-red-500/30 rounded-xl p-4 space-y-3 text-left mb-4">
+                          <div className="flex items-center gap-2">
+                            <AlertCircle className="w-5 h-5 text-red-400" />
+                            <h4 className="font-semibold text-red-300 text-sm">Listing is currently Rejected</h4>
+                          </div>
+                          <p className="text-xs text-gray-300 leading-relaxed">
+                            You can re-approve this listing to reactivate and publish it live on the marketplace.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={handleApprovePendingAd}
+                            disabled={isApprovingAd}
+                            className="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-2.5 px-4 rounded-lg text-sm transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-md"
+                          >
+                            <CheckCircle className="w-4 h-4" />
+                            <span>{isApprovingAd ? 'Approving...' : 'Re-Approve & Publish Listing'}</span>
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Active Listing Take-Down / Reject Option */}
+                      {selectedListing.status === 'active' && isCurrentUserAdmin && (
+                        <button
+                          type="button"
+                          onClick={handleRejectPendingAd}
+                          className="w-full bg-red-950/40 hover:bg-red-900/60 text-red-300 border border-red-600/40 font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                        >
+                          <XCircle className="w-4 h-4 text-red-400" />
+                          <span>Reject / Unpublish Listing</span>
+                        </button>
+                      )}
                       {/* Contact Seller */}
                       <button
                         onClick={() => handleContactSeller(selectedListing)}
@@ -795,6 +1219,30 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                 {banModal.submitting ? 'Banning...' : 'Confirm Ban'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── API Extractors Modal ── */}
+      {showExtractorModal && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowExtractorModal(false); }}
+        >
+          <div className="bg-xsm-dark-gray border border-xsm-medium-gray rounded-2xl max-w-4xl w-full max-h-[90vh] overflow-y-auto p-4 sm:p-6 shadow-2xl">
+            <div className="flex justify-between items-center pb-4 mb-4 border-b border-xsm-medium-gray/50">
+              <h2 className="text-xl font-bold text-xsm-yellow flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5 text-amber-400" />
+                <span>Platform Extractor Controls</span>
+              </h2>
+              <button
+                onClick={() => setShowExtractorModal(false)}
+                className="p-1.5 rounded-lg border border-xsm-border hover:bg-xsm-medium-gray text-xsm-light-gray hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <AdminExtractorControls onClose={() => setShowExtractorModal(false)} isCompactModal={true} />
           </div>
         </div>
       )}

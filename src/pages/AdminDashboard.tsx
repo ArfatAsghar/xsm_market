@@ -15,6 +15,7 @@ import AdminWebsiteUpdates from '@/components/admin/AdminWebsiteUpdates';
 import EmailPoolManager from '@/components/admin/EmailPoolManager';
 import AdminReferralManagement from '@/components/admin/AdminReferralManagement';
 import AdminKycManagement from '@/components/admin/AdminKycManagement';
+import AdminExtractorControls from '@/components/admin/AdminExtractorControls';
 import { useAuth } from '@/context/useAuth';
 
 const AdminDashboard: React.FC = () => {
@@ -78,6 +79,7 @@ const AdminDashboard: React.FC = () => {
       case 'referral-management': return 'Referral & KYC Moderation';
       case 'financial-records': return 'Financial Analytics & Volume';
       case 'website-updates': return 'Announcements & Updates';
+      case 'api-extractors': return 'Platform API Extractor Controls';
       default: return viewKey.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
     }
   };
@@ -175,7 +177,18 @@ const AdminDashboard: React.FC = () => {
       icon: Bell,
       accent: 'from-sky-500/20 to-sky-600/10 text-sky-600 dark:text-sky-400',
       tag: 'Public Notices'
-    }
+    },
+    ...(isCurrentUserAdmin || isCurrentUserManager ? [{
+      id: 'api-extractors',
+      name: 'API Extractors',
+      desc: 'Turn ON or OFF automated profile extractors for YouTube, TikTok, Instagram, Facebook, Twitter, and Telegram.',
+      category: 'platform',
+      categoryLabel: 'Infrastructure',
+      icon: SlidersHorizontal,
+      accent: 'from-amber-500/20 to-yellow-600/10 text-amber-600 dark:text-yellow-400',
+      tag: 'API Controls',
+      isHighlight: true
+    }] : [])
   ];
 
   const filteredModules = allModules.filter(m => {
@@ -206,6 +219,8 @@ const AdminDashboard: React.FC = () => {
         return <FinancialRecords />;
       case 'website-updates':
         return <AdminWebsiteUpdates />;
+      case 'api-extractors':
+        return <AdminExtractorControls />;
       default:
         return (
           <div className="space-y-8">

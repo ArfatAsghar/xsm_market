@@ -33,6 +33,7 @@ interface ChannelData {
     name: string;
     rating: number;
     sales: number;
+    isKycVerified?: boolean;
   };
 }
 
@@ -40,7 +41,7 @@ interface ChannelModalProps {
   channel: ChannelData | null;
   isOpen: boolean;
   onClose: () => void;
-  onNavigateToChat?: () => void;
+  onNavigateToChat?: (chatId?: string | number) => void;
 }
 
 const PlatformIcon = ({ platform }: { platform: ChannelData['platform'] }) => {
@@ -403,7 +404,15 @@ const ChannelModal: React.FC<ChannelModalProps> = ({ channel, isOpen, onClose, o
                   <h4 className="text-lg font-semibold text-xsm-yellow mb-3">Seller Information</h4>
                   <div className="flex flex-col space-y-4">
                     <div>
-                      <div className="flex items-center space-x-3 mb-2">
+                      <div className="flex items-center space-x-2 mb-2">
+                        {channel.seller.isKycVerified && (
+                          <span
+                            title="KYC Verified"
+                            className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-blue-500 text-white flex-shrink-0 text-[9px] font-black"
+                          >
+                            ✓
+                          </span>
+                        )}
                         <div className="text-white font-semibold text-lg">{channel.seller.name}</div>
                         {channel.seller.rating > 0 && (
                           <div className="flex items-center space-x-1">

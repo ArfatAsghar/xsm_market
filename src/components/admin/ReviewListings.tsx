@@ -920,7 +920,7 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                       <div className="text-center">
                         <div className="flex items-center justify-center mb-2">
                           <Users className="w-5 h-5 text-xsm-yellow mr-2" />
-                          <span className="text-xsm-light-gray">Subscribers</span>
+                          <span className="text-xsm-light-gray">{selectedListing.platform === 'youtube' ? 'Subscribers' : 'Followers'}</span>
                         </div>
                         <div className="text-2xl font-bold text-white">{formatNumber(selectedListing.subscribers)}</div>
                       </div>
@@ -1018,12 +1018,14 @@ const ReviewListings: React.FC<ReviewListingsProps> = ({ onNavigateToChat }) => 
                           </div>
 
                           <div>
-                            <label className="text-xs text-xsm-light-gray block mb-1">Verified Followers / Subscribers:</label>
+                            <label className="text-xs text-xsm-light-gray block mb-1">
+                              Verified {selectedListing.platform === 'youtube' ? 'Subscribers' : 'Followers'}:
+                            </label>
                             <input
                               type="number"
                               value={enrichSubscribers}
                               onChange={(e) => setEnrichSubscribers(e.target.value)}
-                              placeholder="e.g. 54000"
+                              placeholder={selectedListing.platform === 'youtube' ? "e.g. 54000 subscribers" : "e.g. 54000 followers"}
                               className="w-full bg-xsm-black border border-xsm-medium-gray rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-xsm-yellow"
                             />
                           </div>

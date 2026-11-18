@@ -784,24 +784,15 @@ const SellChannel: React.FC<SellChannelProps> = () => {
           description: "Your listing has been updated. Redirecting...",
         });
       } else {
-        // Create new ad
-        if (isFallbackActive) {
-          adData.isManualPending = true;
-          adData.status = 'pending';
-        }
+        // Create new ad - every listing must be first approved by the admin before showing in marketplace
+        adData.isManualPending = true;
+        adData.status = 'pending';
         result = await createAd(adData);
         
-        if (isFallbackActive) {
-          toast({
-            title: "Listing Queued for System Sync! ⚡",
-            description: "Your channel has been queued in our automated indexing node. Your listing will go live once sync completes.",
-          });
-        } else {
-          toast({
-            title: "Listing Created Successfully! 🎉",
-            description: "Your listing is now live on the marketplace! Redirecting to your profile...",
-          });
-        }
+        toast({
+          title: "Listing Submitted for Review! ⏳",
+          description: "Your listing has been submitted and will go live on the marketplace as soon as an admin approves it.",
+        });
       }
       
       console.log('Ad operation result:', result);
@@ -1258,9 +1249,9 @@ const SellChannel: React.FC<SellChannelProps> = () => {
               </div>
             </div>
 
-            {/* Optional Fields Section */}
+            {/* Description Section */}
             <div className="pt-6">
-              <h2 className="text-xl font-medium mb-4">Optional fields</h2>
+              <h2 className="text-xl font-bold mb-4 text-slate-900 dark:text-white">Description</h2>
               
               {/* Description */}
               <div className="mb-6">
@@ -1268,7 +1259,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
-                  className="xsm-input w-full resize-none"
+                  className="xsm-input w-full resize-none text-slate-900 dark:text-white bg-white dark:bg-xsm-black border-slate-300 dark:border-xsm-medium-gray"
                   rows={4}
                   placeholder="Listing description (posting contacts is prohibited)"
                 />
@@ -1276,7 +1267,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
               {/* Monetization Status — Interactive Cards */}
               <div className="mb-6">
-                <label className="block text-white font-medium mb-2.5">
+                <label className="block text-slate-900 dark:text-white font-bold mb-2.5">
                   Monetization Status
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1285,25 +1276,25 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                     onClick={() => setFormData(prev => ({ ...prev, isMonetized: true }))}
                     className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex items-start gap-3.5 cursor-pointer ${
                       formData.isMonetized
-                        ? 'border-green-500 bg-gradient-to-br from-green-950/40 via-green-900/20 to-xsm-dark-gray text-white ring-2 ring-green-500/80 shadow-lg shadow-green-500/10'
-                        : 'border-xsm-medium-gray/40 bg-xsm-black/60 text-gray-300 hover:border-green-500/50 hover:text-white'
+                        ? 'border-green-500 bg-green-50/90 dark:bg-gradient-to-br dark:from-green-950/40 dark:via-green-900/20 dark:to-xsm-dark-gray text-slate-900 dark:text-white ring-2 ring-green-500/80 shadow-lg shadow-green-500/10'
+                        : 'border-slate-300 dark:border-xsm-medium-gray/40 bg-white dark:bg-xsm-black/60 text-slate-800 dark:text-gray-300 hover:border-green-500/50 hover:text-green-700 dark:hover:text-white'
                     }`}
                   >
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
-                      formData.isMonetized ? 'bg-green-500/20 text-green-400 border border-green-500/40 shadow-inner' : 'bg-xsm-dark-gray text-gray-400 border border-xsm-medium-gray/30'
+                      formData.isMonetized ? 'bg-green-500/20 text-green-600 dark:text-green-400 border border-green-500/40 shadow-inner' : 'bg-slate-100 dark:bg-xsm-dark-gray text-slate-500 dark:text-gray-400 border border-slate-200 dark:border-xsm-medium-gray/30'
                     }`}>
                       <DollarSign className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-sm text-white">Monetized</span>
+                        <span className="font-bold text-sm text-slate-900 dark:text-white">Monetized</span>
                         {formData.isMonetized && (
-                          <span className="bg-green-500/20 text-green-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-green-500/30 flex items-center gap-1">
+                          <span className="bg-green-500/20 text-green-700 dark:text-green-400 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-green-500/30 flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3 inline" /> Active
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 leading-relaxed">
+                      <p className="text-xs text-slate-600 dark:text-gray-400 leading-relaxed">
                         Channel is approved for monetization and actively eligible to earn revenue
                       </p>
                     </div>
@@ -1314,25 +1305,25 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                     onClick={() => setFormData(prev => ({ ...prev, isMonetized: false }))}
                     className={`p-4 rounded-xl border text-left transition-all relative overflow-hidden flex items-start gap-3.5 cursor-pointer ${
                       !formData.isMonetized
-                        ? 'border-xsm-yellow bg-gradient-to-br from-amber-950/30 via-xsm-yellow/10 to-xsm-dark-gray text-white ring-2 ring-xsm-yellow/80 shadow-lg shadow-yellow-500/10'
-                        : 'border-xsm-medium-gray/40 bg-xsm-black/60 text-gray-300 hover:border-xsm-yellow/50 hover:text-white'
+                        ? 'border-amber-500 bg-amber-50/90 dark:bg-gradient-to-br dark:from-amber-950/30 dark:via-xsm-yellow/10 dark:to-xsm-dark-gray text-slate-900 dark:text-white ring-2 ring-amber-500/80 shadow-lg shadow-yellow-500/10'
+                        : 'border-slate-300 dark:border-xsm-medium-gray/40 bg-white dark:bg-xsm-black/60 text-slate-800 dark:text-gray-300 hover:border-amber-500/50 hover:text-amber-700 dark:hover:text-white'
                     }`}
                   >
                     <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-all ${
-                      !formData.isMonetized ? 'bg-xsm-yellow/20 text-xsm-yellow border border-xsm-yellow/40 shadow-inner' : 'bg-xsm-dark-gray text-gray-400 border border-xsm-medium-gray/30'
+                      !formData.isMonetized ? 'bg-amber-500/20 text-amber-600 dark:text-xsm-yellow border border-amber-500/40 shadow-inner' : 'bg-slate-100 dark:bg-xsm-dark-gray text-slate-500 dark:text-gray-400 border border-slate-200 dark:border-xsm-medium-gray/30'
                     }`}>
                       <XCircle className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-sm text-white">Not Monetized</span>
+                        <span className="font-bold text-sm text-slate-900 dark:text-white">Not Monetized</span>
                         {!formData.isMonetized && (
-                          <span className="bg-amber-500/20 text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
+                          <span className="bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[10px] font-extrabold px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3 inline" /> Selected
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-gray-400 leading-relaxed">
+                      <p className="text-xs text-slate-600 dark:text-gray-400 leading-relaxed">
                         Not yet monetized or ready to apply for monetization once requirements are met
                       </p>
                     </div>
@@ -1351,14 +1342,14 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                 const customSelectedMethods = currentEarningList.filter(m => !presetMethods.includes(m));
 
                 return (
-                  <div className="mb-6 p-4 rounded-xl border border-green-500/30 bg-green-950/10 transition-all">
+                  <div className="mb-6 p-4 rounded-xl border border-green-500/40 bg-emerald-500/10 dark:bg-green-950/10 transition-all">
                     <div className="flex items-center justify-between mb-2">
-                      <label className="block text-white font-bold text-sm">
+                      <label className="block text-slate-900 dark:text-white font-bold text-sm">
                         Ways of Earning ({detectedPlatKey.charAt(0).toUpperCase() + detectedPlatKey.slice(1)} Monetization)
                       </label>
-                      <span className="text-xs text-green-400 font-semibold">Select all that apply</span>
+                      <span className="text-xs text-green-700 dark:text-green-400 font-semibold">Select all that apply</span>
                     </div>
-                    <p className="text-xs text-gray-400 mb-3">
+                    <p className="text-xs text-slate-600 dark:text-gray-400 mb-3">
                       Select monetization and revenue methods used for this channel/account:
                     </p>
 
@@ -1381,7 +1372,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                             className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer ${
                               isSelected
                                 ? 'bg-xsm-yellow text-black border-xsm-yellow shadow-md scale-105'
-                                : 'bg-xsm-black/80 text-gray-300 border-xsm-medium-gray/40 hover:border-xsm-yellow/50 hover:text-white'
+                                : 'bg-white dark:bg-xsm-black/80 text-slate-800 dark:text-gray-300 border-slate-300 dark:border-xsm-medium-gray/40 hover:border-amber-500 hover:text-slate-900 dark:hover:text-white'
                             }`}
                           >
                             {isSelected ? '✓ ' : '+ '}{method}
@@ -1393,17 +1384,17 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                     {/* Custom Selected Chips */}
                     {customSelectedMethods.length > 0 && (
                       <div className="mb-3 flex flex-wrap gap-2 items-center">
-                        <span className="text-[11px] text-gray-400 font-semibold">Custom Methods:</span>
+                        <span className="text-[11px] text-slate-600 dark:text-gray-400 font-semibold">Custom Methods:</span>
                         {customSelectedMethods.map(method => (
                           <span
                             key={method}
-                            className="bg-green-900/40 text-green-300 border border-green-500/40 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"
+                            className="bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300 border border-green-400 dark:border-green-500/40 px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1.5"
                           >
                             <span>✓ {method}</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveEarningMethod(method)}
-                              className="text-gray-400 hover:text-red-400 transition-colors cursor-pointer"
+                              className="text-slate-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 transition-colors cursor-pointer"
                             >
                               <X className="w-3.5 h-3.5" />
                             </button>
@@ -1424,7 +1415,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                             handleAddCustomEarningMethod();
                           }
                         }}
-                        className="xsm-input flex-1 text-xs"
+                        className="xsm-input flex-1 text-xs bg-white dark:bg-xsm-black text-slate-900 dark:text-white border-slate-300 dark:border-xsm-medium-gray"
                         placeholder="Type custom earning method and click Add (e.g. Brand Sponsorship, Affiliate, Merchandise)..."
                       />
                       <button
@@ -1434,7 +1425,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                         className={`px-4 py-2 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all ${
                           customEarningInput.trim()
                             ? 'bg-xsm-yellow text-black hover:bg-yellow-400 cursor-pointer shadow-md'
-                            : 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                            : 'bg-slate-300 dark:bg-gray-700 text-slate-500 dark:text-gray-400 cursor-not-allowed'
                         }`}
                       >
                         <Plus className="w-3.5 h-3.5" />
@@ -1447,7 +1438,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
               {/* Specify Primary Content Published — Compact Selection Cards */}
               <div className="mb-6">
-                <label className="block text-white font-medium mb-2.5">
+                <label className="block text-slate-900 dark:text-white font-bold mb-2.5">
                   Specify Primary Content Published
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -1465,15 +1456,15 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                         onClick={() => setFormData(prev => ({ ...prev, contentType: item.id }))}
                         className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                           isSelected
-                            ? 'border-xsm-yellow bg-xsm-yellow/10 text-xsm-yellow ring-1 ring-xsm-yellow shadow-md'
-                            : 'border-xsm-medium-gray/40 bg-xsm-black/60 text-gray-300 hover:border-xsm-yellow/50 hover:text-white'
+                            ? 'border-amber-500 bg-amber-500/10 text-amber-600 dark:text-xsm-yellow ring-1 ring-amber-500 shadow-md'
+                            : 'border-slate-300 dark:border-xsm-medium-gray/40 bg-white dark:bg-xsm-black/60 text-slate-800 dark:text-gray-300 hover:border-amber-500 hover:text-slate-900 dark:hover:text-white'
                         }`}
                       >
                         <div className="flex items-center gap-1.5 mb-1">
                           <span className="text-sm">{item.icon}</span>
-                          <span className="font-bold text-xs">{item.label}</span>
+                          <span className="font-bold text-xs text-slate-900 dark:text-white">{item.label}</span>
                         </div>
-                        <p className="text-[10px] text-gray-400">{item.desc}</p>
+                        <p className="text-[10px] text-slate-600 dark:text-gray-400">{item.desc}</p>
                       </button>
                     );
                   })}
@@ -1482,7 +1473,7 @@ const SellChannel: React.FC<SellChannelProps> = () => {
 
               {/* Screenshot Upload */}
               <div className="mt-6">
-                <h3 className="text-base font-medium mb-3 text-white">Screenshots (Optional)</h3>
+                <h3 className="text-base font-bold mb-3 text-slate-900 dark:text-white">Screenshots</h3>
                 <p className="text-sm text-xsm-light-gray mb-4">
                   Add screenshots to showcase your channel (proof of income, analytics, etc.)
                 </p>

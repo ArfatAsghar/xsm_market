@@ -256,11 +256,11 @@
   }
 
   /* Prevent text-only buttons or transparent buttons from keeping white text in light mode */
-  [data-theme="light"] button.text-white:not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-amber"]):not([class*="bg-purple"]):not([class*="bg-orange"]):not([class*="bg-emerald"]):not(.keep-white) {
+  [data-theme="light"] .text-white:is(button):not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-amber"]):not([class*="bg-purple"]):not([class*="bg-orange"]):not([class*="bg-emerald"]):not(.keep-white) {
     color: #0f172a !important;
   }
 
-  [data-theme="light"] a.text-white:not([class*="bg-"]) {
+  [data-theme="light"] .text-white:is(a):not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-amber"]):not([class*="bg-purple"]):not([class*="bg-orange"]):not([class*="bg-emerald"]) {
     color: #0f172a !important;
   }
 
@@ -269,11 +269,11 @@
     color: #1e293b !important;
   }
 
-  [data-theme="light"] .text-gray-300:not([class*="bg-"]) {
+  [data-theme="light"] .text-gray-300:not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-amber"]):not([class*="bg-emerald"]):not([class*="bg-purple"]) {
     color: #334155 !important;
   }
 
-  [data-theme="light"] .text-gray-400:not([class*="bg-"]) {
+  [data-theme="light"] .text-gray-400:not([class*="bg-red"]):not([class*="bg-green"]):not([class*="bg-blue"]):not([class*="bg-yellow"]):not([class*="bg-amber"]):not([class*="bg-emerald"]):not([class*="bg-purple"]) {
     color: #475569 !important;
   }
 
@@ -283,6 +283,23 @@
 
   [data-theme="light"] .text-xsm-light-gray {
     color: #475569 !important;
+  }
+
+  /* Light theme card and chip backgrounds & border contrast */
+  [data-theme="light"] [class*="bg-xsm-black"] {
+    background-color: #ffffff !important;
+    border-color: #cbd5e1 !important;
+    color: #0f172a !important;
+  }
+
+  [data-theme="light"] [class*="bg-xsm-dark-gray"] {
+    background-color: #ffffff !important;
+    border-color: #e2e8f0 !important;
+    color: #0f172a !important;
+  }
+
+  [data-theme="light"] [class*="border-xsm-medium-gray"] {
+    border-color: #cbd5e1 !important;
   }
 
   /* In light theme, ensure input fields have clean white backgrounds with dark text and crisp borders */

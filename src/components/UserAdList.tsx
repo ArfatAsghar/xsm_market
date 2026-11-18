@@ -639,7 +639,7 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                         </span>
                         <span className="text-xsm-medium-gray/60">•</span>
                         <span className="text-blue-400 font-semibold text-[11px]">
-                          {formatNumber(ad.subscribers)} subs
+                          {formatNumber(ad.subscribers)} {ad.platform === 'youtube' ? 'subs' : 'followers'}
                         </span>
                         {ad.category && (
                           <>

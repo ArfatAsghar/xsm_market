@@ -479,7 +479,7 @@ const AdList: React.FC<AdListProps> = ({
                   <span className="text-foreground/80 truncate">{ad.category}</span>
                 </div>
                 <div className="flex items-center gap-1">
-                  <span className="text-muted-foreground font-medium">Subscribers:</span>
+                  <span className="text-muted-foreground font-medium">{ad.platform === 'youtube' ? 'Subscribers:' : 'Followers:'}</span>
                   <span className="text-foreground font-semibold">{formatNumber(ad.subscribers)}</span>
                 </div>
                 <div className="flex items-center gap-1.5">

@@ -1078,7 +1078,7 @@ const AdDetails: React.FC = () => {
               <div className="xsm-card flex flex-col items-center justify-center py-4 px-3 text-center">
                 <Users className="w-6 h-6 text-xsm-yellow mx-auto mb-1.5" />
                 <div className="text-xl font-bold text-white">{formatNumber(channel.subscribers)}</div>
-                <div className="text-xs text-xsm-light-gray mt-0.5">Subscribers</div>
+                <div className="text-xs text-xsm-light-gray mt-0.5">{channel.platform === 'youtube' ? 'Subscribers' : 'Followers'}</div>
               </div>
 
               {/* Channel Status Card */}

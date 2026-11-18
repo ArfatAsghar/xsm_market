@@ -152,8 +152,9 @@ class AdController {
                 'screenshots' => $screenshots,
                 'tags' => $tags,
                 'verificationCode' => $verificationCode,
-                'status' => (!empty($input['isManualPending']) || ($input['status'] ?? '') === 'pending') ? 'pending' : 'active',
-                'verified' => (!empty($input['isManualPending']) || ($input['status'] ?? '') === 'pending') ? 0 : (isset($input['verified']) ? intval($input['verified']) : 0)
+                // Every post must be first approved by the admin even if extracted through APIs
+                'status' => 'pending',
+                'verified' => 0
             ];
             
             error_log('Processed ad data: ' . json_encode($adData));
@@ -162,15 +163,15 @@ class AdController {
             
             error_log('New ad created: ' . $adId . ' by user ' . $user['id']);
             
-            // Return response - exact match to Node.js
+            // Return response
             Response::success([
-                'message' => 'Ad created successfully and is now live!',
+                'message' => 'Listing submitted for review and will go live once approved by admin!',
                 'ad' => [
                     'id' => (int)$adId,
                     'title' => $title,
                     'platform' => $detectedPlatform,
                     'price' => floatval($price),
-                    'status' => 'active',
+                    'status' => 'pending',
                     'createdAt' => date('Y-m-d H:i:s')
                 ]
             ], 201);

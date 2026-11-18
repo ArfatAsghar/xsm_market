@@ -761,7 +761,7 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
                 <p className="text-green-400 text-sm">
                   ✅ Extracted: <strong>{extractedData.title}</strong>
                   {(extractedData.followers || extractedData.subscribers) && (
-                    <span> • {formatFollowerCount(extractedData.followers || extractedData.subscribers)} followers</span>
+                    <span> • {formatFollowerCount(extractedData.followers || extractedData.subscribers)} {(ad.platform === 'youtube' || formData.platform === 'youtube') ? 'subscribers' : 'followers'}</span>
                   )}
                 </p>
               </div>

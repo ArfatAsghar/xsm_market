@@ -111,10 +111,10 @@ const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onShowMore }) => {
         </h3>
 
         <div className="flex flex-col space-y-2">
-          {/* Subscribers only */}
+          {/* Subscribers / Followers */}
           <div className="flex items-center space-x-2 text-xsm-light-gray">
             <Users className="w-4 h-4" />
-            <span>{formatNumber(channel.subscribers)} subs</span>
+            <span>{formatNumber(channel.subscribers)} {(channel as any).platform === 'youtube' ? 'subs' : 'followers'}</span>
           </div>
 
           {/* Price */}

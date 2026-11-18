@@ -280,7 +280,7 @@ const ChannelModal: React.FC<ChannelModalProps> = ({ channel, isOpen, onClose, o
                 <div className="xsm-card text-center">
                   <Users className="w-8 h-8 text-xsm-yellow mx-auto mb-2" />
                   <div className="text-2xl font-bold text-white">{formatNumber(channel.subscribers)}</div>
-                  <div className="text-sm text-xsm-light-gray">Subscribers</div>
+                  <div className="text-sm text-xsm-light-gray">{(channel as any).platform === 'youtube' ? 'Subscribers' : 'Followers'}</div>
                 </div>
 
                 {/* Monetization Status */}

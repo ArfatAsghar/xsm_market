@@ -268,7 +268,7 @@ const PublicAdList: React.FC<PublicAdListProps> = ({ userId, username }) => {
                     </span>
                     <span className="text-xsm-medium-gray/60">•</span>
                     <span className="text-blue-400 font-medium">
-                      {formatSubscribers(ad.subscribers)} subs
+                      {formatSubscribers(ad.subscribers)} {ad.platform === 'youtube' ? 'subs' : 'followers'}
                     </span>
                   </div>
                 </div>

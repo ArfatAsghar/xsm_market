@@ -175,63 +175,6 @@ const SellChannel: React.FC<SellChannelProps> = () => {
     }));
   };
 
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-
-  const handleProfilePictureUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('image/')) {
-      toast({
-        variant: "destructive",
-        title: "Invalid file",
-        description: "Only image files (JPG, PNG, WebP) are allowed.",
-      });
-      return;
-    }
-
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        variant: "destructive",
-        title: "File too large",
-        description: "Image size should be under 5MB.",
-      });
-      return;
-    }
-
-    try {
-      setIsUploadingAvatar(true);
-      const compressed = await compressImage(file, 600, 600, 0.85);
-      const uploadResult = await uploadScreenshots([compressed]);
-      const uploadedUrl = uploadResult?.screenshots?.[0]?.url;
-      if (uploadedUrl) {
-        setFormData(prev => ({ ...prev, profilePicture: uploadedUrl }));
-        toast({
-          title: "Profile Picture Uploaded! ✅",
-          description: "Channel profile image has been updated.",
-        });
-      } else {
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-          setFormData(prev => ({ ...prev, profilePicture: evt.target?.result as string }));
-        };
-        reader.readAsDataURL(compressed);
-      }
-    } catch (err: any) {
-      console.warn('Profile picture upload fallback to local preview:', err);
-      const reader = new FileReader();
-      reader.onload = (evt) => {
-        setFormData(prev => ({ ...prev, profilePicture: evt.target?.result as string }));
-      };
-      reader.readAsDataURL(file);
-      toast({
-        title: "Picture Selected! 🖼️",
-        description: "Channel profile picture selected.",
-      });
-    } finally {
-      setIsUploadingAvatar(false);
-    }
-  };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files;
@@ -784,8 +727,18 @@ const SellChannel: React.FC<SellChannelProps> = () => {
       }
 
       // Prepare ad data
+      const defaultTitle = (() => {
+        if (formData.title && formData.title.trim() !== '') return formData.title.trim();
+        if (extractedData?.title && extractedData.title.trim() !== '') return extractedData.title.trim();
+        if (extractedData?.channelName && extractedData.channelName.trim() !== '') return extractedData.channelName.trim();
+        const cleanUrl = formData.channelUrl.trim();
+        const handleMatch = cleanUrl.match(/@([a-zA-Z0-9_.-]+)/);
+        if (handleMatch) return `@${handleMatch[1]}`;
+        return `${platform.charAt(0).toUpperCase() + platform.slice(1)} Channel`;
+      })();
+
       const adData = {
-        title: formData.title || `${platform.charAt(0).toUpperCase() + platform.slice(1)} Channel`,
+        title: defaultTitle,
         channelUrl: formData.channelUrl,
         platform,
         category: formData.category,
@@ -1245,69 +1198,6 @@ const SellChannel: React.FC<SellChannelProps> = () => {
                 </>
               );
             })()}
-
-            {/* Channel Name / Title Input */}
-            <div>
-              <label className="block text-white font-medium mb-1.5 text-sm">
-                Channel / Account Name
-                <span className="text-xsm-yellow text-xs ml-2">(Auto-filled from link or editable)</span>
-              </label>
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleInputChange}
-                className="xsm-input w-full font-medium"
-                placeholder="e.g. Daily Tech Reviews or @channelname"
-              />
-            </div>
-
-            {/* Channel Profile Picture / Avatar Upload */}
-            <div>
-              <label className="block text-white font-medium mb-1.5 text-sm">
-                Channel Profile Picture / Logo
-                <span className="text-xsm-light-gray text-xs ml-2">(Optional — auto-extracted or upload)</span>
-              </label>
-              <div className="flex items-center gap-4 p-3 bg-xsm-dark-gray/60 border border-xsm-medium-gray/40 rounded-xl">
-                <div className="w-14 h-14 rounded-full overflow-hidden bg-xsm-black border-2 border-xsm-yellow/60 flex-shrink-0 shadow-md">
-                  <img
-                    src={formData.profilePicture || '/default-avatar.png'}
-                    alt="Channel Avatar"
-                    className="w-full h-full object-cover"
-                    referrerPolicy="no-referrer"
-                    crossOrigin="anonymous"
-                    onError={(e) => { (e.target as HTMLImageElement).src = '/default-avatar.png'; }}
-                  />
-                </div>
-                <div className="flex-1 space-y-1.5">
-                  <div className="flex items-center gap-2">
-                    <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-xsm-yellow hover:bg-yellow-400 text-black text-xs font-bold rounded-lg cursor-pointer transition-colors shadow-sm">
-                      <Upload className="w-3.5 h-3.5" />
-                      <span>{isUploadingAvatar ? 'Uploading...' : 'Upload Picture'}</span>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        disabled={isUploadingAvatar}
-                        onChange={handleProfilePictureUpload}
-                      />
-                    </label>
-                    {formData.profilePicture && (
-                      <button
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, profilePicture: '' }))}
-                        className="px-2.5 py-1.5 bg-red-950/40 border border-red-500/40 hover:bg-red-900/60 text-red-300 text-xs font-semibold rounded-lg transition-colors cursor-pointer"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-xsm-light-gray">
-                    Upload channel logo/avatar (JPG, PNG or WebP under 5MB).
-                  </p>
-                </div>
-              </div>
-            </div>
 
             {/* Category Dropdown */}
             <div className="relative" ref={categoryDropdownRef}>

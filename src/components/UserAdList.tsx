@@ -476,8 +476,8 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
 
   if (loading) {
     return (
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
-        {[...Array(5)].map((_, i) => (
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-2.5">
+        {[...Array(4)].map((_, i) => (
           <div key={i} className="bg-xsm-black/70 border border-xsm-medium-gray/30 rounded-none p-2 animate-pulse space-y-2">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-none bg-xsm-medium-gray/40 flex-shrink-0" />
@@ -536,7 +536,7 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
         </div>
       ) : (
         <div className="max-h-[620px] overflow-y-auto pr-1 custom-scrollbar">
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-4 gap-2.5">
             {ads.map((ad, adIndex) => {
               const isVipListing = Boolean(
                 (user as any)?.isVip ||
@@ -553,7 +553,7 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
               return (
                 <div
                   key={ad.id}
-                  className={`rounded-xl p-3 shadow-md flex flex-col justify-between transition-all duration-300 w-full cursor-pointer relative overflow-hidden min-h-[135px] ${
+                  className={`rounded-none p-2.5 shadow-md flex flex-col justify-between transition-all duration-300 w-full cursor-pointer relative overflow-hidden min-h-[115px] ${
                     isPending
                       ? 'bg-gradient-to-r from-yellow-950/30 via-xsm-black/95 to-xsm-black border border-yellow-500/60 shadow-[0_0_12px_rgba(234,179,8,0.15)] hover:border-yellow-400'
                       : isRejected
@@ -566,45 +566,45 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                   onClick={() => handleViewAd(ad)}
                 >
                   {/* Top Status & Meta Row */}
-                  <div className="flex items-center justify-between mb-2 gap-2">
+                  <div className="flex items-center justify-between mb-1.5 gap-1.5">
                     <div>
                       {isPending ? (
-                        <span className="inline-flex items-center gap-1.5 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm animate-pulse">
-                          <Clock className="w-3 h-3 text-yellow-400" />
+                        <span className="inline-flex items-center gap-1 bg-yellow-500/20 text-yellow-300 border border-yellow-500/50 px-1.5 py-0.5 rounded-none text-[9px] font-bold shadow-sm animate-pulse">
+                          <Clock className="w-2.5 h-2.5 text-yellow-400" />
                           <span>Pending Approval</span>
                         </span>
                       ) : isRejected ? (
-                        <span className="inline-flex items-center gap-1.5 bg-red-500/20 text-red-300 border border-red-500/50 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">
-                          <XCircle className="w-3 h-3 text-red-400" />
+                        <span className="inline-flex items-center gap-1 bg-red-500/20 text-red-300 border border-red-500/50 px-1.5 py-0.5 rounded-none text-[9px] font-bold shadow-sm">
+                          <XCircle className="w-2.5 h-2.5 text-red-400" />
                           <span>Rejected</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded-full text-[10px] font-bold shadow-sm">
-                          <CheckCircle className="w-3 h-3 text-emerald-400" />
+                        <span className="inline-flex items-center gap-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded-none text-[9px] font-bold shadow-sm">
+                          <CheckCircle className="w-2.5 h-2.5 text-emerald-400" />
                           <span>Active</span>
                         </span>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1">
                       {isVipListing && (
-                        <span className="inline-flex items-center gap-1 bg-amber-500/20 text-yellow-300 border border-amber-500/40 px-1.5 py-0.5 rounded text-[9px] font-black uppercase">
-                          <Crown className="w-3 h-3 text-yellow-400 fill-yellow-400/20" /> VIP
+                        <span className="inline-flex items-center gap-0.5 bg-amber-500/20 text-yellow-300 border border-amber-500/40 px-1 py-0.5 rounded-none text-[8px] font-black uppercase">
+                          <Crown className="w-2.5 h-2.5 text-yellow-400 fill-yellow-400/20" /> VIP
                         </span>
                       )}
                       {ad.pinned && (
-                        <span className="inline-flex items-center gap-0.5 text-yellow-400 text-[10px] font-bold bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/30">
-                          <Pin className="w-3 h-3 text-yellow-500" /> Pinned
+                        <span className="inline-flex items-center gap-0.5 text-yellow-400 text-[9px] font-bold bg-yellow-500/10 px-1 py-0.5 rounded-none border border-yellow-500/30">
+                          <Pin className="w-2.5 h-2.5 text-yellow-500" /> Pinned
                         </span>
                       )}
                     </div>
                   </div>
 
                   {/* Thumbnail & Title + Price/Subs Row */}
-                  <div className="flex items-center gap-3 mb-2">
+                  <div className="flex items-center gap-2 mb-1.5">
                     <div className="relative flex-shrink-0">
                       <div
-                        className={`w-11 h-11 rounded-lg overflow-hidden border ${
+                        className={`w-9 h-9 rounded-none overflow-hidden border ${
                           isVipListing ? 'border-amber-400' : 'border-xsm-medium-gray/50'
                         } bg-xsm-dark-gray shadow-inner`}
                         onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
@@ -620,31 +620,31 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                           onError={(e) => { (e.target as HTMLImageElement).src = '/default-avatar.png'; }}
                         />
                       </div>
-                      <div className="absolute -bottom-1 -right-1 scale-90">
+                      <div className="absolute -bottom-1 -right-1 scale-75">
                         {getPlatformIconSmall(ad.platform)}
                       </div>
                     </div>
 
                     <div className="min-w-0 flex-1">
                       <h4
-                        className="text-white font-bold text-xs sm:text-sm truncate hover:text-xsm-yellow transition-colors leading-tight"
+                        className="text-white font-bold text-xs truncate hover:text-xsm-yellow transition-colors leading-tight"
                         onClick={(e) => { e.stopPropagation(); handleViewAd(ad); }}
                         title={ad.title}
                       >
                         {ad.title}
                       </h4>
-                      <div className="flex items-center gap-2 text-xs mt-1 flex-wrap">
-                        <span className="text-xsm-yellow font-black text-sm">
+                      <div className="flex items-center gap-1.5 text-[11px] mt-0.5 flex-wrap">
+                        <span className="text-xsm-yellow font-black text-xs">
                           {formatPrice(ad.price)}
                         </span>
                         <span className="text-xsm-medium-gray/60">•</span>
-                        <span className="text-blue-400 font-semibold text-xs">
+                        <span className="text-blue-400 font-semibold text-[11px]">
                           {formatNumber(ad.subscribers)} subs
                         </span>
                         {ad.category && (
                           <>
                             <span className="text-xsm-medium-gray/60">•</span>
-                            <span className="text-xsm-light-gray text-[11px] truncate max-w-[90px]">
+                            <span className="text-xsm-light-gray text-[10px] truncate max-w-[70px]">
                               {ad.category}
                             </span>
                           </>
@@ -655,57 +655,57 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
 
                   {/* Status Notice for Seller */}
                   {isPending && (
-                    <div className="my-1.5 px-2 py-1 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-[10px] text-yellow-300 flex items-center justify-between gap-1">
-                      <span className="flex items-center gap-1.5 truncate">
-                        <Clock className="w-3 h-3 text-yellow-400 flex-shrink-0 animate-spin" />
+                    <div className="my-1 px-2 py-0.5 bg-yellow-500/10 border border-yellow-500/30 rounded-none text-[9px] text-yellow-300 flex items-center justify-between gap-1">
+                      <span className="flex items-center gap-1 truncate">
+                        <Clock className="w-2.5 h-2.5 text-yellow-400 flex-shrink-0 animate-spin" />
                         <span className="truncate">Under admin review — not live yet</span>
                       </span>
-                      <span className="text-[9px] bg-yellow-500/20 px-1.5 py-0.5 rounded text-yellow-200 font-bold shrink-0">
+                      <span className="text-[8px] bg-yellow-500/20 px-1 py-0.5 rounded-none text-yellow-200 font-bold shrink-0">
                         Pending
                       </span>
                     </div>
                   )}
                   {isRejected && (
-                    <div className="my-1.5 px-2 py-1 bg-red-500/10 border border-red-500/30 rounded-lg text-[10px] text-red-300 flex items-center gap-1.5 truncate">
-                      <XCircle className="w-3 h-3 text-red-400 flex-shrink-0" />
+                    <div className="my-1 px-2 py-0.5 bg-red-500/10 border border-red-500/30 rounded-none text-[9px] text-red-300 flex items-center gap-1 truncate">
+                      <XCircle className="w-2.5 h-2.5 text-red-400 flex-shrink-0" />
                       <span className="truncate">Listing rejected by admin</span>
                     </div>
                   )}
 
                   {/* Monetization & Action Buttons Row */}
-                  <div className="flex items-center justify-between pt-2 border-t border-xsm-medium-gray/30 mt-auto">
+                  <div className="flex items-center justify-between pt-1.5 border-t border-xsm-medium-gray/30 mt-auto">
                     {ad.isMonetized ? (
                       <span
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-green-500/15 text-green-400 border border-green-500/30 text-[11px] font-semibold"
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-none bg-green-500/15 text-green-400 border border-green-500/30 text-[10px] font-semibold"
                         title="Monetized"
                       >
-                        <DollarSign className="w-3.5 h-3.5 text-green-400" />
+                        <DollarSign className="w-3 h-3 text-green-400" />
                         <span>Monetized</span>
                       </span>
                     ) : (
                       <span
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-zinc-800 text-gray-400 border border-xsm-medium-gray/30 text-[11px]"
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-none bg-zinc-800 text-gray-400 border border-xsm-medium-gray/30 text-[10px]"
                         title="Non-Monetized"
                       >
-                        <span className="w-2 h-2 rounded-full bg-gray-500"></span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-gray-500"></span>
                         <span>Standard</span>
                       </span>
                     )}
 
-                    <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                       <button
                         onClick={() => handleEdit(ad)}
-                        className="p-1.5 bg-xsm-yellow text-black hover:bg-yellow-400 rounded-md transition-colors shadow-sm"
+                        className="p-1 bg-xsm-yellow text-black hover:bg-yellow-400 rounded-none transition-colors shadow-sm"
                         title="Edit Listing"
                       >
-                        <Edit className="w-3.5 h-3.5" />
+                        <Edit className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => handleDelete(ad.id)}
-                        className="p-1.5 bg-rose-500/80 text-white hover:bg-rose-600 rounded-md transition-colors shadow-sm"
+                        className="p-1 bg-rose-500/80 text-white hover:bg-rose-600 rounded-none transition-colors shadow-sm"
                         title="Delete Listing"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => {
@@ -716,23 +716,23 @@ const UserAdList: React.FC<UserAdListProps> = ({ onEditAd }) => {
                           handlePullUp(ad.id);
                         }}
                         disabled={isPending}
-                        className={`p-1.5 rounded-md transition-colors shadow-sm ${
+                        className={`p-1 rounded-none transition-colors shadow-sm ${
                           isPending ? 'bg-gray-700/50 text-gray-500 cursor-not-allowed' : 'bg-blue-500 text-white hover:bg-blue-600'
                         }`}
                         title={isPending ? 'Pending admin approval' : 'Bump Listing'}
                       >
-                        <Zap className="w-3.5 h-3.5" />
+                        <Zap className="w-3 h-3" />
                       </button>
                       <button
                         onClick={() => handlePin(ad.id)}
-                        className={`p-1.5 ${
+                        className={`p-1 ${
                           ad.pinned 
                             ? 'bg-amber-500 text-black hover:bg-amber-400' 
                             : 'bg-zinc-800 text-amber-400 hover:bg-zinc-700 hover:text-amber-300'
-                        } rounded-md transition-colors shadow-sm`}
+                        } rounded-none transition-colors shadow-sm`}
                         title={ad.pinned ? "Unpin from Profile" : "Pin to Profile"}
                       >
-                        <Pin className={`w-3.5 h-3.5 ${ad.pinned ? 'fill-current' : ''}`} />
+                        <Pin className={`w-3 h-3 ${ad.pinned ? 'fill-current' : ''}`} />
                       </button>
                     </div>
                   </div>

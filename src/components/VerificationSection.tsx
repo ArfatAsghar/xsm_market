@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Shield, CheckCircle2, AlertCircle, Upload, FileText,
-  Camera, X, Eye, AlertTriangle, Lock, Sparkles, RefreshCw
+  Camera, X, Eye, AlertTriangle, Lock, Sparkles, RefreshCw, Clock
 } from 'lucide-react';
 import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

@@ -948,6 +948,23 @@ class AdminController {
             // 5. Delete chat participants
             $db->prepare("DELETE FROM chat_participants WHERE userId = ?")->execute([$userId]);
 
+            // 5b. Clean up KYC: if approved, set to rejected; otherwise remove pending/unverified submissions
+            try {
+                $db->prepare("UPDATE user_kyc SET status = 'rejected', rejection_reason = 'User account deleted by admin', updated_at = NOW() WHERE user_id = ? AND status = 'approved'")->execute([$userId]);
+                $db->prepare("DELETE FROM user_kyc WHERE user_id = ? AND status NOT IN ('approved', 'rejected')")->execute([$userId]);
+            } catch (Throwable $eKyc) {
+                error_log('deleteUser KYC cleanup notice: ' . $eKyc->getMessage());
+            }
+
+            // 5c. Delete user rewards / notifications
+            try {
+                $db->prepare("DELETE FROM user_rewards WHERE user_id = ?")->execute([$userId]);
+            } catch (Throwable $eRewards) {}
+
+            try {
+                $db->prepare("DELETE FROM notifications WHERE userId = ?")->execute([$userId]);
+            } catch (Throwable $eNotif) {}
+
             // 6. Delete user
             $db->prepare("DELETE FROM users WHERE id = ?")->execute([$userId]);
 

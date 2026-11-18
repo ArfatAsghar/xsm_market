@@ -243,13 +243,13 @@ class KycController {
                     k.created_at,
                     k.created_at as submitted_at,
                     k.reviewed_at,
-                    u.username,
-                    u.email,
+                    COALESCE(u.username, '[Deleted User]') as username,
+                    COALESCE(u.email, 'deleted@user') as email,
                     u.profilePicture,
                     u.kyc_id_number as user_verified_id,
                     ref_u.username as referred_by_username
                 FROM user_kyc k
-                INNER JOIN users u ON k.user_id = u.id
+                LEFT JOIN users u ON k.user_id = u.id
                 LEFT JOIN users ref_u ON u.referred_by = ref_u.id
                 {$whereClause}
                 ORDER BY CASE WHEN k.status = 'pending' THEN 0 ELSE 1 END, k.created_at DESC

@@ -215,6 +215,16 @@ class UserController {
             errorResponse('Incorrect password');
         }
 
+        // Clean up KYC: if approved, set to rejected; otherwise remove pending submissions
+        try {
+            $pdo = Database::getConnection();
+            $pdo->prepare("UPDATE user_kyc SET status = 'rejected', rejection_reason = 'User deleted their account', updated_at = NOW() WHERE user_id = ? AND status = 'approved'")->execute([$userId]);
+            $pdo->prepare("DELETE FROM user_kyc WHERE user_id = ? AND status NOT IN ('approved', 'rejected')")->execute([$userId]);
+            $pdo->prepare("UPDATE users SET kyc_status = 'rejected', kyc_id_number = NULL WHERE id = ?")->execute([$userId]);
+        } catch (Throwable $eKyc) {
+            error_log('User deleteAccount KYC cleanup error: ' . $eKyc->getMessage());
+        }
+
         // Soft delete by updating status (you might want to implement this)
         // For now, we'll update the user to be inactive
         if (!$this->user->update($userId, ['isVerified' => false, 'deletedAt' => date('Y-m-d H:i:s')])) {

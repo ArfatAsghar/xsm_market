@@ -137,13 +137,17 @@ function handleSocialMediaExtract() {
         $urlHash = md5(strtolower(trim($url)));
         $cached = getSocialMediaCache($urlHash);
         if ($cached) {
-            // Re-evaluate verificationCode on the fly against cached profile text
+            // Re-evaluate verificationCode on the fly against ALL cached bio/page text.
+            // _verifyText holds the concatenated raw text (description + HTML snippets)
+            // that was used at first-extraction time, so the same code that passed
+            // then will still pass now on a cache hit.
             $cached['verificationCode'] = $verificationCode;
             if (!empty($verificationCode)) {
                 $searchSources = [
-                    $cached['description'] ?? '',
-                    $cached['channelName'] ?? '',
-                    $cached['title'] ?? ''
+                    $cached['_verifyText'] ?? '',   // full bio text saved at extraction time
+                    $cached['description']  ?? '',
+                    $cached['channelName']  ?? '',
+                    $cached['title']        ?? ''
                 ];
                 $cached['codeVerified'] = checkVerificationCodeMatch($verificationCode, ...$searchSources);
                 $cached['verified'] = $cached['codeVerified'];
@@ -358,6 +362,9 @@ function fetchYouTubeProfileData($url, $verificationCode = '') {
         $html
     );
 
+    // Save all raw bio/page text so the cache can re-verify without re-fetching HTML
+    $result['_verifyText'] = implode(' ', array_filter([$apiDescription, $result['title'] ?? '', substr($html, 0, 8000)]));
+
     if (!$html) return $result;
 
     // Unescape JSON escaped slashes so our regexes can match easily
@@ -515,6 +522,15 @@ function fetchYouTubeProfileData($url, $verificationCode = '') {
             }
         }
     }
+
+    // Update _verifyText with any late-stage description/title changes
+    // so the cache always has the most complete verification text
+    $result['_verifyText'] = implode(' ', array_filter([
+        $apiDescription,
+        $result['description'] ?? '',
+        $result['title'] ?? '',
+        substr($html, 0, 8000)
+    ]));
 
     return $result;
 }
@@ -1185,6 +1201,14 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
         $rawHtml
     );
 
+    // Save all raw bio/page text so the cache can re-verify without re-fetching
+    $result['_verifyText'] = implode(' ', array_filter([
+        $result['description'] ?? '',
+        $apiSignature ?? '',
+        $result['title'] ?? '',
+        substr($rawHtml ?? '', 0, 8000)
+    ]));
+
     if (!empty($result['profilePicture'])) {
         $result['profilePicture'] = cacheSocialProfilePicture($result['profilePicture'], 'tiktok', $handle);
     }
@@ -1537,6 +1561,13 @@ function fetchInstagramProfileData($url, $verificationCode = '') {
         $htmlContent
     );
 
+    // Save all raw bio/page text so the cache can re-verify without re-fetching
+    $result['_verifyText'] = implode(' ', array_filter([
+        $result['description'] ?? '',
+        $result['title'] ?? '',
+        substr($htmlContent ?? '', 0, 8000)
+    ]));
+
     if (!empty($result['profilePicture'])) {
         $result['profilePicture'] = cacheSocialProfilePicture($result['profilePicture'], 'instagram', $handle);
     }
@@ -1723,6 +1754,13 @@ function fetchTwitterProfileData($url, $verificationCode = '') {
         $result['title'],
         $htmlContent
     );
+
+    // Save all raw bio/page text so the cache can re-verify without re-fetching
+    $result['_verifyText'] = implode(' ', array_filter([
+        $result['description'] ?? '',
+        $result['title'] ?? '',
+        substr($htmlContent ?? '', 0, 8000)
+    ]));
 
     return $result;
 }
@@ -1929,6 +1967,13 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
         $htmlContent
     );
 
+    // Save all raw bio/page text so the cache can re-verify without re-fetching
+    $result['_verifyText'] = implode(' ', array_filter([
+        $result['description'] ?? '',
+        $result['title'] ?? '',
+        substr($htmlContent ?? '', 0, 8000)
+    ]));
+
     if (!empty($result['profilePicture'])) {
         $result['profilePicture'] = cacheSocialProfilePicture($result['profilePicture'], 'facebook', $fbHandle);
     }
@@ -2032,6 +2077,13 @@ function fetchTelegramProfileData($url, $verificationCode = '') {
         $result['title'],
         $htmlContent
     );
+
+    // Save all raw bio/page text so the cache can re-verify without re-fetching
+    $result['_verifyText'] = implode(' ', array_filter([
+        $result['description'] ?? '',
+        $result['title'] ?? '',
+        substr($htmlContent ?? '', 0, 8000)
+    ]));
 
     return $result;
 }

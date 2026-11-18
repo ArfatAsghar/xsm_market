@@ -474,7 +474,7 @@ class Database {
             error_log('Referral & KYC tables create warning: ' . $e->getMessage());
         }
 
-        // ── social_media_cache table ──────────────────────────────────────────
+        // ── social_media_cache table cleanup ──────────────────────────────────
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS `social_media_cache` (
                 `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -488,8 +488,10 @@ class Database {
                 INDEX `idx_expires_at` (`expires_at`),
                 INDEX `idx_platform` (`platform`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+            // Clear any old legacy cache rows so verification is always 100% fresh
+            $pdo->exec("TRUNCATE TABLE `social_media_cache`");
         } catch (Throwable $e) {
-            error_log('social_media_cache table create warning: ' . $e->getMessage());
+            error_log('social_media_cache table warning: ' . $e->getMessage());
         }
     }
 

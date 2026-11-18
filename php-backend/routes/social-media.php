@@ -133,34 +133,7 @@ function handleSocialMediaExtract() {
             exit;
         }
 
-        // ── 24-HOUR CACHE LOOKUP ─────────────────────────────────────────
-        $urlHash = md5(strtolower(trim($url)));
-        $cached = getSocialMediaCache($urlHash);
-        if ($cached) {
-            // Re-evaluate verificationCode on the fly against ALL cached bio/page text.
-            // _verifyText holds the concatenated raw text (description + HTML snippets)
-            // that was used at first-extraction time, so the same code that passed
-            // then will still pass now on a cache hit.
-            $cached['verificationCode'] = $verificationCode;
-            if (!empty($verificationCode)) {
-                $searchSources = [
-                    $cached['_verifyText'] ?? '',   // full bio text saved at extraction time
-                    $cached['description']  ?? '',
-                    $cached['channelName']  ?? '',
-                    $cached['title']        ?? ''
-                ];
-                $cached['codeVerified'] = checkVerificationCodeMatch($verificationCode, ...$searchSources);
-                $cached['verified'] = $cached['codeVerified'];
-            } else {
-                $cached['codeVerified'] = false;
-                $cached['verified'] = false;
-            }
-            error_log("Social media extraction CACHE HIT for: " . $url);
-            Response::success(['data' => $cached, 'cached' => true]);
-            return;
-        }
-        // ── END CACHE LOOKUP ──────────────────────────────────────────────
-
+        // Direct live extraction — caching completely disabled so verification codes & channel bio updates are always 100% real-time and fresh.
         $channelName = extractChannelNameFromUrl($platform, $pathValue, $url);
         $profileData = [
             'platform' => $platform,
@@ -206,15 +179,7 @@ function handleSocialMediaExtract() {
             }
         }
 
-        // ── SAVE TO 24-HOUR CACHE (Only if valid profile info found) ──────
-        $hasData = !empty($profileData['channelName']) || !empty($profileData['title']) || 
-                   !empty($profileData['profilePicture']) || $profileData['subscribers'] > 0 || 
-                   !empty($profileData['description']);
-        if ($hasData) {
-            setSocialMediaCache($urlHash, $platform, $url, $profileData);
-        }
-        // ── END SAVE TO CACHE ──────────────────────────────────────────────
-
+        // Do not cache extracted profile data — live verification is always required.
         Response::success(['data' => $profileData]);
     } catch (Exception $e) {
         error_log('Social media extract error: ' . $e->getMessage());
@@ -279,6 +244,7 @@ function fetchYouTubeProfileData($url, $verificationCode = '') {
     $result = [
         'title'            => null,
         'channelName'      => null,
+        'description'      => null,
         'profilePicture'   => null,
         'subscribers'      => 0,
         'followers'        => 0,
@@ -348,22 +314,37 @@ function fetchYouTubeProfileData($url, $verificationCode = '') {
         }
     }
 
-    // ── Step 3: HTML scrape — avatar from ytInitialData JSON & Verification check ───────────────────
+    // ── Step 3: HTML scrape — avatar, bio description & live verification check ───────────────────
     $html = fetchTextUrl($url);
     if ($html) {
         $html = str_replace('\/', '/', $html);
     }
 
-    // Check verification code against API description AND HTML source
+    // Extract channel description from API or HTML
+    if (!empty($apiDescription)) {
+        $result['description'] = $apiDescription;
+    } elseif ($html) {
+        if (preg_match('/"microformat":\{"microformatDataRenderer":\{[^}]*"description":"([^"]*)"/i', $html, $dm)) {
+            $result['description'] = html_entity_decode(stripcslashes($dm[1]), ENT_QUOTES);
+        } elseif (preg_match('/"channelProfileMicroformatDetails":\{[^}]*"description":"([^"]*)"/i', $html, $dm)) {
+            $result['description'] = html_entity_decode(stripcslashes($dm[1]), ENT_QUOTES);
+        } elseif (preg_match('/<meta [^>]*property="og:description" [^>]*content="([^"]*)"/i', $html, $dm)) {
+            $result['description'] = html_entity_decode($dm[1], ENT_QUOTES);
+        } elseif (preg_match('/<meta [^>]*name="description" [^>]*content="([^"]*)"/i', $html, $dm)) {
+            $result['description'] = html_entity_decode($dm[1], ENT_QUOTES);
+        } elseif (preg_match('/"description":\{"simpleText":"([^"]*)"\}/i', $html, $dm)) {
+            $result['description'] = html_entity_decode(stripcslashes($dm[1]), ENT_QUOTES);
+        }
+    }
+
+    // Check verification code against API description, extracted bio description, channel title, and full live HTML
     $result['codeVerified'] = checkVerificationCodeMatch(
         $verificationCode,
         $apiDescription,
-        $result['title'],
+        $result['description'] ?? '',
+        $result['title'] ?? '',
         $html
     );
-
-    // Save all raw bio/page text so the cache can re-verify without re-fetching HTML
-    $result['_verifyText'] = implode(' ', array_filter([$apiDescription, $result['title'] ?? '', substr($html, 0, 8000)]));
 
     if (!$html) return $result;
 
@@ -523,15 +504,6 @@ function fetchYouTubeProfileData($url, $verificationCode = '') {
         }
     }
 
-    // Update _verifyText with any late-stage description/title changes
-    // so the cache always has the most complete verification text
-    $result['_verifyText'] = implode(' ', array_filter([
-        $apiDescription,
-        $result['description'] ?? '',
-        $result['title'] ?? '',
-        substr($html, 0, 8000)
-    ]));
-
     return $result;
 }
 
@@ -683,51 +655,13 @@ function handleSocialBladeIntegration() {
     }
 }
 
-// ── 24-HOUR EXTRACTION CACHE HELPERS ───────────────────────────────────────
+// ── EXTRACTION CACHING DISABLED (Live extraction guaranteed for ownership verification) ──
 function getSocialMediaCache($urlHash) {
-    try {
-        $pdo = Database::getConnection();
-        $stmt = $pdo->prepare("SELECT cached_data FROM social_media_cache WHERE url_hash = ? AND expires_at > NOW() LIMIT 1");
-        $stmt->execute([$urlHash]);
-        $row = $stmt->fetch();
-        if ($row && !empty($row['cached_data'])) {
-            $data = json_decode($row['cached_data'], true);
-            if (is_array($data)) {
-                return $data;
-            }
-        }
-    } catch (Throwable $e) {
-        error_log('Social cache read warning: ' . $e->getMessage());
-    }
     return null;
 }
 
 function setSocialMediaCache($urlHash, $platform, $channelUrl, $profileData) {
-    try {
-        $pdo = Database::getConnection();
-        // Delete old entry for this urlHash if present
-        $del = $pdo->prepare("DELETE FROM social_media_cache WHERE url_hash = ?");
-        $del->execute([$urlHash]);
-
-        // Insert new cache record valid for 24 hours
-        $stmt = $pdo->prepare("
-            INSERT INTO social_media_cache (url_hash, platform, channel_url, cached_data, created_at, expires_at)
-            VALUES (?, ?, ?, ?, NOW(), DATE_ADD(NOW(), INTERVAL 24 HOUR))
-        ");
-        $stmt->execute([
-            $urlHash,
-            $platform,
-            $channelUrl,
-            json_encode($profileData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)
-        ]);
-
-        // Probabilistic cleanup of expired cache rows (~5% probability)
-        if (mt_rand(1, 20) === 1) {
-            $pdo->query("DELETE FROM social_media_cache WHERE expires_at < NOW()");
-        }
-    } catch (Throwable $e) {
-        error_log('Social cache write warning: ' . $e->getMessage());
-    }
+    return;
 }
 
 // ── RAPIDAPI MULTI-KEY POOL & ROTATION ────────────────────────────────────
@@ -1201,14 +1135,6 @@ function fetchTikTokProfileData($url, $verificationCode = '') {
         $rawHtml
     );
 
-    // Save all raw bio/page text so the cache can re-verify without re-fetching
-    $result['_verifyText'] = implode(' ', array_filter([
-        $result['description'] ?? '',
-        $apiSignature ?? '',
-        $result['title'] ?? '',
-        substr($rawHtml ?? '', 0, 8000)
-    ]));
-
     if (!empty($result['profilePicture'])) {
         $result['profilePicture'] = cacheSocialProfilePicture($result['profilePicture'], 'tiktok', $handle);
     }
@@ -1561,13 +1487,6 @@ function fetchInstagramProfileData($url, $verificationCode = '') {
         $htmlContent
     );
 
-    // Save all raw bio/page text so the cache can re-verify without re-fetching
-    $result['_verifyText'] = implode(' ', array_filter([
-        $result['description'] ?? '',
-        $result['title'] ?? '',
-        substr($htmlContent ?? '', 0, 8000)
-    ]));
-
     if (!empty($result['profilePicture'])) {
         $result['profilePicture'] = cacheSocialProfilePicture($result['profilePicture'], 'instagram', $handle);
     }
@@ -1754,13 +1673,6 @@ function fetchTwitterProfileData($url, $verificationCode = '') {
         $result['title'],
         $htmlContent
     );
-
-    // Save all raw bio/page text so the cache can re-verify without re-fetching
-    $result['_verifyText'] = implode(' ', array_filter([
-        $result['description'] ?? '',
-        $result['title'] ?? '',
-        substr($htmlContent ?? '', 0, 8000)
-    ]));
 
     return $result;
 }
@@ -1967,13 +1879,6 @@ function fetchFacebookProfileData($url, $verificationCode = '') {
         $htmlContent
     );
 
-    // Save all raw bio/page text so the cache can re-verify without re-fetching
-    $result['_verifyText'] = implode(' ', array_filter([
-        $result['description'] ?? '',
-        $result['title'] ?? '',
-        substr($htmlContent ?? '', 0, 8000)
-    ]));
-
     if (!empty($result['profilePicture'])) {
         $result['profilePicture'] = cacheSocialProfilePicture($result['profilePicture'], 'facebook', $fbHandle);
     }
@@ -2077,13 +1982,6 @@ function fetchTelegramProfileData($url, $verificationCode = '') {
         $result['title'],
         $htmlContent
     );
-
-    // Save all raw bio/page text so the cache can re-verify without re-fetching
-    $result['_verifyText'] = implode(' ', array_filter([
-        $result['description'] ?? '',
-        $result['title'] ?? '',
-        substr($htmlContent ?? '', 0, 8000)
-    ]));
 
     return $result;
 }

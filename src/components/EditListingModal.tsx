@@ -632,8 +632,8 @@ const EditListingModal: React.FC<EditListingModalProps> = ({ ad, isOpen, onClose
       console.log('Ad update result:', result);
 
       toast({
-        title: "Listing Updated Successfully! 🎉",
-        description: "Your listing has been updated and is live on the marketplace.",
+        title: "Listing Updated for Review! ⏳",
+        description: "Your changes have been submitted for admin review and will reappear on the marketplace once approved.",
       });
 
       if (result.ad) {

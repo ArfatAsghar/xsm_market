@@ -780,8 +780,8 @@ const SellChannel: React.FC<SellChannelProps> = () => {
         result = await response.json();
         
         toast({
-          title: "Listing Updated Successfully! ✅",
-          description: "Your listing has been updated. Redirecting...",
+          title: "Listing Submitted for Review! ⏳",
+          description: "Your edited listing has been submitted for admin review and will reappear once approved.",
         });
       } else {
         // Create new ad - every listing must be first approved by the admin before showing in marketplace

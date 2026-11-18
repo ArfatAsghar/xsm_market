@@ -266,12 +266,25 @@ class AdController {
                 Response::error('No valid fields to update', 400);
             }
             
+            // Whenever a listing is edited, it goes to the admin panel for verification
+            // and will only reappear on the marketplace after an admin approves it.
+            if (!empty($input['status']) && $user['isAdmin']) {
+                $updateData['status'] = $input['status'];
+            } else {
+                $updateData['status'] = 'pending';
+                $updateData['verified'] = 0;
+                $updateData['approvedAt'] = null;
+                $updateData['approvedBy'] = null;
+            }
+            
             Ad::update($adId, $updateData);
             
             $updatedAd = Ad::findByIdWithSeller($adId);
             
             Response::json([
-                'message' => 'Ad updated successfully',
+                'message' => ($updateData['status'] === 'pending')
+                    ? 'Listing updated and submitted for admin review. It will reappear on the marketplace once approved!'
+                    : 'Ad updated successfully',
                 'ad' => $updatedAd
             ]);
             
